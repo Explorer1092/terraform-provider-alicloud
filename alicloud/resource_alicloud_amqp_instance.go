@@ -29,7 +29,7 @@ func resourceAlicloudAmqpInstance() *schema.Resource {
 				Type:         schema.TypeString,
 				Required:     true,
 				ForceNew:     true,
-				ValidateFunc: validation.StringInSlice([]string{"professional", "vip"}, false),
+				ValidateFunc: validation.StringInSlice([]string{"professional", "vip","ENTERPRISE"}, false),
 			},
 			"logistics": {
 				Type:     schema.TypeString,
