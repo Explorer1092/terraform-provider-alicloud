@@ -21,7 +21,6 @@ import (
 )
 
 // ModifyApiGroup invokes the cloudapi.ModifyApiGroup API synchronously
-// api document: https://help.aliyun.com/api/cloudapi/modifyapigroup.html
 func (client *Client) ModifyApiGroup(request *ModifyApiGroupRequest) (response *ModifyApiGroupResponse, err error) {
 	response = CreateModifyApiGroupResponse()
 	err = client.DoAction(request, response)
@@ -29,8 +28,6 @@ func (client *Client) ModifyApiGroup(request *ModifyApiGroupRequest) (response *
 }
 
 // ModifyApiGroupWithChan invokes the cloudapi.ModifyApiGroup API asynchronously
-// api document: https://help.aliyun.com/api/cloudapi/modifyapigroup.html
-// asynchronous document: https://help.aliyun.com/document_detail/66220.html
 func (client *Client) ModifyApiGroupWithChan(request *ModifyApiGroupRequest) (<-chan *ModifyApiGroupResponse, <-chan error) {
 	responseChan := make(chan *ModifyApiGroupResponse, 1)
 	errChan := make(chan error, 1)
@@ -53,8 +50,6 @@ func (client *Client) ModifyApiGroupWithChan(request *ModifyApiGroupRequest) (<-
 }
 
 // ModifyApiGroupWithCallback invokes the cloudapi.ModifyApiGroup API asynchronously
-// api document: https://help.aliyun.com/api/cloudapi/modifyapigroup.html
-// asynchronous document: https://help.aliyun.com/document_detail/66220.html
 func (client *Client) ModifyApiGroupWithCallback(request *ModifyApiGroupRequest, callback func(response *ModifyApiGroupResponse, err error)) <-chan int {
 	result := make(chan int, 1)
 	err := client.AddAsyncTask(func() {
@@ -77,16 +72,19 @@ func (client *Client) ModifyApiGroupWithCallback(request *ModifyApiGroupRequest,
 type ModifyApiGroupRequest struct {
 	*requests.RpcRequest
 	DefaultDomain      string               `position:"Query" name:"DefaultDomain"`
+	BasePath           string               `position:"Query" name:"BasePath"`
 	Description        string               `position:"Query" name:"Description"`
 	SecurityToken      string               `position:"Query" name:"SecurityToken"`
 	RpcPattern         string               `position:"Query" name:"RpcPattern"`
 	UserLogConfig      string               `position:"Query" name:"UserLogConfig"`
 	Tag                *[]ModifyApiGroupTag `position:"Query" name:"Tag"  type:"Repeated"`
+	CustomerConfigs    string               `position:"Query" name:"CustomerConfigs"`
 	GroupId            string               `position:"Query" name:"GroupId"`
 	GroupName          string               `position:"Query" name:"GroupName"`
 	PassthroughHeaders string               `position:"Query" name:"PassthroughHeaders"`
 	CompatibleFlags    string               `position:"Query" name:"CompatibleFlags"`
 	CustomTraceConfig  string               `position:"Query" name:"CustomTraceConfig"`
+	SupportSSE         string               `position:"Query" name:"SupportSSE"`
 }
 
 // ModifyApiGroupTag is a repeated param struct in ModifyApiGroupRequest
@@ -99,10 +97,11 @@ type ModifyApiGroupTag struct {
 type ModifyApiGroupResponse struct {
 	*responses.BaseResponse
 	RequestId   string `json:"RequestId" xml:"RequestId"`
+	BasePath    string `json:"BasePath" xml:"BasePath"`
 	GroupId     string `json:"GroupId" xml:"GroupId"`
 	GroupName   string `json:"GroupName" xml:"GroupName"`
-	SubDomain   string `json:"SubDomain" xml:"SubDomain"`
 	Description string `json:"Description" xml:"Description"`
+	SubDomain   string `json:"SubDomain" xml:"SubDomain"`
 }
 
 // CreateModifyApiGroupRequest creates a request to invoke ModifyApiGroup API

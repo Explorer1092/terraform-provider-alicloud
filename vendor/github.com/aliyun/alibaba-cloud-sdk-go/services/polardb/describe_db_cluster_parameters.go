@@ -72,6 +72,7 @@ func (client *Client) DescribeDBClusterParametersWithCallback(request *DescribeD
 type DescribeDBClusterParametersRequest struct {
 	*requests.RpcRequest
 	ResourceOwnerId      requests.Integer `position:"Query" name:"ResourceOwnerId"`
+	DescribeType         string           `position:"Query" name:"DescribeType"`
 	ResourceOwnerAccount string           `position:"Query" name:"ResourceOwnerAccount"`
 	DBClusterId          string           `position:"Query" name:"DBClusterId"`
 	OwnerAccount         string           `position:"Query" name:"OwnerAccount"`
@@ -81,11 +82,14 @@ type DescribeDBClusterParametersRequest struct {
 // DescribeDBClusterParametersResponse is the response struct for api DescribeDBClusterParameters
 type DescribeDBClusterParametersResponse struct {
 	*responses.BaseResponse
-	DBVersion         string            `json:"DBVersion" xml:"DBVersion"`
-	RequestId         string            `json:"RequestId" xml:"RequestId"`
-	DBType            string            `json:"DBType" xml:"DBType"`
-	Engine            string            `json:"Engine" xml:"Engine"`
-	RunningParameters RunningParameters `json:"RunningParameters" xml:"RunningParameters"`
+	DBVersion         string                                         `json:"DBVersion" xml:"DBVersion"`
+	RequestId         string                                         `json:"RequestId" xml:"RequestId"`
+	DBType            string                                         `json:"DBType" xml:"DBType"`
+	Engine            string                                         `json:"Engine" xml:"Engine"`
+	DBClusterId       string                                         `json:"DBClusterId" xml:"DBClusterId"`
+	ParameterNumbers  string                                         `json:"ParameterNumbers" xml:"ParameterNumbers"`
+	RunningParameters RunningParametersInDescribeDBClusterParameters `json:"RunningParameters" xml:"RunningParameters"`
+	Parameters        ParametersInDescribeDBClusterParameters        `json:"Parameters" xml:"Parameters"`
 }
 
 // CreateDescribeDBClusterParametersRequest creates a request to invoke DescribeDBClusterParameters API

@@ -19,24 +19,41 @@ For information about Microservice Engine (MSE) Gateway and how to use it, see [
 
 Basic Usage
 
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_mse_gateway&exampleId=4623b44d-e20a-2904-4bdb-291791729664050253bc&activeTab=example&spm=docs.r.mse_gateway.0.4623b44de2&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
 ```terraform
-data "alicloud_zones" "default" {
+provider "alicloud" {
+  region = "cn-hangzhou"
+}
+
+data "alicloud_zones" "example" {
   available_resource_creation = "VSwitch"
 }
-data "alicloud_vpcs" "default" {
-  name_regex = "default-NODELETING"
+
+resource "alicloud_vpc" "example" {
+  vpc_name   = "terraform-example"
+  cidr_block = "172.16.0.0/16"
 }
-data "alicloud_vswitches" "default" {
-  vpc_id  = data.alicloud_vpcs.default.ids.0
-  zone_id = data.alicloud_zones.default.zones.0.id
+
+resource "alicloud_vswitch" "example" {
+  count        = 2
+  vpc_id       = alicloud_vpc.example.id
+  cidr_block   = format("172.16.%d.0/21", (count.index + 1) * 16)
+  zone_id      = data.alicloud_zones.example.zones[count.index].id
+  vswitch_name = format("terraform_example_%d", count.index + 1)
 }
+
 resource "alicloud_mse_gateway" "example" {
-  gateway_name      = "example_value"
+  gateway_name      = "terraform-example"
   replica           = 2
   spec              = "MSE_GTW_2_4_200_c"
-  vswitch_id        = data.alicloud_vswitches.default.ids.0
-  backup_vswitch_id = data.alicloud_vswitches.default.ids.1
-  vpc_id            = data.alicloud_vpcs.default.ids.0
+  vswitch_id        = alicloud_vswitch.example.0.id
+  backup_vswitch_id = alicloud_vswitch.example.1.id
+  vpc_id            = alicloud_vpc.example.id
 }
 ```
 
@@ -82,6 +99,6 @@ The `timeouts` block allows you to specify [timeouts](https://www.terraform.io/d
 
 Microservice Engine (MSE) Gateway can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_mse_gateway.example <id>
 ```

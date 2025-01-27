@@ -1,5 +1,5 @@
 ---
-subcategory: "VPC"
+subcategory: "Express Connect"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_router_interfaces"
 sidebar_current: "docs-alicloud-datasource-router-interfaces"
@@ -9,8 +9,10 @@ description: |-
 
 # alicloud\_router\_interfaces
 
-This data source provides information about [router interfaces](https://www.alibabacloud.com/help/doc-detail/52412.htm)
+This data source provides information about [router interfaces](https://www.alibabacloud.com/help/en/express-connect/developer-reference/api-vpc-2016-04-28-describerouterinterfaces-efficiency-channels)
 that connect VPCs together.
+
+-> **DEPRECATED:**  This datasource has been deprecated from version `1.199.0`. Please use new data source [alicloud_express_connect_router_interfaces](https://registry.terraform.io/providers/aliyun/alicloud/latest/docs/data-sources/express_connect_router_interfaces).
 
 ## Example Usage
 

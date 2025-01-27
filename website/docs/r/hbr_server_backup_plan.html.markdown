@@ -19,15 +19,58 @@ For information about Hybrid Backup Recovery (HBR) Server Backup Plan and how to
 
 Basic Usage
 
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_hbr_server_backup_plan&exampleId=4c2af01f-d884-b2c5-fe19-a0e59accc44ef1665bfd&activeTab=example&spm=docs.r.hbr_server_backup_plan.0.4c2af01fd8&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
 ```terraform
-data "alicloud_instances" "default" {
-  name_regex = "no-deleteing-hbr-ecs-server-backup-plan"
-  status     = "Running"
+data "alicloud_zones" "example" {
+  available_resource_creation = "Instance"
+}
+
+data "alicloud_instance_types" "example" {
+  availability_zone = data.alicloud_zones.example.zones.0.id
+  cpu_core_count    = 1
+  memory_size       = 2
+}
+
+data "alicloud_images" "example" {
+  name_regex = "^ubuntu_18.*64"
+  owners     = "system"
+}
+
+resource "alicloud_vpc" "example" {
+  vpc_name   = "terraform-example"
+  cidr_block = "172.17.3.0/24"
+}
+
+resource "alicloud_vswitch" "example" {
+  vswitch_name = "terraform-example"
+  cidr_block   = "172.17.3.0/24"
+  vpc_id       = alicloud_vpc.example.id
+  zone_id      = data.alicloud_zones.example.zones.0.id
+}
+
+resource "alicloud_security_group" "example" {
+  name   = "terraform-example"
+  vpc_id = alicloud_vpc.example.id
+}
+
+resource "alicloud_instance" "example" {
+  image_id             = data.alicloud_images.example.images.0.id
+  instance_type        = data.alicloud_instance_types.example.instance_types.0.id
+  availability_zone    = data.alicloud_zones.example.zones.0.id
+  security_groups      = [alicloud_security_group.example.id]
+  instance_name        = "terraform-example"
+  internet_charge_type = "PayByBandwidth"
+  vswitch_id           = alicloud_vswitch.example.id
 }
 
 resource "alicloud_hbr_server_backup_plan" "example" {
-  ecs_server_backup_plan_name = "server_backup_plan"
-  instance_id                 = data.alicloud_instances.default.instances.0.id
+  ecs_server_backup_plan_name = "terraform-example"
+  instance_id                 = alicloud_instance.example.id
   schedule                    = "I|1602673264|PT2H"
   retention                   = 1
   detail {
@@ -50,6 +93,9 @@ The following arguments are supported:
   * `interval` **ISO8601 time interval**. E.g: `PT1H` means one hour apart. `P1D` means one day apart. It means to execute a backup task every `{interval}` starting from `{startTime}`. The backup task for the elapsed time will not be compensated. If the last backup task is not completed, the next backup task will not be triggered.
 * `detail` - (Required) ECS server backup plan details.
 * `disabled` - (Optional) Whether to disable the backup task. Valid values: `true`, `false`.
+* `cross_account_type` - (Optional, ForceNew, Computed, Available in v1.199.0+) The type of the cross account backup. Valid values: `SELF_ACCOUNT`, `CROSS_ACCOUNT`.
+* `cross_account_user_id` - (Optional, ForceNew, Available in v1.199.0+) The original account ID of the cross account backup managed by the current account.
+* `cross_account_role_name` - (Optional, ForceNew, Available in v1.199.0+) The role name created in the original account RAM backup by the cross account managed by the current account.
 
 #### Block detail
 
@@ -76,6 +122,6 @@ The following attributes are exported:
 
 Hybrid Backup Recovery (HBR) Server Backup Plan can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_hbr_server_backup_plan.example <id>
 ```

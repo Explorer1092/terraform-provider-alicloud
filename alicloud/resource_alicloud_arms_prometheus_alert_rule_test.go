@@ -289,7 +289,7 @@ resource "alicloud_arms_dispatch_rule" "default" {
 `, name)
 }
 
-func TestAccAlicloudARMSPrometheusAlertRule_unit(t *testing.T) {
+func TestUnitAlicloudARMSPrometheusAlertRule(t *testing.T) {
 	p := Provider().(*schema.Provider).ResourcesMap
 	rand := acctest.RandIntRange(10000, 99999)
 	d, _ := schema.InternalMap(p["alicloud_arms_prometheus_alert_rule"].Schema).Data(nil, nil)
@@ -523,7 +523,7 @@ func TestAccAlicloudARMSPrometheusAlertRule_unit(t *testing.T) {
 				diff.SetAttribute(fmt.Sprintf("%s.#", key), &terraform.ResourceAttrDiff{Old: "1", New: "1"})
 				for _, ipConfig := range d.Get(key).(*schema.Set).List() {
 					ipConfigArg := ipConfig.(map[string]interface{})
-					for field, _ := range p["alicloud_arms_prometheus_alert_rule"].Schema[key].Elem.(*schema.Resource).Schema {
+					for field := range p["alicloud_arms_prometheus_alert_rule"].Schema[key].Elem.(*schema.Resource).Schema {
 						diff.SetAttribute(fmt.Sprintf("%s.%d.%s", key, rand, field), &terraform.ResourceAttrDiff{Old: ipConfigArg[field].(string), New: ipConfigArg[field].(string) + "_update"})
 					}
 				}
@@ -566,7 +566,7 @@ func TestAccAlicloudARMSPrometheusAlertRule_unit(t *testing.T) {
 				diff.SetAttribute(fmt.Sprintf("%s.#", key), &terraform.ResourceAttrDiff{Old: "1", New: "1"})
 				for _, ipConfig := range d.Get(key).(*schema.Set).List() {
 					ipConfigArg := ipConfig.(map[string]interface{})
-					for field, _ := range p["alicloud_arms_prometheus_alert_rule"].Schema[key].Elem.(*schema.Resource).Schema {
+					for field := range p["alicloud_arms_prometheus_alert_rule"].Schema[key].Elem.(*schema.Resource).Schema {
 						diff.SetAttribute(fmt.Sprintf("%s.%d.%s", key, rand, field), &terraform.ResourceAttrDiff{Old: ipConfigArg[field].(string), New: ipConfigArg[field].(string) + "_update"})
 					}
 				}

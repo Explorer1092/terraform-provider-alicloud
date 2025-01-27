@@ -7,8 +7,6 @@ import (
 	"log"
 	"time"
 
-	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
-
 	"github.com/aliyun/aliyun-oss-go-sdk/oss"
 	"github.com/aliyun/terraform-provider-alicloud/alicloud/connectivity"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/hashcode"
@@ -31,15 +29,16 @@ func resourceAlicloudOssBucket() *schema.Resource {
 				Type:         schema.TypeString,
 				Optional:     true,
 				ForceNew:     true,
-				ValidateFunc: validation.StringLenBetween(3, 63),
-				Default:      resource.PrefixedUniqueId("tf-oss-bucket-"),
+				Computed:     true,
+				ValidateFunc: StringLenBetween(3, 63),
 			},
 
 			"acl": {
 				Type:         schema.TypeString,
-				Default:      oss.ACLPrivate,
+				Computed:     true,
 				Optional:     true,
-				ValidateFunc: validation.StringInSlice([]string{"private", "public-read", "public-read-write"}, false),
+				ValidateFunc: StringInSlice([]string{"private", "public-read", "public-read-write"}, false),
+				Deprecated:   "Field 'acl' has been deprecated since provider version 1.220.0. New resource 'alicloud_oss_bucket_acl' instead.",
 			},
 
 			"cors_rule": {
@@ -139,6 +138,12 @@ func resourceAlicloudOssBucket() *schema.Resource {
 				MaxItems: 1,
 			},
 
+			"lifecycle_rule_allow_same_action_overlap": {
+				Type:     schema.TypeBool,
+				Optional: true,
+				Default:  false,
+			},
+
 			"lifecycle_rule": {
 				Type:     schema.TypeList,
 				Optional: true,
@@ -148,7 +153,7 @@ func resourceAlicloudOssBucket() *schema.Resource {
 							Type:         schema.TypeString,
 							Optional:     true,
 							Computed:     true,
-							ValidateFunc: validation.StringLenBetween(0, 255),
+							ValidateFunc: StringLenBetween(0, 255),
 						},
 						"prefix": {
 							Type:     schema.TypeString,
@@ -203,13 +208,22 @@ func resourceAlicloudOssBucket() *schema.Resource {
 									},
 									"storage_class": {
 										Type:     schema.TypeString,
-										Default:  oss.StorageStandard,
-										Optional: true,
-										ValidateFunc: validation.StringInSlice([]string{
+										Required: true,
+										ValidateFunc: StringInSlice([]string{
 											string(oss.StorageStandard),
 											string(oss.StorageIA),
 											string(oss.StorageArchive),
+											string(oss.StorageColdArchive),
+											string(oss.StorageDeepColdArchive),
 										}, false),
+									},
+									"is_access_time": {
+										Type:     schema.TypeBool,
+										Optional: true,
+									},
+									"return_to_std_when_visit": {
+										Type:     schema.TypeBool,
+										Optional: true,
 									},
 								},
 							},
@@ -258,11 +272,71 @@ func resourceAlicloudOssBucket() *schema.Resource {
 									"storage_class": {
 										Type:     schema.TypeString,
 										Required: true,
-										ValidateFunc: validation.StringInSlice([]string{
+										ValidateFunc: StringInSlice([]string{
 											string(oss.StorageStandard),
 											string(oss.StorageIA),
 											string(oss.StorageArchive),
+											string(oss.StorageColdArchive),
+											string(oss.StorageDeepColdArchive),
 										}, false),
+									},
+									"is_access_time": {
+										Type:     schema.TypeBool,
+										Optional: true,
+									},
+									"return_to_std_when_visit": {
+										Type:     schema.TypeBool,
+										Optional: true,
+									},
+								},
+							},
+						},
+						"tags": tagsSchema(),
+						"filter": {
+							Type:     schema.TypeList,
+							Optional: true,
+							MaxItems: 1,
+							Elem: &schema.Resource{
+								Schema: map[string]*schema.Schema{
+									"not": {
+										Type:     schema.TypeList,
+										Optional: true,
+										MaxItems: 1,
+										Elem: &schema.Resource{
+											Schema: map[string]*schema.Schema{
+												"prefix": {
+													Type:     schema.TypeString,
+													Optional: true,
+												},
+												"tag": {
+													Type:     schema.TypeList,
+													MaxItems: 1,
+													Optional: true,
+													Elem: &schema.Resource{
+														Schema: map[string]*schema.Schema{
+															"key": {
+																Type:     schema.TypeString,
+																Required: true,
+															},
+															"value": {
+																Type:     schema.TypeString,
+																Required: true,
+															},
+														},
+													},
+												},
+											},
+										},
+									},
+									"object_size_greater_than": {
+										Type:         schema.TypeInt,
+										Optional:     true,
+										ValidateFunc: IntAtLeast(1),
+									},
+									"object_size_less_than": {
+										Type:         schema.TypeInt,
+										Optional:     true,
+										ValidateFunc: IntAtLeast(1),
 									},
 								},
 							},
@@ -301,10 +375,12 @@ func resourceAlicloudOssBucket() *schema.Resource {
 				Default:  oss.StorageStandard,
 				Optional: true,
 				ForceNew: true,
-				ValidateFunc: validation.StringInSlice([]string{
+				ValidateFunc: StringInSlice([]string{
 					string(oss.StorageStandard),
 					string(oss.StorageIA),
 					string(oss.StorageArchive),
+					string(oss.StorageColdArchive),
+					string(oss.StorageDeepColdArchive),
 				}, false),
 			},
 			"redundancy_type": {
@@ -312,7 +388,7 @@ func resourceAlicloudOssBucket() *schema.Resource {
 				Default:  oss.RedundancyLRS,
 				Optional: true,
 				ForceNew: true,
-				ValidateFunc: validation.StringInSlice([]string{
+				ValidateFunc: StringInSlice([]string{
 					string(oss.RedundancyLRS),
 					string(oss.RedundancyZRS),
 				}, false),
@@ -325,7 +401,7 @@ func resourceAlicloudOssBucket() *schema.Resource {
 						"sse_algorithm": {
 							Type:     schema.TypeString,
 							Required: true,
-							ValidateFunc: validation.StringInSlice([]string{
+							ValidateFunc: StringInSlice([]string{
 								ServerSideEncryptionAes256,
 								ServerSideEncryptionKMS,
 							}, false),
@@ -355,7 +431,7 @@ func resourceAlicloudOssBucket() *schema.Resource {
 						"status": {
 							Type:     schema.TypeString,
 							Required: true,
-							ValidateFunc: validation.StringInSlice([]string{
+							ValidateFunc: StringInSlice([]string{
 								"Enabled",
 								"Suspended",
 							}, false),
@@ -378,13 +454,47 @@ func resourceAlicloudOssBucket() *schema.Resource {
 				},
 				MaxItems: 1,
 			},
+
+			"access_monitor": {
+				Type:     schema.TypeList,
+				Optional: true,
+				Computed: true,
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"status": {
+							Type:     schema.TypeString,
+							Optional: true,
+							Computed: true,
+							ValidateFunc: StringInSlice([]string{
+								"Enabled",
+								"Disabled",
+							}, false),
+						},
+					},
+				},
+				MaxItems: 1,
+			},
+			"resource_group_id": {
+				Type:     schema.TypeString,
+				Computed: true,
+				Optional: true,
+			},
 		},
 	}
 }
 
 func resourceAlicloudOssBucketCreate(d *schema.ResourceData, meta interface{}) error {
 	client := meta.(*connectivity.AliyunClient)
-	request := map[string]string{"bucketName": d.Get("bucket").(string)}
+	var bucketName string
+	if v, ok := d.GetOk("bucket"); ok && v != "" {
+		bucketName = v.(string)
+	} else {
+		bucketName = resource.PrefixedUniqueId("tf-oss-bucket-")
+		if len(bucketName) > 63 {
+			bucketName = bucketName[:63]
+		}
+	}
+	request := map[string]string{"bucketName": bucketName}
 	var requestInfo *oss.Client
 	raw, err := client.WithOssClient(func(ossClient *oss.Client) (interface{}, error) {
 		requestInfo = ossClient
@@ -402,15 +512,30 @@ func resourceAlicloudOssBucketCreate(d *schema.ResourceData, meta interface{}) e
 		BucketName           string
 		StorageClassOption   oss.Option
 		RedundancyTypeOption oss.Option
+		AclTypeOption        oss.Option
 	}
 
 	req := Request{
-		d.Get("bucket").(string),
+		bucketName,
 		oss.StorageClass(oss.StorageClassType(d.Get("storage_class").(string))),
 		oss.RedundancyType(oss.DataRedundancyType(d.Get("redundancy_type").(string))),
+		oss.ACL(oss.ACLType(d.Get("acl").(string))),
 	}
+	options := []oss.Option{
+		req.StorageClassOption,
+		req.RedundancyTypeOption,
+		req.AclTypeOption,
+	}
+
+	//resource_group_id
+	if resourceGroupId, ok := d.Get("resource_group_id").(string); ok {
+		if len(resourceGroupId) > 0 {
+			options = append(options, oss.SetHeader("x-oss-resource-group-id", resourceGroupId))
+		}
+	}
+
 	raw, err = client.WithOssClient(func(ossClient *oss.Client) (interface{}, error) {
-		return nil, ossClient.CreateBucket(req.BucketName, req.StorageClassOption, req.RedundancyTypeOption)
+		return nil, ossClient.CreateBucket(req.BucketName, options...)
 	})
 	if err != nil {
 		return WrapErrorf(err, DefaultErrorMsg, "alicloud_oss_bucket", "CreateBucket", AliyunOssGoSdk)
@@ -486,6 +611,16 @@ func resourceAlicloudOssBucketRead(d *schema.ResourceData, meta interface{}) err
 		versioning = append(versioning, data)
 		d.Set("versioning", versioning)
 	}
+
+	if object.BucketInfo.AccessMonitor != "" {
+		data := map[string]interface{}{
+			"status": object.BucketInfo.AccessMonitor,
+		}
+		accessmonitor := make([]map[string]interface{}, 0)
+		accessmonitor = append(accessmonitor, data)
+		d.Set("access_monitor", accessmonitor)
+	}
+
 	request := map[string]string{"bucketName": d.Id()}
 	var requestInfo *oss.Client
 
@@ -644,6 +779,12 @@ func resourceAlicloudOssBucketRead(d *schema.ResourceData, meta interface{}) err
 				}
 				e["days"] = transition.Days
 				e["storage_class"] = string(transition.StorageClass)
+				if transition.IsAccessTime != nil {
+					e["is_access_time"] = *transition.IsAccessTime
+				}
+				if transition.ReturnToStdWhenVisit != nil {
+					e["return_to_std_when_visit"] = *transition.ReturnToStdWhenVisit
+				}
 				eSli = append(eSli, e)
 			}
 			rule["transitions"] = schema.NewSet(transitionsHash, eSli)
@@ -677,10 +818,58 @@ func resourceAlicloudOssBucketRead(d *schema.ResourceData, meta interface{}) err
 				e := make(map[string]interface{})
 				e["days"] = transition.NoncurrentDays
 				e["storage_class"] = string(transition.StorageClass)
+				if transition.IsAccessTime != nil {
+					e["is_access_time"] = *transition.IsAccessTime
+				}
+				if transition.ReturnToStdWhenVisit != nil {
+					e["return_to_std_when_visit"] = *transition.ReturnToStdWhenVisit
+				}
 				eSli = append(eSli, e)
 			}
 			rule["noncurrent_version_transition"] = schema.NewSet(transitionsHash, eSli)
 		}
+		// Tags
+		if len(lifecycleRule.Tags) != 0 {
+			ruleTagsMap := make(map[string]string)
+			for _, t := range lifecycleRule.Tags {
+				ruleTagsMap[t.Key] = t.Value
+			}
+			rule["tags"] = ruleTagsMap
+		}
+
+		// Filter
+		if lifecycleRule.Filter != nil {
+			var filterSli []interface{}
+			filterE := make(map[string]interface{})
+			//not
+			var notSli []interface{}
+			for _, not := range lifecycleRule.Filter.Not {
+				notE := make(map[string]interface{})
+				notE["prefix"] = string(not.Prefix)
+				var tagSli []interface{}
+				if not.Tag != nil {
+					tagE := make(map[string]interface{})
+					tagE["key"] = string(not.Tag.Key)
+					tagE["value"] = string(not.Tag.Value)
+					notE["tag"] = append(tagSli, tagE)
+				}
+				notSli = append(notSli, notE)
+			}
+			filterE["not"] = notSli
+
+			// object_size_greater_than
+			if lifecycleRule.Filter.ObjectSizeGreaterThan != nil {
+				filterE["object_size_greater_than"] = *lifecycleRule.Filter.ObjectSizeGreaterThan
+			}
+
+			// object_size_less_than
+			if lifecycleRule.Filter.ObjectSizeLessThan != nil {
+				filterE["object_size_less_than"] = *lifecycleRule.Filter.ObjectSizeLessThan
+			}
+
+			rule["filter"] = append(filterSli, filterE)
+		}
+
 		lrules = append(lrules, rule)
 	}
 
@@ -753,6 +942,20 @@ func resourceAlicloudOssBucketRead(d *schema.ResourceData, meta interface{}) err
 		return WrapError(err)
 	}
 
+	// Read the bucket resource-group-id
+	raw, err = client.WithOssClient(func(ossClient *oss.Client) (interface{}, error) {
+		requestInfo = ossClient
+		return ossClient.GetBucketResourceGroup(d.Id())
+	})
+	if err != nil && !IsExpectedErrors(err, []string{"NotImplemented"}) {
+		return WrapErrorf(err, DefaultErrorMsg, d.Id(), "GetBucketResourceGroup", AliyunOssGoSdk)
+	}
+	if err == nil {
+		addDebug("GetBucketResourceGroup", raw, requestInfo, request)
+		resourceGroup, _ := raw.(oss.GetBucketResourceGroupResult)
+		d.Set("resource_group_id", resourceGroup.ResourceGroupId)
+	}
+
 	return nil
 }
 
@@ -761,7 +964,7 @@ func resourceAlicloudOssBucketUpdate(d *schema.ResourceData, meta interface{}) e
 
 	d.Partial(true)
 
-	if d.HasChange("acl") {
+	if d.HasChange("acl") && !d.IsNewResource() {
 		request := map[string]string{"bucketName": d.Id(), "bucketACL": d.Get("acl").(string)}
 		var requestInfo *oss.Client
 		raw, err := client.WithOssClient(func(ossClient *oss.Client) (interface{}, error) {
@@ -803,11 +1006,28 @@ func resourceAlicloudOssBucketUpdate(d *schema.ResourceData, meta interface{}) e
 		d.SetPartial("referer_config")
 	}
 
+	//set access_monitor status to enable before lifecycle rule
+	accessMonitorChange := false
+	if d.HasChange("access_monitor") {
+		accessMonitorChange = true
+		if err := resourceAlicloudOssBucketAccessMonitorUpdate(client, d, true); err != nil {
+			return WrapError(err)
+		}
+	}
+
 	if d.HasChange("lifecycle_rule") {
 		if err := resourceAlicloudOssBucketLifecycleRuleUpdate(client, d); err != nil {
 			return WrapError(err)
 		}
 		d.SetPartial("lifecycle_rule")
+	}
+
+	//set access_monitor status to disable after lifecycle rule
+	if accessMonitorChange {
+		if err := resourceAlicloudOssBucketAccessMonitorUpdate(client, d, false); err != nil {
+			return WrapError(err)
+		}
+		d.SetPartial("access_monitor")
 	}
 
 	if d.HasChange("policy") {
@@ -843,6 +1063,23 @@ func resourceAlicloudOssBucketUpdate(d *schema.ResourceData, meta interface{}) e
 			return WrapError(err)
 		}
 		d.SetPartial("transfer_acceleration")
+	}
+
+	if !d.IsNewResource() && d.HasChange("resource_group_id") {
+		resourceGroupId := d.Get("resource_group_id").(string)
+		request := map[string]string{"bucketName": d.Id(), "resourceGroupId": resourceGroupId}
+		var requestInfo *oss.Client
+		raw, err := client.WithOssClient(func(ossClient *oss.Client) (interface{}, error) {
+			requestInfo = ossClient
+			return nil, ossClient.PutBucketResourceGroup(d.Id(), oss.PutBucketResourceGroup{
+				ResourceGroupId: resourceGroupId,
+			})
+		})
+		if err != nil {
+			return WrapErrorf(err, DefaultErrorMsg, d.Id(), "PutBucketResourceGroup", AliyunOssGoSdk)
+		}
+		addDebug("PutBucketResourceGroup", raw, requestInfo, request)
+		d.SetPartial("resource_group_id")
 	}
 
 	d.Partial(false)
@@ -1136,6 +1373,14 @@ func resourceAlicloudOssBucketLifecycleRuleUpdate(client *connectivity.AliyunCli
 				if valStorageClass != "" {
 					i.StorageClass = oss.StorageClassType(valStorageClass)
 				}
+
+				if val, ok := transition.(map[string]interface{})["is_access_time"].(bool); ok && val {
+					i.IsAccessTime = &val
+					if val1, ok := transition.(map[string]interface{})["return_to_std_when_visit"].(bool); ok {
+						i.ReturnToStdWhenVisit = &val1
+					}
+				}
+
 				rule.Transitions = append(rule.Transitions, i)
 			}
 		}
@@ -1183,16 +1428,74 @@ func resourceAlicloudOssBucketLifecycleRuleUpdate(client *connectivity.AliyunCli
 				i.NoncurrentDays = valDays
 				i.StorageClass = oss.StorageClassType(valStorageClass)
 
+				if val, ok := transition.(map[string]interface{})["is_access_time"].(bool); ok && val {
+					i.IsAccessTime = &val
+					if val1, ok := transition.(map[string]interface{})["return_to_std_when_visit"].(bool); ok {
+						i.ReturnToStdWhenVisit = &val1
+					}
+				}
+
 				rule.NonVersionTransitions = append(rule.NonVersionTransitions, i)
 			}
+		}
+
+		// tags
+		ruleTagsMap := d.Get(fmt.Sprintf("lifecycle_rule.%d.tags", i)).(map[string]interface{})
+		if ruleTagsMap != nil {
+			for k, v := range ruleTagsMap {
+				rule.Tags = append(rule.Tags, oss.Tag{
+					Key:   k,
+					Value: v.(string),
+				})
+			}
+		}
+
+		// filter
+		ruleFilter := d.Get(fmt.Sprintf("lifecycle_rule.%d.filter", i)).([]interface{})
+		if len(ruleFilter) > 0 {
+			e := ruleFilter[0].(map[string]interface{})
+			filter := oss.LifecycleFilter{}
+			filterNotElems, _ := e["not"].([]interface{})
+			for _, notElem := range filterNotElems {
+				filterNot := oss.LifecycleFilterNot{}
+				//prefix
+				filterNot.Prefix = notElem.(map[string]interface{})["prefix"].(string)
+
+				//tag
+				filterNotTagElems := notElem.(map[string]interface{})["tag"].([]interface{})
+				if len(filterNotTagElems) > 0 {
+					filterNotTagElem := filterNotTagElems[0].(map[string]interface{})
+					tag := oss.Tag{}
+					tag.Key = filterNotTagElem["key"].(string)
+					tag.Value = filterNotTagElem["value"].(string)
+					filterNot.Tag = &tag
+				}
+				filter.Not = append(filter.Not, filterNot)
+			}
+
+			if v, ok := e["object_size_greater_than"].(int); ok && v > 0 {
+				greater := int64(v)
+				filter.ObjectSizeGreaterThan = &greater
+			}
+
+			if v, ok := e["object_size_less_than"].(int); ok && v > 0 {
+				less := int64(v)
+				filter.ObjectSizeLessThan = &less
+			}
+
+			rule.Filter = &filter
 		}
 
 		rules = append(rules, rule)
 	}
 
+	options := []oss.Option{}
+	if d.Get("lifecycle_rule_allow_same_action_overlap").(bool) {
+		options = append(options, oss.AllowSameActionOverLap(true))
+	}
 	raw, err := client.WithOssClient(func(ossClient *oss.Client) (interface{}, error) {
 		requestInfo = ossClient
-		return nil, ossClient.SetBucketLifecycle(bucket, rules)
+		return nil, ossClient.SetBucketLifecycle(bucket, rules, options...)
 	})
 	if err != nil {
 		return WrapErrorf(err, DefaultErrorMsg, d.Id(), "SetBucketLifecycle", AliyunOssGoSdk)
@@ -1367,6 +1670,34 @@ func resourceAlicloudOssBucketTransferAccUpdate(client *connectivity.AliyunClien
 	return nil
 }
 
+func resourceAlicloudOssBucketAccessMonitorUpdate(client *connectivity.AliyunClient, d *schema.ResourceData, flag bool) error {
+	am := d.Get("access_monitor").([]interface{})
+	if len(am) == 1 {
+		var requestInfo *oss.Client
+		var amCfg oss.PutBucketAccessMonitor
+		c := am[0].(map[string]interface{})
+		if v, ok := c["status"]; ok {
+			amCfg.Status = v.(string)
+		}
+
+		if (flag && amCfg.Status == "Enabled") || (!flag && amCfg.Status == "Disabled") {
+			raw, err := client.WithOssClient(func(ossClient *oss.Client) (interface{}, error) {
+				requestInfo = ossClient
+				return nil, ossClient.PutBucketAccessMonitor(d.Id(), amCfg)
+			})
+			if err != nil {
+				return WrapErrorf(err, DefaultErrorMsg, d.Id(), "PutBucketAccessMonitor", AliyunOssGoSdk)
+			}
+			addDebug("PutBucketAccessMonitor", raw, requestInfo, map[string]interface{}{
+				"bucketName":             d.Id(),
+				"PutBucketAccessMonitor": amCfg,
+			})
+		}
+	}
+
+	return nil
+}
+
 func resourceAlicloudOssBucketDelete(d *schema.ResourceData, meta interface{}) error {
 	client := meta.(*connectivity.AliyunClient)
 	ossService := OssService{client}
@@ -1393,7 +1724,7 @@ func resourceAlicloudOssBucketDelete(d *schema.ResourceData, meta interface{}) e
 			if IsExpectedErrors(err, []string{"BucketNotEmpty"}) {
 				if d.Get("force_destroy").(bool) {
 					raw, er := client.WithOssClient(func(ossClient *oss.Client) (interface{}, error) {
-						bucket, _ := ossClient.Bucket(d.Get("bucket").(string))
+						bucket, _ := ossClient.Bucket(d.Id())
 						lor, err := bucket.ListObjectVersions()
 						if err != nil {
 							return nil, WrapErrorf(err, DefaultErrorMsg, d.Id(), "ListObjectVersions", AliyunOssGoSdk)
@@ -1462,6 +1793,12 @@ func transitionsHash(v interface{}) int {
 	}
 	if v, ok := m["days"]; ok {
 		buf.WriteString(fmt.Sprintf("%d-", v.(int)))
+	}
+	if v, ok := m["is_access_time"]; ok {
+		buf.WriteString(fmt.Sprintf("%v-", v.(bool)))
+	}
+	if v, ok := m["return_to_std_when_visit"]; ok {
+		buf.WriteString(fmt.Sprintf("%v-", v.(bool)))
 	}
 	return hashcode.String(buf.String())
 }

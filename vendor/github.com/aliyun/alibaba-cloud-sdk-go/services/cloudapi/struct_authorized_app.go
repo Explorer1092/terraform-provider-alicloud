@@ -17,12 +17,14 @@ package cloudapi
 
 // AuthorizedApp is a nested struct in cloudapi response
 type AuthorizedApp struct {
-	StageName           string `json:"StageName" xml:"StageName"`
+	AuthValidTime       string `json:"AuthValidTime" xml:"AuthValidTime"`
 	AppId               int64  `json:"AppId" xml:"AppId"`
-	AppName             string `json:"AppName" xml:"AppName"`
-	Operator            string `json:"Operator" xml:"Operator"`
-	AuthorizationSource string `json:"AuthorizationSource" xml:"AuthorizationSource"`
-	Description         string `json:"Description" xml:"Description"`
-	AuthorizedTime      string `json:"AuthorizedTime" xml:"AuthorizedTime"`
+	Extend              string `json:"Extend" xml:"Extend"`
 	AuthVaildTime       string `json:"AuthVaildTime" xml:"AuthVaildTime"`
+	AuthorizationSource string `json:"AuthorizationSource" xml:"AuthorizationSource"`
+	AuthorizedTime      string `json:"AuthorizedTime" xml:"AuthorizedTime"`
+	AppName             string `json:"AppName" xml:"AppName"`
+	StageName           string `json:"StageName" xml:"StageName"`
+	Operator            string `json:"Operator" xml:"Operator"`
+	Description         string `json:"Description" xml:"Description"`
 }

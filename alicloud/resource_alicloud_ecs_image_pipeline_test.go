@@ -234,7 +234,7 @@ data "alicloud_resource_manager_resource_groups" "default" {
 }
 data "alicloud_zones" "default" {}
 data "alicloud_vpcs" "default" {
-	name_regex = "default-NODELETING"
+	name_regex = "^default-NODELETING$"
 }
 data "alicloud_vswitches" "default" {
 	vpc_id = data.alicloud_vpcs.default.ids.0
@@ -252,7 +252,7 @@ data "alicloud_account" "default" {}
 `, name)
 }
 
-func TestAccAlicloudEcsImagePipeline_unit(t *testing.T) {
+func TestUnitAlicloudEcsImagePipeline(t *testing.T) {
 	p := Provider().(*schema.Provider).ResourcesMap
 	dInit, _ := schema.InternalMap(p["alicloud_ecs_image_pipeline"].Schema).Data(nil, nil)
 	dExisted, _ := schema.InternalMap(p["alicloud_ecs_image_pipeline"].Schema).Data(nil, nil)

@@ -7,28 +7,66 @@ description: |-
   Provides a Alicloud Bastion Host Host resource.
 ---
 
-# alicloud\_bastionhost\_host
+# alicloud_bastionhost_host
 
 Provides a Bastion Host Host resource.
 
 For information about Bastion Host Host and how to use it, see [What is Host](https://www.alibabacloud.com/help/en/doc-detail/201330.htm).
 
--> **NOTE:** Available in v1.135.0+.
+-> **NOTE:** Available since v1.135.0.
 
 ## Example Usage
 
 Basic Usage
 
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_bastionhost_host&exampleId=4ca63422-dd8c-93bf-845f-e113fe2731b3b8ed1b24&activeTab=example&spm=docs.r.bastionhost_host.0.4ca63422dd&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
 ```terraform
-resource "alicloud_bastionhost_host" "example" {
+variable "name" {
+  default = "tf_example"
+}
+data "alicloud_zones" "default" {
+  available_resource_creation = "VSwitch"
+}
+
+data "alicloud_vpcs" "default" {
+  name_regex = "^default-NODELETING$"
+  cidr_block = "10.4.0.0/16"
+}
+
+data "alicloud_vswitches" "default" {
+  cidr_block = "10.4.0.0/24"
+  vpc_id     = data.alicloud_vpcs.default.ids.0
+  zone_id    = data.alicloud_zones.default.zones.0.id
+}
+
+resource "alicloud_security_group" "default" {
+  vpc_id = data.alicloud_vpcs.default.ids.0
+}
+
+resource "alicloud_bastionhost_instance" "default" {
+  description        = var.name
+  license_code       = "bhah_ent_50_asset"
+  plan_code          = "cloudbastion"
+  storage            = "5"
+  bandwidth          = "5"
+  period             = "1"
+  vswitch_id         = data.alicloud_vswitches.default.ids[0]
+  security_group_ids = [alicloud_security_group.default.id]
+}
+
+resource "alicloud_bastionhost_host" "default" {
+  instance_id          = alicloud_bastionhost_instance.default.id
+  host_name            = var.name
   active_address_type  = "Private"
   host_private_address = "172.16.0.10"
-  host_name            = "example_value"
-  instance_id          = "bastionhost-cn-tl3xxxxxxx"
   os_type              = "Linux"
   source               = "Local"
 }
-
 ```
 
 ## Argument Reference
@@ -60,6 +98,6 @@ The following attributes are exported:
 
 Bastion Host Host can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_bastionhost_host.example <instance_id>:<host_id>
 ```

@@ -7,23 +7,31 @@ description: |-
   Provides a Alicloud Iot Device Group resource.
 ---
 
-# alicloud\_iot\_device\_group
+# alicloud_iot_device_group
 
 Provides a Iot Device Group resource.
 
 For information about Iot Device Group and how to use it, see [What is Device Group](https://www.alibabacloud.com/help/product/30520.htm).
 
--> **NOTE:** Available in v1.134.0+.
+-> **NOTE:** Available since v1.134.0.
 
 ## Example Usage
 
 Basic Usage
 
-```terraform
-resource "alicloud_iot_device_group" "example" {
-  group_name = "example_value"
-}
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_iot_device_group&exampleId=a177a88b-84e0-5a56-f6d4-4cf61be5f76f18dbe55c&activeTab=example&spm=docs.r.iot_device_group.0.a177a88b84&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
 
+```terraform
+variable "name" {
+  default = "tfexample"
+}
+resource "alicloud_iot_device_group" "example" {
+  group_name = var.name
+}
 ```
 
 ## Argument Reference
@@ -45,6 +53,6 @@ The following attributes are exported:
 
 Iot Device Group can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_iot_device_group.example <id>
 ```

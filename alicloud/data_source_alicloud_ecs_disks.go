@@ -13,9 +13,9 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
 )
 
-func dataSourceAlicloudEcsDisks() *schema.Resource {
+func dataSourceAliCloudEcsDisks() *schema.Resource {
 	return &schema.Resource{
-		Read: dataSourceAlicloudEcsDisksRead,
+		Read: dataSourceAliCloudEcsDisksRead,
 		Schema: map[string]*schema.Schema{
 			"additional_attributes": {
 				Type:     schema.TypeList,
@@ -32,7 +32,7 @@ func dataSourceAlicloudEcsDisks() *schema.Resource {
 				Type:         schema.TypeString,
 				Optional:     true,
 				ForceNew:     true,
-				ValidateFunc: validation.StringInSlice([]string{"cloud", "cloud_efficiency", "cloud_essd", "cloud_ssd", "ephemeral_ssd"}, false),
+				ValidateFunc: StringInSlice([]string{"cloud", "cloud_efficiency", "cloud_essd", "cloud_ssd", "ephemeral_ssd", "cloud_auto", "cloud_essd_entry"}, false),
 			},
 			"delete_auto_snapshot": {
 				Type:     schema.TypeBool,
@@ -71,13 +71,13 @@ func dataSourceAlicloudEcsDisks() *schema.Resource {
 				Type:         schema.TypeString,
 				Optional:     true,
 				ForceNew:     true,
-				ValidateFunc: validation.StringInSlice([]string{"system", "data", "all"}, false),
+				ValidateFunc: StringInSlice([]string{"system", "data", "all"}, false),
 			},
 			"type": {
 				Type:         schema.TypeString,
 				Optional:     true,
 				ForceNew:     true,
-				ValidateFunc: validation.StringInSlice([]string{"system", "data", "all"}, false),
+				ValidateFunc: StringInSlice([]string{"system", "data", "all"}, false),
 				Deprecated:   "Field 'type' has been deprecated from provider version 1.122.0. New field 'disk_type' instead.",
 			},
 			"dry_run": {
@@ -89,7 +89,6 @@ func dataSourceAlicloudEcsDisks() *schema.Resource {
 				Type:     schema.TypeBool,
 				Optional: true,
 				ForceNew: true,
-				Default:  true,
 			},
 			"enable_automated_snapshot_policy": {
 				Type:     schema.TypeBool,
@@ -105,7 +104,7 @@ func dataSourceAlicloudEcsDisks() *schema.Resource {
 				Type:         schema.TypeString,
 				Optional:     true,
 				ForceNew:     true,
-				ValidateFunc: validation.StringInSlice([]string{"on", "off"}, false),
+				ValidateFunc: StringInSlice([]string{"on", "off"}, false),
 			},
 			"instance_id": {
 				Type:     schema.TypeString,
@@ -135,7 +134,7 @@ func dataSourceAlicloudEcsDisks() *schema.Resource {
 				Type:         schema.TypeString,
 				Optional:     true,
 				ForceNew:     true,
-				ValidateFunc: validation.StringInSlice([]string{"PayAsYouGo", "Subscription"}, false),
+				ValidateFunc: StringInSlice([]string{"PayAsYouGo", "Subscription"}, false),
 			},
 			"portable": {
 				Type:     schema.TypeBool,
@@ -156,7 +155,7 @@ func dataSourceAlicloudEcsDisks() *schema.Resource {
 				Type:         schema.TypeString,
 				Optional:     true,
 				ForceNew:     true,
-				ValidateFunc: validation.StringInSlice([]string{"Attaching", "Available", "Creating", "Detaching", "In_use", "Migrating", "ReIniting", "Transferring"}, false),
+				ValidateFunc: StringInSlice([]string{"Attaching", "Available", "Creating", "Detaching", "In_use", "Migrating", "ReIniting", "Transferring"}, false),
 			},
 			"tags": tagsSchema(),
 			"zone_id": {
@@ -244,6 +243,10 @@ func dataSourceAlicloudEcsDisks() *schema.Resource {
 							Computed: true,
 						},
 						"expired_time": {
+							Type:     schema.TypeString,
+							Computed: true,
+						},
+						"expiration_time": {
 							Type:     schema.TypeString,
 							Computed: true,
 						},
@@ -382,7 +385,7 @@ func dataSourceAlicloudEcsDisks() *schema.Resource {
 	}
 }
 
-func dataSourceAlicloudEcsDisksRead(d *schema.ResourceData, meta interface{}) error {
+func dataSourceAliCloudEcsDisksRead(d *schema.ResourceData, meta interface{}) error {
 	client := meta.(*connectivity.AliyunClient)
 
 	action := "DescribeDisks"
@@ -486,7 +489,7 @@ func dataSourceAlicloudEcsDisksRead(d *schema.ResourceData, meta interface{}) er
 	if v, ok := d.GetOk("page_size"); ok && v.(int) > 0 {
 		request["PageSize"] = v.(int)
 	} else {
-		request["PageSize"] = PageSizeLarge
+		request["PageSize"] = PageSizeXLarge
 	}
 	var objects []interface{}
 	var diskNameRegex *regexp.Regexp
@@ -580,6 +583,7 @@ func dataSourceAlicloudEcsDisksRead(d *schema.ResourceData, meta interface{}) er
 			"enable_automated_snapshot_policy": object["EnableAutomatedSnapshotPolicy"],
 			"encrypted":                        string(OnFlag),
 			"expired_time":                     object["ExpiredTime"],
+			"expiration_time":                  object["ExpiredTime"],
 			"iops":                             formatInt(object["IOPS"]),
 			"iops_read":                        formatInt(object["IOPSRead"]),
 			"iops_write":                       formatInt(object["IOPSWrite"]),

@@ -7,40 +7,50 @@ description: |-
   Provides a Alicloud Simple Application Server Firewall Rule resource.
 ---
 
-# alicloud\_simple\_application\_server\_firewall\_rule
+# alicloud_simple_application_server_firewall_rule
 
 Provides a Simple Application Server Firewall Rule resource.
 
 For information about Simple Application Server Firewall Rule and how to use it, see [What is Firewall Rule](https://www.alibabacloud.com/help/doc-detail/190449.htm).
 
--> **NOTE:** Available in v1.143.0+.
+-> **NOTE:** Available since v1.143.0.
 
 ## Example Usage
 
 Basic Usage
 
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_simple_application_server_firewall_rule&exampleId=0e591dba-527a-0e06-b288-536cd17677570be13048&activeTab=example&spm=docs.r.simple_application_server_firewall_rule.0.0e591dba52&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
 ```terraform
-data "alicloud_simple_application_server_instances" "default" {}
+provider "alicloud" {
+  region = "cn-hangzhou"
+}
+
+variable "name" {
+  default = "tf_example"
+}
 
 data "alicloud_simple_application_server_images" "default" {}
-
 data "alicloud_simple_application_server_plans" "default" {}
 
 resource "alicloud_simple_application_server_instance" "default" {
-  count          = length(data.alicloud_simple_application_server_instances.default.ids) > 0 ? 0 : 1
   payment_type   = "Subscription"
   plan_id        = data.alicloud_simple_application_server_plans.default.plans.0.id
-  instance_name  = "tf-testaccswas-firewallrule"
+  instance_name  = var.name
   image_id       = data.alicloud_simple_application_server_images.default.images.0.id
   period         = 1
   data_disk_size = 100
 }
 
 resource "alicloud_simple_application_server_firewall_rule" "default" {
-  instance_id   = length(data.alicloud_simple_application_server_instances.default.ids) > 0 ? data.alicloud_simple_application_server_instances.default.ids.0 : alicloud_simple_application_server_instance.default.0.id
+  instance_id   = alicloud_simple_application_server_instance.default.id
   rule_protocol = "Tcp"
   port          = "9999"
-  remark        = "example_value"
+  remark        = var.name
 }
 ```
 ## Argument Reference
@@ -63,6 +73,6 @@ The following attributes are exported:
 
 Simple Application Server Firewall Rule can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_simple_application_server_firewall_rule.example <instance_id>:<firewall_rule_id>
 ```

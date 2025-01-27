@@ -337,7 +337,7 @@ data "alicloud_zones" "default" {
 }
 
 data "alicloud_vpcs" "default" {
-	name_regex = "default-NODELETING"
+	name_regex = "^default-NODELETING$"
 }
 data "alicloud_vswitches" "default" {
 	vpc_id  = data.alicloud_vpcs.default.ids.0
@@ -358,7 +358,7 @@ locals {
 `, name)
 }
 
-func TestAccAlicloudVPNIpsecServer_unit(t *testing.T) {
+func TestUnitAlicloudVPNIpsecServer(t *testing.T) {
 	p := Provider().(*schema.Provider).ResourcesMap
 	d, _ := schema.InternalMap(p["alicloud_vpn_ipsec_server"].Schema).Data(nil, nil)
 	dCreate, _ := schema.InternalMap(p["alicloud_vpn_ipsec_server"].Schema).Data(nil, nil)

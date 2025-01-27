@@ -7,21 +7,40 @@ description: |-
   Provides a Alicloud Direct Mail Mail Address resource.
 ---
 
-# alicloud\_direct\_mail\_mail\_address
+# alicloud_direct_mail_mail_address
 
 Provides a Direct Mail Mail Address resource.
 
-For information about Direct Mail Mail Address and how to use it, see [What is Mail Address](https://www.aliyun.com/product/directmail).
+For information about Direct Mail Mail Address and how to use it, see [What is Mail Address](https://www.alibabacloud.com/help/en/directmail/latest/set-up-sender-addresses).
 
--> **NOTE:** Available in v1.134.0+.
+-> **NOTE:** Available since v1.134.0.
 
 ## Example Usage
 
 Basic Usage
 
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_direct_mail_mail_address&exampleId=f0eba849-80c0-1031-2686-81e7401f99d1bc584a05&activeTab=example&spm=docs.r.direct_mail_mail_address.0.f0eba84980&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
 ```terraform
+variable "account_name" {
+  default = "tfexample"
+}
+variable "domain_name" {
+  default = "alicloud-provider.online"
+}
+provider "alicloud" {
+  region = "cn-hangzhou"
+}
+
+resource "alicloud_direct_mail_domain" "example" {
+  domain_name = var.domain_name
+}
 resource "alicloud_direct_mail_mail_address" "example" {
-  account_name = "example_value@email.com"
+  account_name = format("%s@%s", var.account_name, alicloud_direct_mail_domain.example.domain_name)
   sendtype     = "batch"
 }
 ```
@@ -51,6 +70,6 @@ The following attributes are exported:
 
 Direct Mail Mail Address can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_direct_mail_mail_address.example <id>
 ```

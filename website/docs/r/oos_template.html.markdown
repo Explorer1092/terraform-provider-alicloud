@@ -7,15 +7,26 @@ description: |-
   Provides a OOS Template resource.
 ---
 
-# alicloud\_oos\_template
+# alicloud_oos_template
 
 Provides a OOS Template resource. For information about Alicloud OOS Template and how to use it, see [What is Resource Alicloud OOS Template](https://www.alibabacloud.com/help/doc-detail/120761.htm).
 
--> **NOTE:** Available in 1.92.0+.
+-> **NOTE:** Available since v1.92.0.
 
 ## Example Usage
 
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_oos_template&exampleId=10923d26-3220-f2f7-2f86-fa45c48d15e00f0e3c2e&activeTab=example&spm=docs.r.oos_template.0.10923d2632&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
 ```terraform
+resource "random_integer" "default" {
+  min = 10000
+  max = 99999
+}
+
 resource "alicloud_oos_template" "example" {
   content       = <<EOF
   {
@@ -41,8 +52,8 @@ resource "alicloud_oos_template" "example" {
       }]
   }
   EOF
-  template_name = "test-name"
-  version_name  = "test"
+  template_name = "tf-example-name-${random_integer.default.result}"
+  version_name  = "example"
   tags = {
     "Created" = "TF",
     "For"     = "acceptance Test"
@@ -59,8 +70,9 @@ The following arguments are supported:
 * `auto_delete_executions` - (Optional) When deleting a template, whether to delete its related executions. Default to `false`.
 * `template_name` - (Required, ForceNew) The name of the template. The template name can be up to 200 characters in length. The name can contain letters, digits, hyphens (-), and underscores (_). It cannot start with `ALIYUN`, `ACS`, `ALIBABA`, or `ALICLOUD`.
 * `version_name` - (Optional) The name of template version.
+* `resource_group_id` (Optional, Computed, Available in 1.177.0+) The ID of resource group which the template belongs.  
 * `tags` - (Optional) A mapping of tags to assign to the resource.
-                    
+
 ## Attributes Reference
 
 The following attributes are exported:
@@ -82,6 +94,6 @@ The following attributes are exported:
 
 OOS Template can be imported using the id or template_name, e.g.
 
-```
+```shell
 $ terraform import alicloud_oos_template.example template_name
 ```

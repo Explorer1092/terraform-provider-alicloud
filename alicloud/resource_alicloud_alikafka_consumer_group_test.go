@@ -113,7 +113,7 @@ func testSweepAlikafkaConsumerGroup(region string) error {
 	return nil
 }
 
-func TestAccAlicloudAlikafkaConsumerGroup_basic(t *testing.T) {
+func TestAccAliCloudAlikafkaConsumerGroup_basic(t *testing.T) {
 
 	var v *alikafka.ConsumerVO
 	resourceId := "alicloud_alikafka_consumer_group.default"
@@ -131,7 +131,6 @@ func TestAccAlicloudAlikafkaConsumerGroup_basic(t *testing.T) {
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
-			testAccPreCheckWithRegions(t, true, connectivity.AlikafkaSupportedRegions)
 			testAccPreCheck(t)
 		},
 		// module name
@@ -211,7 +210,7 @@ func TestAccAlicloudAlikafkaConsumerGroup_basic(t *testing.T) {
 
 }
 
-func TestAccAlicloudAlikafkaConsumerGroup_basic1(t *testing.T) {
+func TestAccAliCloudAlikafkaConsumerGroup_basic1(t *testing.T) {
 	var v *alikafka.ConsumerVO
 	resourceId := "alicloud_alikafka_consumer_group.default"
 	ra := resourceAttrInit(resourceId, alikafkaConsumerGroupBasicMap)
@@ -226,7 +225,6 @@ func TestAccAlicloudAlikafkaConsumerGroup_basic1(t *testing.T) {
 	testAccConfig := resourceTestAccConfigFunc(resourceId, name, resourceAlikafkaConsumerGroupConfigDependence)
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
-			testAccPreCheckWithRegions(t, true, connectivity.AlikafkaSupportedRegions)
 			testAccPreCheck(t)
 		},
 		IDRefreshName: resourceId,
@@ -256,7 +254,7 @@ func TestAccAlicloudAlikafkaConsumerGroup_basic1(t *testing.T) {
 
 }
 
-func TestAccAlicloudAlikafkaConsumerGroup_multi(t *testing.T) {
+func TestAccAliCloudAlikafkaConsumerGroup_multi(t *testing.T) {
 
 	var v *alikafka.ConsumerVO
 	resourceId := "alicloud_alikafka_consumer_group.default.4"
@@ -274,7 +272,6 @@ func TestAccAlicloudAlikafkaConsumerGroup_multi(t *testing.T) {
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
-			testAccPreCheckWithRegions(t, true, connectivity.AlikafkaSupportedRegions)
 			testAccPreCheck(t)
 		},
 		// module name
@@ -306,7 +303,7 @@ variable "name" {
 }
 
 data "alicloud_vpcs" "default" {
- name_regex = "^default-NODELETING"
+  name_regex = "^default-NODELETING$"
 }
 data "alicloud_vswitches" "default" {
   vpc_id = data.alicloud_vpcs.default.ids.0
@@ -319,7 +316,7 @@ resource "alicloud_security_group" "default" {
 
 resource "alicloud_alikafka_instance" "default" {
   name = "${var.name}"
-  topic_quota = "50"
+  partition_num = "50"
   disk_type = "1"
   disk_size = "500"
   deploy_type = "5"
@@ -334,7 +331,7 @@ var alikafkaConsumerGroupBasicMap = map[string]string{
 	"consumer_id": "${var.name}",
 }
 
-func TestAccAlicloudAlikafkaConsumerGroup_unit(t *testing.T) {
+func TestUnitAlicloudAlikafkaConsumerGroup(t *testing.T) {
 	p := Provider().(*schema.Provider).ResourcesMap
 	dInit, _ := schema.InternalMap(p["alicloud_alikafka_consumer_group"].Schema).Data(nil, nil)
 	dExisted, _ := schema.InternalMap(p["alicloud_alikafka_consumer_group"].Schema).Data(nil, nil)

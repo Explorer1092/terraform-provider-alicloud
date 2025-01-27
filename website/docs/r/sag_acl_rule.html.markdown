@@ -1,5 +1,5 @@
 ---
-subcategory: "Smart Access Gateway"
+subcategory: "Smart Access Gateway (Smartag)"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_sag_acl_rule"
 sidebar_current: "docs-alicloud-resource-sag-acl-rule"
@@ -7,28 +7,41 @@ description: |-
   Provides a Sag Acl Rule resource.
 ---
 
-# alicloud\_sag\_acl\_rule
+# alicloud_sag_acl_rule
 
 Provides a Sag Acl Rule resource. This topic describes how to configure an access control list (ACL) rule for a target Smart Access Gateway instance to permit or deny access to or from specified IP addresses in the ACL rule.
 
-For information about Sag Acl Rule and how to use it, see [What is access control list (ACL) rule](https://www.alibabacloud.com/help/doc-detail/111483.htm).
+For information about Sag Acl Rule and how to use it, see [What is access control list (ACL) rule](https://www.alibabacloud.com/help/en/smart-access-gateway/latest/addaclrule).
 
--> **NOTE:** Available in 1.60.0+
+-> **NOTE:** Available since v1.60.0.
 
--> **NOTE:** Only the following regions support create Cloud Connect Network. [`cn-shanghai`, `cn-shanghai-finance-1`, `cn-hongkong`, `ap-southeast-1`, `ap-southeast-2`, `ap-southeast-3`, `ap-southeast-5`, `ap-northeast-1`, `eu-central-1`]
+-> **NOTE:** Only the following regions support create Cloud Connect Network. [`cn-shanghai`, `cn-shanghai-finance-1`, `cn-hongkong`, `ap-southeast-1`, `ap-southeast-3`, `ap-southeast-5`, `ap-northeast-1`, `eu-central-1`]
 
 ## Example Usage
 
 Basic Usage
 
-```
-resource "alicloud_sag_acl" "default" {
-  name        = "tf-testAccSagAclName"
-  sag_count   = "0"
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_sag_acl_rule&exampleId=00a279d9-ec15-5df5-8460-6f4494fc2c03c0cc5ab8&activeTab=example&spm=docs.r.sag_acl_rule.0.00a279d9ec&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
+```terraform
+variable "name" {
+  default = "tf_example"
 }
+provider "alicloud" {
+  region = "cn-shanghai"
+}
+
+resource "alicloud_sag_acl" "default" {
+  name = var.name
+}
+
 resource "alicloud_sag_acl_rule" "default" {
   acl_id            = alicloud_sag_acl.default.id
-  description       = "tf-testSagAclRule"
+  description       = var.name
   policy            = "accept"
   ip_protocol       = "ALL"
   direction         = "in"
@@ -65,7 +78,7 @@ The following attributes are exported:
 
 The Sag Acl Rule can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_sag_acl_rule.example acr-abc123456
 ```
 

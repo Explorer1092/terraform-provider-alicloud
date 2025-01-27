@@ -1,5 +1,5 @@
 ---
-subcategory: "Auto Scaling(ESS)"
+subcategory: "Auto Scaling"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_ess_scaling_rule"
 sidebar_current: "docs-alicloud-resource-ess-scaling-rule"
@@ -7,15 +7,34 @@ description: |-
   Provides a ESS scaling rule resource.
 ---
 
-# alicloud\_ess\_scaling\_rule
+# alicloud_ess_scaling_rule
 
 Provides a ESS scaling rule resource.
 
+For information about ess scaling rule, see [CreateScalingRule](https://www.alibabacloud.com/help/en/auto-scaling/latest/createscalingrule).
+
+-> **NOTE:** Available since v1.39.0.
+
 ## Example Usage
 
-```
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_ess_scaling_rule&exampleId=b17b1417-e8bd-038c-a6a4-59ff45366987711b7247&activeTab=example&spm=docs.r.ess_scaling_rule.0.b17b1417e8&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
+```terraform
 variable "name" {
-  default = "essscalingruleconfig"
+  default = "terraform-example"
+}
+
+resource "random_integer" "default" {
+  min = 10000
+  max = 99999
+}
+
+locals {
+  name = "${var.name}-${random_integer.default.result}"
 }
 
 data "alicloud_zones" "default" {
@@ -36,19 +55,19 @@ data "alicloud_images" "default" {
 }
 
 resource "alicloud_vpc" "default" {
-  name       = var.name
+  vpc_name   = local.name
   cidr_block = "172.16.0.0/16"
 }
 
 resource "alicloud_vswitch" "default" {
-  vpc_id            = alicloud_vpc.default.id
-  cidr_block        = "172.16.0.0/24"
-  zone_id           = data.alicloud_zones.default.zones[0].id
-  vswitch_name      = var.name
+  vpc_id       = alicloud_vpc.default.id
+  cidr_block   = "172.16.0.0/24"
+  zone_id      = data.alicloud_zones.default.zones[0].id
+  vswitch_name = local.name
 }
 
 resource "alicloud_security_group" "default" {
-  name   = var.name
+  name   = local.name
   vpc_id = alicloud_vpc.default.id
 }
 
@@ -66,7 +85,7 @@ resource "alicloud_security_group_rule" "default" {
 resource "alicloud_ess_scaling_group" "default" {
   min_size           = 1
   max_size           = 1
-  scaling_group_name = var.name
+  scaling_group_name = local.name
   vswitch_ids        = [alicloud_vswitch.default.id]
   removal_policies   = ["OldestInstance", "NewestInstance"]
 }
@@ -95,7 +114,7 @@ to create different type rules, alarm task and scheduled task one-click.
 
 The following arguments are supported:
 
-* `scaling_group_id` - (Required) ID of the scaling group of a scaling rule.
+* `scaling_group_id` - (Required, ForceNew) ID of the scaling group of a scaling rule.
 * `adjustment_type` - (Optional) Adjustment mode of a scaling rule. Optional values:
     - QuantityChangeInCapacity: It is used to increase or decrease a specified number of ECS instances.
     - PercentChangeInCapacity: It is used to increase or decrease a specified proportion of ECS instances.
@@ -106,20 +125,41 @@ The following arguments are supported:
     - TotalCapacity：[0, 1000]
 * `scaling_rule_name` - (Optional) Name shown for the scaling rule, which must contain 2-64 characters (English or Chinese), starting with numbers, English letters or Chinese characters, and can contain number, underscores `_`, hypens `-`, and decimal point `.`. If this parameter value is not specified, the default value is scaling rule id. 
 * `cooldown` - (Optional) The cooldown time of the scaling rule. This parameter is applicable only to simple scaling rules. Value range: [0, 86,400], in seconds. The default value is empty，if not set, the return value will be 0, which is the default value of integer.
-* `scaling_rule_type` - (Optional, Available in 1.58.0+) The scaling rule type, either "SimpleScalingRule", "TargetTrackingScalingRule", "StepScalingRule". Default to "SimpleScalingRule".
-* `estimated_instance_warmup` - (Optional, Available in 1.58.0+) The estimated time, in seconds, until a newly launched instance will contribute CloudMonitor metrics. Default to 300.
-* `metric_name` - (Optional, Available in 1.58.0+) A CloudMonitor metric name.
-* `target_value` - (Optional, Available in 1.58.0+) The target value for the metric.
-* `disable_scale_in` - (Optional, Available in 1.58.0+) Indicates whether scale in by the target tracking policy is disabled. Default to false.
-* `step_adjustment` - (Optional, Available in 1.58.0+) Steps for StepScalingRule. See [Block stepAdjustment](#block-stepAdjustment) below for details.
+* `scaling_rule_type` - (Optional, ForceNew, Available since v1.58.0) The scaling rule type, either "SimpleScalingRule", "TargetTrackingScalingRule", "StepScalingRule", "PredictiveScalingRule". Default to "SimpleScalingRule".
+* `estimated_instance_warmup` - (Optional, Available since v1.58.0) The estimated time, in seconds, until a newly launched instance will contribute CloudMonitor metrics. Default to 300.
+* `min_adjustment_magnitude` - (Optional, Available since v1.221.0) The minimum number of instances that must be scaled. This parameter takes effect if you set ScalingRuleType to SimpleScalingRule or StepScalingRule, and AdjustmentType to PercentChangeInCapacity.
+* `scale_in_evaluation_count` - (Optional, Available since v1.221.0) The number of consecutive times that the event-triggered task created for scale-ins must meet the threshold conditions before an alert is triggered. After a target tracking scaling rule is created, an event-triggered task is automatically created and associated with the target tracking scaling rule.
+* `scale_out_evaluation_count` - (Optional, Available since v1.221.0) The number of consecutive times that the event-triggered task created for scale-outs must meet the threshold conditions before an alert is triggered. After a target tracking scaling rule is created, an event-triggered task is automatically created and associated with the target tracking scaling rule.
+* `metric_name` - (Optional, Available since v1.58.0) A CloudMonitor metric name.
+* `target_value` - (Optional, Available since v1.58.0) The target value for the metric.
+* `disable_scale_in` - (Optional, Available since v1.58.0) Indicates whether scale in by the target tracking policy is disabled. Default to false.
+* `step_adjustment` - (Optional, Available since v1.58.0) Steps for StepScalingRule. See [`step_adjustment`](#step_adjustment) below.
+* `ari` - (Optional) The unique identifier of the scaling rule.
+* `alarm_dimension` - (Optional, ForceNew, Available since v1.216.0) AlarmDimension for StepScalingRule. See [`alarm_dimension`](#alarm_dimension) below.
+* `predictive_scaling_mode` - (Optional, Available since v1.222.0) The mode of the predictive scaling rule. Valid values: PredictAndScale, PredictOnly.
+* `initial_max_size` - (Optional, Available since v1.222.0) The maximum number of ECS instances that can be added to the scaling group. If you specify InitialMaxSize, you must also specify PredictiveValueBehavior.
+* `predictive_value_behavior` - (Optional, Available since v1.222.0) The action on the predicted maximum value. Valid values: MaxOverridePredictiveValue, PredictiveValueOverrideMax, PredictiveValueOverrideMaxWithBuffer.
+* `predictive_value_buffer` - (Optional, Available since v1.222.0) The ratio based on which the predicted value is increased if you set PredictiveValueBehavior to PredictiveValueOverrideMaxWithBuffer. If the predicted value increased by this ratio is greater than the initial maximum capacity, the increased value is used as the maximum value for prediction tasks. Valid values: 0 to 100.
+* `predictive_task_buffer_time` - (Optional, Available since v1.222.0) The amount of buffer time before the prediction task runs. By default, all prediction tasks that are automatically created by a predictive scaling rule run on the hour. You can specify a buffer time to run prediction tasks and prepare resources in advance. Valid values: 0 to 60. Unit: minutes.
 
-## Block stepAdjustment
+
+
+
+### `step_adjustment`
 
 The stepAdjustment mapping supports the following:
 
 * `metric_interval_lower_bound` - (Optional) The lower bound of step.
 * `metric_interval_upper_bound` - (Optional) The upper bound of step.
 * `scaling_adjustment` - (Optional) The adjust value of step.
+
+### `alarm_dimension`
+
+The alarmDimension mapping supports the following:
+
+* `dimension_key` - (Optional) The dimension key of the metric.
+* `dimension_value` - (Optional, ForceNew) The dimension value of the metric.
+
 
 ## Attributes Reference
 
@@ -131,6 +171,6 @@ The following attributes are exported:
 
 ESS scaling rule can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_ess_scaling_rule.example abc123456
 ```

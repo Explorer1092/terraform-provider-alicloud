@@ -1,6 +1,7 @@
 package alicloud
 
 import (
+	"fmt"
 	"log"
 
 	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
@@ -32,6 +33,14 @@ func tagsSchema() *schema.Schema {
 	return &schema.Schema{
 		Type:     schema.TypeMap,
 		Optional: true,
+	}
+}
+
+func tagsSchemaForceNew() *schema.Schema {
+	return &schema.Schema{
+		Type:     schema.TypeMap,
+		Optional: true,
+		ForceNew: true,
 	}
 }
 
@@ -97,6 +106,27 @@ func tagsToMap(tags interface{}) map[string]interface{} {
 			} else if v, ok := t["Key"]; ok {
 				tagKey = v.(string)
 				tagValue = t["Value"]
+			} else if v, ok := t["tag_key"]; ok {
+				tagKey = v.(string)
+				tagValue = t["tag_value"]
+			} else if v, ok := t["tagKey"]; ok {
+				tagKey = v.(string)
+				tagValue = t["tagValue"]
+			} else if v, ok := t["key"]; ok {
+				tagKey = v.(string)
+				tagValue = t["value"]
+			}
+			if !tagIgnored(tagKey, tagValue) {
+				result[tagKey] = tagValue
+			}
+		}
+	case []map[string]interface{}:
+		for _, tag := range tags.([]map[string]interface{}) {
+			var tagKey string
+			var tagValue interface{}
+			if v, ok := tag["tag_key"]; ok {
+				tagKey = v.(string)
+				tagValue = tag["tag_value"]
 			}
 			if !tagIgnored(tagKey, tagValue) {
 				result[tagKey] = tagValue
@@ -169,7 +199,7 @@ func setVolumeTags(client *connectivity.AliyunClient, resourceType TagResourceTy
 		}
 
 		if len(response.Disks.Disk) == 0 {
-			return WrapError(Error("no specified system disk"))
+			return WrapError(Error(fmt.Sprintf("The system disk cannot be queried in this instance %s. Please check whether you have permission to access the API DescribeDisks. Last response is: %v", d.Id(), response)))
 		}
 
 		var ids []string
@@ -205,32 +235,66 @@ func updateTags(client *connectivity.AliyunClient, ids []string, resourceType Ta
 		request := ecs.CreateUntagResourcesRequest()
 		request.ResourceType = string(resourceType)
 		request.ResourceId = &ids
-
 		var tagsKey []string
-		for _, t := range remove {
-			tagsKey = append(tagsKey, t.Key)
-		}
-		request.TagKey = &tagsKey
 
-		wait := incrementalWait(1*time.Second, 1*time.Second)
-		err := resource.Retry(10*time.Minute, func() *resource.RetryError {
-			raw, err := client.WithEcsClient(func(ecsClient *ecs.Client) (interface{}, error) {
-				return ecsClient.UntagResources(request)
-			})
-			if err != nil {
-				if NeedRetry(err) {
-					wait()
-					return resource.RetryableError(err)
+		for i := 0; i < len(remove); i = i + 20 {
+			tagsKey = tagsKey[:0]
 
+			if len(remove[i:]) <= 20 {
+				for _, t := range remove[i:] {
+					tagsKey = append(tagsKey, t.Key)
 				}
-				return resource.NonRetryableError(err)
-			}
-			addDebug(request.GetActionName(), raw, request.RpcRequest, request)
-			return nil
-		})
 
-		if err != nil {
-			return WrapErrorf(err, DefaultErrorMsg, ids, request.GetActionName(), AlibabaCloudSdkGoERROR)
+				request.TagKey = &tagsKey
+
+				wait := incrementalWait(1*time.Second, 1*time.Second)
+				err := resource.Retry(10*time.Minute, func() *resource.RetryError {
+					raw, err := client.WithEcsClient(func(ecsClient *ecs.Client) (interface{}, error) {
+						return ecsClient.UntagResources(request)
+					})
+					if err != nil {
+						if NeedRetry(err) {
+							wait()
+							return resource.RetryableError(err)
+
+						}
+						return resource.NonRetryableError(err)
+					}
+					addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+					return nil
+				})
+
+				if err != nil {
+					return WrapErrorf(err, DefaultErrorMsg, ids, request.GetActionName(), AlibabaCloudSdkGoERROR)
+				}
+			} else {
+				for _, t := range remove[i : i+20] {
+					tagsKey = append(tagsKey, t.Key)
+				}
+
+				request.TagKey = &tagsKey
+
+				wait := incrementalWait(1*time.Second, 1*time.Second)
+				err := resource.Retry(10*time.Minute, func() *resource.RetryError {
+					raw, err := client.WithEcsClient(func(ecsClient *ecs.Client) (interface{}, error) {
+						return ecsClient.UntagResources(request)
+					})
+					if err != nil {
+						if NeedRetry(err) {
+							wait()
+							return resource.RetryableError(err)
+
+						}
+						return resource.NonRetryableError(err)
+					}
+					addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+					return nil
+				})
+
+				if err != nil {
+					return WrapErrorf(err, DefaultErrorMsg, ids, request.GetActionName(), AlibabaCloudSdkGoERROR)
+				}
+			}
 		}
 	}
 
@@ -238,35 +302,72 @@ func updateTags(client *connectivity.AliyunClient, ids []string, resourceType Ta
 		request := ecs.CreateTagResourcesRequest()
 		request.ResourceType = string(resourceType)
 		request.ResourceId = &ids
-
 		var tags []ecs.TagResourcesTag
-		for _, t := range create {
-			tags = append(tags, ecs.TagResourcesTag{
-				Key:   t.Key,
-				Value: t.Value,
-			})
-		}
-		request.Tag = &tags
 
-		wait := incrementalWait(1*time.Second, 1*time.Second)
-		err := resource.Retry(10*time.Minute, func() *resource.RetryError {
-			raw, err := client.WithEcsClient(func(ecsClient *ecs.Client) (interface{}, error) {
-				return ecsClient.TagResources(request)
-			})
-			if err != nil {
-				if NeedRetry(err) {
-					wait()
-					return resource.RetryableError(err)
+		for i := 0; i < len(create); i = i + 20 {
+			tags = tags[:0]
 
+			if len(create[i:]) <= 20 {
+				for _, t := range create[i:] {
+					tags = append(tags, ecs.TagResourcesTag{
+						Key:   t.Key,
+						Value: t.Value,
+					})
 				}
-				return resource.NonRetryableError(err)
-			}
-			addDebug(request.GetActionName(), raw, request.RpcRequest, request)
-			return nil
-		})
 
-		if err != nil {
-			return WrapErrorf(err, DefaultErrorMsg, ids, request.GetActionName(), AlibabaCloudSdkGoERROR)
+				request.Tag = &tags
+
+				wait := incrementalWait(1*time.Second, 1*time.Second)
+				err := resource.Retry(10*time.Minute, func() *resource.RetryError {
+					raw, err := client.WithEcsClient(func(ecsClient *ecs.Client) (interface{}, error) {
+						return ecsClient.TagResources(request)
+					})
+					if err != nil {
+						if NeedRetry(err) {
+							wait()
+							return resource.RetryableError(err)
+
+						}
+						return resource.NonRetryableError(err)
+					}
+					addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+					return nil
+				})
+
+				if err != nil {
+					return WrapErrorf(err, DefaultErrorMsg, ids, request.GetActionName(), AlibabaCloudSdkGoERROR)
+				}
+			} else {
+				for _, t := range create[i : i+20] {
+					tags = append(tags, ecs.TagResourcesTag{
+						Key:   t.Key,
+						Value: t.Value,
+					})
+				}
+
+				request.Tag = &tags
+
+				wait := incrementalWait(1*time.Second, 1*time.Second)
+				err := resource.Retry(10*time.Minute, func() *resource.RetryError {
+					raw, err := client.WithEcsClient(func(ecsClient *ecs.Client) (interface{}, error) {
+						return ecsClient.TagResources(request)
+					})
+					if err != nil {
+						if NeedRetry(err) {
+							wait()
+							return resource.RetryableError(err)
+
+						}
+						return resource.NonRetryableError(err)
+					}
+					addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+					return nil
+				})
+
+				if err != nil {
+					return WrapErrorf(err, DefaultErrorMsg, ids, request.GetActionName(), AlibabaCloudSdkGoERROR)
+				}
+			}
 		}
 	}
 
@@ -467,6 +568,52 @@ func otsTagsToMap(tags []ots.TagInfo) map[string]string {
 	return result
 }
 
+func otsRestTagsToMap(tags []RestOtsTagInfo) map[string]string {
+	result := make(map[string]string)
+	for _, t := range tags {
+		result[t.Key] = t.Value
+	}
+
+	return result
+}
+
+func albTagsToMap(tags interface{}) map[string]interface{} {
+	result := make(map[string]interface{})
+	if tags == nil {
+		return result
+	}
+	switch v := tags.(type) {
+	case map[string]interface{}:
+		for key, value := range tags.(map[string]interface{}) {
+			if !albTagIgnored(key, value) {
+				result[key] = value
+			}
+		}
+	case []interface{}:
+		if len(tags.([]interface{})) < 1 {
+			return result
+		}
+		for _, tag := range tags.([]interface{}) {
+			t := tag.(map[string]interface{})
+			var tagKey string
+			var tagValue interface{}
+			if v, ok := t["TagKey"]; ok {
+				tagKey = v.(string)
+				tagValue = t["TagValue"]
+			} else if v, ok := t["Key"]; ok {
+				tagKey = v.(string)
+				tagValue = t["Value"]
+			}
+			if !albTagIgnored(tagKey, tagValue) {
+				result[tagKey] = tagValue
+			}
+		}
+	default:
+		log.Printf("\u001B[31m[ERROR]\u001B[0m Unknown tags type %s. The tags value is: %v.", v, tags)
+	}
+	return result
+}
+
 func tagsMapEqual(expectMap map[string]interface{}, compareMap map[string]string) bool {
 	if len(expectMap) != len(compareMap) {
 		return false
@@ -550,6 +697,19 @@ func slbTagIgnored(t slb.TagResource) bool {
 		ok, _ := regexp.MatchString(v, t.TagKey)
 		if ok {
 			log.Printf("[DEBUG] Found Alibaba Cloud specific tag %s (val: %s), ignoring.\n", t.TagKey, t.TagValue)
+			return true
+		}
+	}
+	return false
+}
+
+func albTagIgnored(tagKey string, tagValue interface{}) bool {
+	filter := []string{"^aliyun", "^acs:", "^http://", "^https://", "^ack", "^ingress"}
+	for _, v := range filter {
+		log.Printf("[DEBUG] Matching prefix %v with %v\n", v, tagKey)
+		ok, _ := regexp.MatchString(v, tagKey)
+		if ok {
+			log.Printf("[DEBUG] Found Alibaba Cloud specific tag %s (val: %s), ignoring.\n", tagKey, tagValue)
 			return true
 		}
 	}

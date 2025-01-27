@@ -185,13 +185,12 @@ data "alicloud_zones" default {
 }
 
 data "alicloud_instance_types" "default" {
-	availability_zone = "${data.alicloud_zones.default.zones.0.id}"
-  	cpu_core_count    = 1
-	memory_size       = 2
+  availability_zone = "${data.alicloud_zones.default.zones.0.id}"
+  instance_type_family = "ecs.sn1ne"
 }
 
 data "alicloud_vpcs" "default" {
-	name_regex = "default-NODELETING"
+  name_regex = "^default-NODELETING$"
 }
 
 data "alicloud_vswitches" "default" {

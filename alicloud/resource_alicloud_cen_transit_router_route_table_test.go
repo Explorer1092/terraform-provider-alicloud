@@ -125,14 +125,36 @@ func TestAccAlicloudCenTransitRouterRouteTable_basic1(t *testing.T) {
 					"transit_router_id":                      "${alicloud_cen_transit_router.default.transit_router_id}",
 					"transit_router_route_table_name":        name,
 					"transit_router_route_table_description": "description",
-					"dry_run":                                "false",
+					"tags": map[string]string{
+						"Created": "TF",
+						"For":     "TransitRouterRouteTable",
+					},
+					"dry_run": "false",
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
 						"transit_router_id":                      CHECKSET,
 						"transit_router_route_table_name":        name,
 						"transit_router_route_table_description": "description",
+						"tags.%":                                 "2",
+						"tags.Created":                           "TF",
+						"tags.For":                               "TransitRouterRouteTable",
 						"dry_run":                                "false",
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"tags": map[string]string{
+						"Created": "TF_Update",
+						"For":     "TransitRouterRouteTable_Update",
+					},
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"tags.%":       "2",
+						"tags.Created": "TF_Update",
+						"tags.For":     "TransitRouterRouteTable_Update",
 					}),
 				),
 			},
@@ -171,7 +193,7 @@ resource "alicloud_cen_transit_router" "default" {
 `, name)
 }
 
-func TestAccAlicloudCenTransitRouterRouteTable_unit(t *testing.T) {
+func TestUnitAlicloudCenTransitRouterRouteTable(t *testing.T) {
 	p := Provider().(*schema.Provider).ResourcesMap
 	d, _ := schema.InternalMap(p["alicloud_cen_transit_router_route_table"].Schema).Data(nil, nil)
 	dCreate, _ := schema.InternalMap(p["alicloud_cen_transit_router_route_table"].Schema).Data(nil, nil)

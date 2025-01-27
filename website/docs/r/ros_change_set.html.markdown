@@ -19,15 +19,25 @@ For information about ROS Change Set and how to use it, see [What is Change Set]
 
 Basic Usage
 
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_ros_change_set&exampleId=1c4bfc18-d876-86f4-2360-4f0b62444fa17265b398&activeTab=example&spm=docs.r.ros_change_set.0.1c4bfc18d8&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
 ```terraform
+resource "random_integer" "default" {
+  min = 10000
+  max = 99999
+}
+
 resource "alicloud_ros_change_set" "example" {
   change_set_name = "example_value"
-  stack_name      = "tf-testacc"
+  stack_name      = "tf-example-${random_integer.default.result}"
   change_set_type = "CREATE"
   description     = "Test From Terraform"
   template_body   = "{\"ROSTemplateFormatVersion\":\"2015-09-01\"}"
 }
-
 ```
 
 ## Argument Reference
@@ -77,6 +87,6 @@ The `timeouts` block allows you to specify [timeouts](https://www.terraform.io/d
 
 ROS Change Set can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_ros_change_set.example <change_set_id>
 ```

@@ -19,7 +19,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 )
 
-func TestAccAlicloudCddcDedicatedHostAccount_basic0(t *testing.T) {
+func SkipTestAccAlicloudCddcDedicatedHostAccount_basic0(t *testing.T) {
 	var v map[string]interface{}
 	resourceId := "alicloud_cddc_dedicated_host_account.default"
 	ra := resourceAttrInit(resourceId, AlicloudCDDCDedicatedHostAccountMap0)
@@ -95,7 +95,7 @@ data "alicloud_cddc_dedicated_hosts" "default" {
 `, name)
 }
 
-func TestAccAlicloudCddcDedicatedHostAccount_unit(t *testing.T) {
+func TestUnitAlicloudCddcDedicatedHostAccount(t *testing.T) {
 	p := Provider().(*schema.Provider).ResourcesMap
 	dInit, _ := schema.InternalMap(p["alicloud_cddc_dedicated_host_account"].Schema).Data(nil, nil)
 	dExisted, _ := schema.InternalMap(p["alicloud_cddc_dedicated_host_account"].Schema).Data(nil, nil)

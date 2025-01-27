@@ -1,5 +1,5 @@
 ---
-subcategory: "Datahub Service"
+subcategory: "Datahub Service (DataHub)"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_datahub_topic"
 sidebar_current: "docs-alicloud-resource-datahub-topic"
@@ -7,32 +7,43 @@ description: |-
   Provides a Alicloud datahub topic resource.
 ---
 
-# alicloud\_datahub\_topic
+# alicloud_datahub_topic
 
-The topic is the basic unit of Datahub data source and is used to define one kind of data or stream. It contains a set of subscriptions. You can manage the datahub source of an application by using topics. [Refer to details](https://help.aliyun.com/document_detail/47440.html).
+The topic is the basic unit of Datahub data source and is used to define one kind of data or stream. It contains a set of subscriptions. You can manage the datahub source of an application by using topics. [Refer to details](https://www.alibabacloud.com/help/en/datahub/latest/nerbcz).
+
+-> **NOTE:** Available since v1.19.0.
 
 ## Example Usage
 
 Basic Usage
 
-- BLob Topic
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_datahub_topic&exampleId=41106986-70ca-4574-d9e0-b500ae2c44b643374da3&activeTab=example&spm=docs.r.datahub_topic.0.4110698670&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
 
-```
-resource "alicloud_datahub_topic" "example" {
-  name         = "tf_datahub_topic"
-  project_name = "tf_datahub_project"
+```terraform
+variable "name" {
+  default = "tf_example"
+}
+resource "alicloud_datahub_project" "example" {
+  name    = var.name
+  comment = "created by terraform"
+}
+
+resource "alicloud_datahub_topic" "example_blob" {
+  name         = "${var.name}_blob"
+  project_name = alicloud_datahub_project.example.name
   record_type  = "BLOB"
   shard_count  = 3
   life_cycle   = 7
   comment      = "created by terraform"
 }
-```
-- Tuple Topic
 
-```
-resource "alicloud_datahub_topic" "example" {
-  name         = "tf_datahub_topic"
-  project_name = "tf_datahub_project"
+resource "alicloud_datahub_topic" "example_tuple" {
+  name         = "${var.name}_tuple"
+  project_name = alicloud_datahub_project.example.name
   record_type  = "TUPLE"
   record_schema = {
     bigint_field    = "BIGINT"
@@ -78,6 +89,6 @@ The following attributes are exported:
 
 Datahub topic can be imported using the ID, e.g.
 
-```
+```shell
 $ terraform import alicloud_datahub_topic.example tf_datahub_project:tf_datahub_topic
 ```

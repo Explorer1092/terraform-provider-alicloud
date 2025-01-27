@@ -1,17 +1,17 @@
 ---
-subcategory: "Network Attached Storage (NAS)"
+subcategory: "File Storage (NAS)"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_nas_snapshot"
 sidebar_current: "docs-alicloud-resource-nas-snapshot"
 description: |-
-  Provides a Alicloud Network Attached Storage (NAS) Snapshot resource.
+  Provides a Alicloud File Storage (NAS) Snapshot resource.
 ---
 
-# alicloud\_nas\_snapshot
+# alicloud_nas_snapshot
 
-Provides a Network Attached Storage (NAS) Snapshot resource.
+Provides a File Storage (NAS) Snapshot resource.
 
-For information about Network Attached Storage (NAS) Snapshot and how to use it, see [What is Snapshot](https://www.alibabacloud.com/help/en/doc-detail/126549.html).
+For information about File Storage (NAS) Snapshot and how to use it, see [What is Snapshot](https://www.alibabacloud.com/help/en/doc-detail/126549.html).
 
 -> **NOTE:** Available in v1.152.0+.
 
@@ -20,6 +20,12 @@ For information about Network Attached Storage (NAS) Snapshot and how to use it,
 ## Example Usage
 
 Basic Usage
+
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_nas_snapshot&exampleId=54ecd166-f560-b05e-591b-76a65278f2ce6b8d533e&activeTab=example&spm=docs.r.nas_snapshot.0.54ecd166f5&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
 
 ```terraform
 variable "name" {
@@ -35,7 +41,6 @@ resource "alicloud_nas_file_system" "default" {
   protocol_type    = "NFS"
   zone_id          = data.alicloud_nas_zones.default.zones.0.zone_id
   storage_type     = "standard"
-  description      = var.name
   capacity         = 100
 }
 
@@ -74,8 +79,8 @@ The `timeouts` block allows you to specify [timeouts](https://www.terraform.io/d
 
 ## Import
 
-Network Attached Storage (NAS) Snapshot can be imported using the id, e.g.
+File Storage (NAS) Snapshot can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_nas_snapshot.example <id>
 ```

@@ -19,24 +19,68 @@ For information about HBR Ecs Backup Plan and how to use it, see [What is Ecs Ba
 
 Basic Usage
 
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_hbr_ecs_backup_plan&exampleId=4fe06bf8-46f3-b71e-e9ac-e5016194a2a27e7dba75&activeTab=example&spm=docs.r.hbr_ecs_backup_plan.0.4fe06bf846&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
 ```terraform
-variable "name" {
-  default = "valut-name"
+data "alicloud_zones" "example" {
+  available_resource_creation = "Instance"
 }
 
-resource "alicloud_hbr_vault" "default" {
-  vault_name = var.name
+data "alicloud_instance_types" "example" {
+  availability_zone = data.alicloud_zones.example.zones.0.id
+  cpu_core_count    = 1
+  memory_size       = 2
 }
 
-data "alicloud_instances" "default" {
-  name_regex = "no-deleteing-hbr-ecs-backup-plan"
-  status     = "Running"
+data "alicloud_images" "example" {
+  name_regex = "^ubuntu_18.*64"
+  owners     = "system"
+}
+
+resource "alicloud_vpc" "example" {
+  vpc_name   = "terraform-example"
+  cidr_block = "172.17.3.0/24"
+}
+
+resource "alicloud_vswitch" "example" {
+  vswitch_name = "terraform-example"
+  cidr_block   = "172.17.3.0/24"
+  vpc_id       = alicloud_vpc.example.id
+  zone_id      = data.alicloud_zones.example.zones.0.id
+}
+
+resource "alicloud_security_group" "example" {
+  name   = "terraform-example"
+  vpc_id = alicloud_vpc.example.id
+}
+
+resource "alicloud_instance" "example" {
+  image_id             = data.alicloud_images.example.images.0.id
+  instance_type        = data.alicloud_instance_types.example.instance_types.0.id
+  availability_zone    = data.alicloud_zones.example.zones.0.id
+  security_groups      = [alicloud_security_group.example.id]
+  instance_name        = "terraform-example"
+  internet_charge_type = "PayByBandwidth"
+  vswitch_id           = alicloud_vswitch.example.id
+}
+
+resource "random_integer" "default" {
+  min = 10000
+  max = 99999
+}
+
+resource "alicloud_hbr_vault" "example" {
+  vault_name = "terraform-example-${random_integer.default.result}"
 }
 
 resource "alicloud_hbr_ecs_backup_plan" "example" {
-  ecs_backup_plan_name = "example_value"
-  instance_id          = data.alicloud_instances.default.instances.0.id
-  vault_id             = alicloud_hbr_vault.default.id
+  ecs_backup_plan_name = "terraform-example"
+  instance_id          = alicloud_instance.example.id
+  vault_id             = alicloud_hbr_vault.example.id
   retention            = "1"
   schedule             = "I|1602673264|PT2H"
   backup_type          = "COMPLETE"
@@ -72,8 +116,11 @@ The following arguments are support:
 * `path` - (Optional) List of backup path. e.g. `["/home", "/var"]`. **Note** If `path` is empty, it means that all directories will be backed up.
 * `exclude` - (Optional) Exclude path. String of Json list, up to 255 characters. e.g. `"[\"/home/work\"]"`
 * `include` - (Optional) Include path. String of Json list, up to 255 characters. e.g. `"[\"/var\"]"`
-* `update_paths` - (Optional, Deprecated in v1.139.0+) Attribute update_paths has been deprecated in v1.139.0+, and you do not need to set it anymore.
+* `update_paths` - (Optional, Deprecated from v1.139.0+) Attribute update_paths has been deprecated in v1.139.0+, and you do not need to set it anymore.
 * `detail` - (Optional) The detail of the backup plan.
+* `cross_account_type` - (Optional, ForceNew, Computed, Available in v1.189.0+) The type of the cross account backup. Valid values: `SELF_ACCOUNT`, `CROSS_ACCOUNT`.
+* `cross_account_user_id` - (Optional, ForceNew, Available in v1.189.0+) The original account ID of the cross account backup managed by the current account.
+* `cross_account_role_name` - (Optional, ForceNew, Available in v1.189.0+) The role name created in the original account RAM backup by the cross account managed by the current account.
 
 ## Notice
 
@@ -103,6 +150,6 @@ The following attributes are exported:
 
 HBR Ecs Backup Plan can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_hbr_ecs_backup_plan.example <id>
 ```

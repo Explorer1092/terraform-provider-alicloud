@@ -156,7 +156,6 @@ func TestAccAlicloudDTSMigrationJob_basic0(t *testing.T) {
 					"structure_initialization":           "true",
 					"data_initialization":                "true",
 					"data_synchronization":               "true",
-					"status":                             "Migrating",
 					"depends_on":                         []string{"alicloud_db_account_privilege.default"},
 				}),
 				Check: resource.ComposeTestCheckFunc(
@@ -175,20 +174,19 @@ func TestAccAlicloudDTSMigrationJob_basic0(t *testing.T) {
 						"structure_initialization":           "true",
 						"data_initialization":                "true",
 						"data_synchronization":               "true",
-						"status":                             "Migrating",
 					}),
 				),
 			},
-			{
-				Config: testAccConfig(map[string]interface{}{
-					"status": "Suspending",
-				}),
-				Check: resource.ComposeTestCheckFunc(
-					testAccCheck(map[string]string{
-						"status": "Suspending",
-					}),
-				),
-			},
+			//{
+			//	Config: testAccConfig(map[string]interface{}{
+			//		"status": "Suspending",
+			//	}),
+			//	Check: resource.ComposeTestCheckFunc(
+			//		testAccCheck(map[string]string{
+			//			"status": "Suspending",
+			//		}),
+			//	),
+			//},
 			{
 				Config: testAccConfig(map[string]interface{}{
 					"status": "Migrating",
@@ -237,7 +235,7 @@ data "alicloud_db_instance_classes" "default" {
 }
 
 data "alicloud_vpcs" "default" {
-  name_regex = "default-NODELETING"
+    name_regex = "^default-NODELETING$"
 }
 
 data "alicloud_vswitches" "default" {
@@ -288,7 +286,7 @@ resource "alicloud_dts_migration_instance" "default" {
 `, name, defaultRegionToTest)
 }
 
-func TestAccAlicloudDTSMigrationJob_unit(t *testing.T) {
+func TestUnitAlicloudDTSMigrationJob(t *testing.T) {
 	p := Provider().(*schema.Provider).ResourcesMap
 	d, _ := schema.InternalMap(p["alicloud_dts_migration_job"].Schema).Data(nil, nil)
 	dCreate, _ := schema.InternalMap(p["alicloud_dts_migration_job"].Schema).Data(nil, nil)

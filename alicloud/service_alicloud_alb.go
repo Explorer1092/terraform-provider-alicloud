@@ -391,54 +391,17 @@ func (s *AlbService) AlbSecurityPolicyStateRefreshFunc(id string, failStates []s
 
 func (s *AlbService) ListServerGroupServers(id string) (object []interface{}, err error) {
 	var response map[string]interface{}
+	action := "ListServerGroupServers"
+
 	conn, err := s.client.NewAlbClient()
 	if err != nil {
-		return nil, WrapError(err)
+		return object, WrapError(err)
 	}
-	action := "ListServerGroupServers"
+
 	request := map[string]interface{}{
 		"ServerGroupId": id,
 	}
-	runtime := util.RuntimeOptions{}
-	runtime.SetAutoretry(true)
-	wait := incrementalWait(3*time.Second, 3*time.Second)
-	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
-		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2020-06-16"), StringPointer("AK"), nil, request, &runtime)
-		if err != nil {
-			if NeedRetry(err) {
-				wait()
-				return resource.RetryableError(err)
-			}
-			return resource.NonRetryableError(err)
-		}
-		return nil
-	})
-	addDebug(action, response, request)
-	if err != nil {
-		return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
-	}
-	v, _ := jsonpath.Get("$.Servers", response)
-	if v == nil {
-		return object, nil
-	}
 
-	if fmt.Sprint(v.([]interface{})[0].(map[string]interface{})["ServerGroupId"]) != id {
-		return object, WrapErrorf(Error(GetNotFoundMessage("ALB", id)), NotFoundWithResponse, response)
-	}
-
-	return v.([]interface{}), nil
-}
-
-func (s *AlbService) DescribeAlbServerGroup(id string) (object map[string]interface{}, err error) {
-	var response map[string]interface{}
-	conn, err := s.client.NewAlbClient()
-	if err != nil {
-		return nil, WrapError(err)
-	}
-	action := "ListServerGroups"
-	request := map[string]interface{}{
-		"MaxResults": 100,
-	}
 	idExist := false
 	for {
 		runtime := util.RuntimeOptions{}
@@ -456,19 +419,28 @@ func (s *AlbService) DescribeAlbServerGroup(id string) (object map[string]interf
 			return nil
 		})
 		addDebug(action, response, request)
+
 		if err != nil {
 			return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
 		}
-		v, err := jsonpath.Get("$.ServerGroups", response)
-		if formatInt(response["TotalCount"]) != 0 && err != nil {
-			return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$.ServerGroups", response)
+
+		if formatInt(response["TotalCount"]) == 0 {
+			return object, nil
 		}
-		if v != nil {
-			for _, v := range v.([]interface{}) {
-				if fmt.Sprint(v.(map[string]interface{})["ServerGroupId"]) == id {
-					idExist = true
-					return v.(map[string]interface{}), nil
-				}
+
+		resp, err := jsonpath.Get("$.Servers", response)
+		if err != nil {
+			return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$.Servers", response)
+		}
+
+		if v, ok := resp.([]interface{}); !ok || len(v) < 1 {
+			return object, WrapErrorf(Error(GetNotFoundMessage("Alb:ServerGroup", id)), NotFoundWithResponse, response)
+		}
+
+		for _, v := range resp.([]interface{}) {
+			if fmt.Sprint(v.(map[string]interface{})["ServerGroupId"]) == id {
+				idExist = true
+				return resp.([]interface{}), nil
 			}
 		}
 
@@ -478,10 +450,77 @@ func (s *AlbService) DescribeAlbServerGroup(id string) (object map[string]interf
 			break
 		}
 	}
+
 	if !idExist {
-		return object, WrapErrorf(Error(GetNotFoundMessage("ALB", id)), NotFoundWithResponse, response)
+		return object, WrapErrorf(Error(GetNotFoundMessage("Alb:ServerGroup", id)), NotFoundWithResponse, response)
 	}
-	return
+
+	return object, nil
+}
+
+func (s *AlbService) DescribeAlbServerGroup(id string) (object map[string]interface{}, err error) {
+	var response map[string]interface{}
+	action := "ListServerGroups"
+
+	conn, err := s.client.NewAlbClient()
+	if err != nil {
+		return object, WrapError(err)
+	}
+
+	request := map[string]interface{}{
+		"MaxResults": PageSizeXLarge,
+	}
+
+	idExist := false
+	for {
+		runtime := util.RuntimeOptions{}
+		runtime.SetAutoretry(true)
+		wait := incrementalWait(3*time.Second, 3*time.Second)
+		err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+			response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2020-06-16"), StringPointer("AK"), nil, request, &runtime)
+			if err != nil {
+				if NeedRetry(err) {
+					wait()
+					return resource.RetryableError(err)
+				}
+				return resource.NonRetryableError(err)
+			}
+			return nil
+		})
+		addDebug(action, response, request)
+
+		if err != nil {
+			return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
+		}
+
+		resp, err := jsonpath.Get("$.ServerGroups", response)
+		if err != nil {
+			return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$.ServerGroups", response)
+		}
+
+		if v, ok := resp.([]interface{}); !ok || len(v) < 1 {
+			return object, WrapErrorf(Error(GetNotFoundMessage("Alb:ServerGroup", id)), NotFoundWithResponse, response)
+		}
+
+		for _, v := range resp.([]interface{}) {
+			if fmt.Sprint(v.(map[string]interface{})["ServerGroupId"]) == id {
+				idExist = true
+				return v.(map[string]interface{}), nil
+			}
+		}
+
+		if nextToken, ok := response["NextToken"].(string); ok && nextToken != "" {
+			request["NextToken"] = nextToken
+		} else {
+			break
+		}
+	}
+
+	if !idExist {
+		return object, WrapErrorf(Error(GetNotFoundMessage("Alb:ServerGroup", id)), NotFoundWithResponse, response)
+	}
+
+	return object, nil
 }
 
 func (s *AlbService) AlbServerGroupStateRefreshFunc(id string, failStates []string) resource.StateRefreshFunc {
@@ -500,6 +539,7 @@ func (s *AlbService) AlbServerGroupStateRefreshFunc(id string, failStates []stri
 				return object, fmt.Sprint(object["ServerGroupStatus"]), WrapError(Error(FailedToReachTargetStatus, fmt.Sprint(object["ServerGroupStatus"])))
 			}
 		}
+
 		return object, fmt.Sprint(object["ServerGroupStatus"]), nil
 	}
 }
@@ -702,16 +742,22 @@ func (s *AlbService) DescribeAlbListener(id string) (object map[string]interface
 	return object, nil
 }
 
-func (s *AlbService) DescribeAlbRule(id string) (object map[string]interface{}, err error) {
+func (s *AlbService) DescribeAlbRule(id, direction string) (object map[string]interface{}, err error) {
 	var response map[string]interface{}
 	conn, err := s.client.NewAlbClient()
 	if err != nil {
 		return nil, WrapError(err)
 	}
+
 	action := "ListRules"
 	request := map[string]interface{}{
 		"MaxResults": PageSizeLarge,
 	}
+
+	if direction != "" {
+		request["Direction"] = direction
+	}
+
 	idExist := false
 	for {
 		runtime := util.RuntimeOptions{}
@@ -758,9 +804,9 @@ func (s *AlbService) DescribeAlbRule(id string) (object map[string]interface{}, 
 	return
 }
 
-func (s *AlbService) AlbRuleStateRefreshFunc(id string, failStates []string) resource.StateRefreshFunc {
+func (s *AlbService) AlbRuleStateRefreshFunc(id, direction string, failStates []string) resource.StateRefreshFunc {
 	return func() (interface{}, string, error) {
-		object, err := s.DescribeAlbRule(id)
+		object, err := s.DescribeAlbRule(id, direction)
 		if err != nil {
 			if NotFoundError(err) {
 				// Set this to nil as if we didn't find anything.
@@ -780,14 +826,17 @@ func (s *AlbService) AlbRuleStateRefreshFunc(id string, failStates []string) res
 
 func (s *AlbService) DescribeAlbHealthCheckTemplate(id string) (object map[string]interface{}, err error) {
 	var response map[string]interface{}
+	action := "GetHealthCheckTemplateAttribute"
+
 	conn, err := s.client.NewAlbClient()
 	if err != nil {
 		return nil, WrapError(err)
 	}
-	action := "GetHealthCheckTemplateAttribute"
+
 	request := map[string]interface{}{
 		"HealthCheckTemplateId": id,
 	}
+
 	runtime := util.RuntimeOptions{}
 	runtime.SetAutoretry(true)
 	wait := incrementalWait(3*time.Second, 3*time.Second)
@@ -803,17 +852,21 @@ func (s *AlbService) DescribeAlbHealthCheckTemplate(id string) (object map[strin
 		return nil
 	})
 	addDebug(action, response, request)
+
 	if err != nil {
 		if IsExpectedErrors(err, []string{"ResourceNotFound.HealthCheckTemplate"}) {
 			return object, WrapErrorf(Error(GetNotFoundMessage("ALB:HealthCheckTemplate", id)), NotFoundMsg, ProviderERROR, fmt.Sprint(response["RequestId"]))
 		}
 		return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
 	}
+
 	v, err := jsonpath.Get("$", response)
 	if err != nil {
 		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$", response)
 	}
+
 	object = v.(map[string]interface{})
+
 	return object, nil
 }
 
@@ -1053,5 +1106,131 @@ func (s *AlbService) AlbAclEntryAttachmentStateRefreshFunc(id string, failStates
 			}
 		}
 		return object, fmt.Sprint(object["Status"]), nil
+	}
+}
+
+func (s *AlbService) DescribeAlbAscript(id string) (object map[string]interface{}, err error) {
+	conn, err := s.client.NewAlbClient()
+	if err != nil {
+		return object, WrapError(err)
+	}
+
+	request := map[string]interface{}{
+		"AScriptIds.1": id,
+	}
+
+	var response map[string]interface{}
+	action := "ListAScripts"
+	runtime := util.RuntimeOptions{}
+	runtime.SetAutoretry(true)
+	wait := incrementalWait(3*time.Second, 3*time.Second)
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		resp, err := conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2020-06-16"), StringPointer("AK"), nil, request, &runtime)
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		response = resp
+		addDebug(action, response, request)
+		return nil
+	})
+	if err != nil {
+		if IsExpectedErrors(err, []string{"InternalError"}) {
+			return object, WrapErrorf(err, NotFoundMsg, AlibabaCloudSdkGoERROR)
+		}
+		return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
+	}
+	v, err := jsonpath.Get("$.AScripts", response)
+	if err != nil {
+		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$.AScripts", response)
+	}
+	resp := v.([]interface{})
+	if len(resp) < 1 {
+		return object, WrapErrorf(err, NotFoundMsg, AlibabaCloudSdkGoERROR)
+	}
+
+	return resp[0].(map[string]interface{}), nil
+}
+
+func (s *AlbService) AlbAscriptStateRefreshFunc(d *schema.ResourceData, failStates []string) resource.StateRefreshFunc {
+	return func() (interface{}, string, error) {
+		object, err := s.DescribeAlbAscript(d.Id())
+		if err != nil {
+			if NotFoundError(err) {
+				return nil, "", nil
+			}
+			return nil, "", WrapError(err)
+		}
+		for _, failState := range failStates {
+			if fmt.Sprint(object["AScriptStatus"]) == failState {
+				return object, fmt.Sprint(object["AScriptStatus"]), WrapError(Error(FailedToReachTargetStatus, fmt.Sprint(object["AScriptStatus"])))
+			}
+		}
+		return object, fmt.Sprint(object["AScriptStatus"]), nil
+	}
+}
+
+func (s *AlbService) DescribeAlbLoadBalancerCommonBandwidthPackageAttachment(id string) (object map[string]interface{}, err error) {
+	conn, err := s.client.NewAlbClient()
+	if err != nil {
+		return object, WrapError(err)
+	}
+	parts, err := ParseResourceId(id, 2)
+	if err != nil {
+		return object, WrapError(err)
+	}
+
+	request := map[string]interface{}{
+		"LoadBalancerId": parts[0],
+	}
+
+	var response map[string]interface{}
+	action := "GetLoadBalancerAttribute"
+	runtime := util.RuntimeOptions{}
+	runtime.SetAutoretry(true)
+	wait := incrementalWait(3*time.Second, 3*time.Second)
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		resp, err := conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2020-06-16"), StringPointer("AK"), nil, request, &runtime)
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		response = resp
+		addDebug(action, response, request)
+		return nil
+	})
+	if err != nil {
+		return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
+	}
+	v, err := jsonpath.Get("$", response)
+	if err != nil {
+		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$", response)
+	}
+	return v.(map[string]interface{}), nil
+}
+
+func (s *AlbService) AlbLoadBalancerCommonBandwidthPackageAttachmentStateRefreshFunc(id string, failStates []string) resource.StateRefreshFunc {
+	return func() (interface{}, string, error) {
+		object, err := s.DescribeAlbLoadBalancerCommonBandwidthPackageAttachment(id)
+		if err != nil {
+			if NotFoundError(err) {
+				return nil, "", nil
+			}
+			return nil, "", WrapError(err)
+		}
+
+		loadBalancerStatus82 := object["LoadBalancerStatus"]
+		for _, failState := range failStates {
+			if fmt.Sprint(loadBalancerStatus82) == failState {
+				return object, fmt.Sprint(loadBalancerStatus82), WrapError(Error(FailedToReachTargetStatus, fmt.Sprint(loadBalancerStatus82)))
+			}
+		}
+		return object, fmt.Sprint(loadBalancerStatus82), nil
 	}
 }

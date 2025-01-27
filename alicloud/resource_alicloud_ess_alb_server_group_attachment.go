@@ -3,7 +3,10 @@ package alicloud
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
+
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ess"
@@ -66,9 +69,24 @@ func resourceAliyunEssAlbServerGroupAttachmentCreate(d *schema.ResourceData, met
 		Weight:           strconv.Itoa(formatInt(d.Get("weight"))),
 	})
 	request.AlbServerGroup = &attachScalingGroupAlbServerGroups
-	raw, err := client.WithEssClient(func(essClient *ess.Client) (interface{}, error) {
-		return essClient.AttachAlbServerGroups(request)
+	wait := incrementalWait(1*time.Second, 2*time.Second)
+
+	var raw interface{}
+	var err error
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		raw, err = client.WithEssClient(func(essClient *ess.Client) (interface{}, error) {
+			return essClient.AttachAlbServerGroups(request)
+		})
+		if err != nil {
+			if IsExpectedErrors(err, []string{"IncorrectScalingGroupStatus"}) || NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		return nil
 	})
+
 	if err != nil {
 		return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
 	}
@@ -130,25 +148,43 @@ func resourceAliyunEssAlbServerGroupAttachmentDelete(d *schema.ResourceData, met
 		Port:             port,
 	})
 	request.AlbServerGroup = &detachScalingGroupAlbServerGroups
-	raw, err := client.WithEssClient(func(essClient *ess.Client) (interface{}, error) {
-		return essClient.DetachAlbServerGroups(request)
+
+	activityId := ""
+	err := resource.Retry(client.GetRetryTimeout(d.Timeout(schema.TimeoutDelete)), func() *resource.RetryError {
+		raw, err := client.WithEssClient(func(essClient *ess.Client) (interface{}, error) {
+			return essClient.DetachAlbServerGroups(request)
+		})
+		if err != nil {
+			if IsExpectedErrors(err, []string{"IncorrectScalingGroupStatus"}) {
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		response, _ := raw.(*ess.DetachAlbServerGroupsResponse)
+		activityId = response.ScalingActivityId
+		if len(response.ScalingActivityId) == 0 {
+			return nil
+		}
+
+		addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+		return nil
 	})
 	if err != nil {
+		if strings.Contains(err.Error(), "The specified value of parameter \"ScalingGroupId\" is not valid") {
+			return nil
+		}
 		return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
 	}
-	addDebug(request.GetActionName(), raw, request.RpcRequest, request)
-
-	response, _ := raw.(*ess.DetachAlbServerGroupsResponse)
-
-	if len(response.ScalingActivityId) == 0 {
+	essService := EssService{client}
+	if activityId == "" {
 		return nil
 	}
-
-	essService := EssService{client}
-	stateConf := BuildStateConf([]string{}, []string{"Successful"}, d.Timeout(schema.TimeoutCreate), 1*time.Minute, essService.ActivityStateRefreshFunc(response.ScalingActivityId, []string{"Failed", "Rejected"}))
+	stateConf := BuildStateConf([]string{}, []string{"Successful"}, d.Timeout(schema.TimeoutCreate), 1*time.Minute, essService.ActivityStateRefreshFunc(activityId, []string{"Failed", "Rejected"}))
 	if _, err := stateConf.WaitForState(); err != nil {
+		if strings.Contains(err.Error(), "activity not found") {
+			return nil
+		}
 		return WrapErrorf(err, IdMsg, d.Id())
 	}
-
 	return nil
 }

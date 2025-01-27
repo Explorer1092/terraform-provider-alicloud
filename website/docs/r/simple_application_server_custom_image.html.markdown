@@ -7,52 +7,57 @@ description: |-
   Provides a Alicloud Simple Application Server Custom Image resource.
 ---
 
-# alicloud\_simple\_application\_server\_custom\_image
+# alicloud_simple_application_server_custom_image
 
 Provides a Simple Application Server Custom Image resource.
 
-For information about Simple Application Server Custom Image and how to use it, see [What is Custom Image](https://www.alibabacloud.com/help/zh/doc-detail/333535.htm).
+For information about Simple Application Server Custom Image and how to use it, see [What is Custom Image](https://www.alibabacloud.com/help/en/doc-detail/333535.htm).
 
--> **NOTE:** Available in v1.143.0+.
+-> **NOTE:** Available since v1.143.0.
 
 ## Example Usage
 
 Basic Usage
 
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_simple_application_server_custom_image&exampleId=68f8c52d-bfa6-7037-76d1-2f176a7d4a96bbd03de9&activeTab=example&spm=docs.r.simple_application_server_custom_image.0.68f8c52dbf&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
 ```terraform
-data "alicloud_simple_application_server_instances" "example" {}
-
-data "alicloud_simple_application_server_images" "example" {}
-
-data "alicloud_simple_application_server_plans" "example" {}
-
-resource "alicloud_simple_application_server_instance" "example" {
-  count         = length(data.alicloud_simple_application_server_instances.example.ids) > 0 ? 0 : 1
-  payment_type  = "Subscription"
-  plan_id       = data.alicloud_simple_application_server_plans.example.plans.0.id
-  instance_name = "example_value"
-  image_id      = data.alicloud_simple_application_server_images.example.images.0.id
-  period        = 1
+variable "name" {
+  default = "tf_example"
 }
 
-data "alicloud_simple_application_server_disks" "example" {
-  disk_type   = "System"
-  instance_id = length(data.alicloud_simple_application_server_instances.example.ids) > 0 ? data.alicloud_simple_application_server_instances.example.ids.0 : alicloud_simple_application_server_instance.example.0.id
+data "alicloud_simple_application_server_images" "default" {}
+data "alicloud_simple_application_server_plans" "default" {}
+
+resource "alicloud_simple_application_server_instance" "default" {
+  payment_type   = "Subscription"
+  plan_id        = data.alicloud_simple_application_server_plans.default.plans.0.id
+  instance_name  = var.name
+  image_id       = data.alicloud_simple_application_server_images.default.images.0.id
+  period         = 1
+  data_disk_size = 100
 }
 
-resource "alicloud_simple_application_server_snapshot" "example" {
-  disk_id       = data.alicloud_simple_application_server_disks.example.ids.0
-  snapshot_name = "example_value"
+data "alicloud_simple_application_server_disks" "default" {
+  instance_id = alicloud_simple_application_server_instance.default.id
 }
 
-resource "alicloud_simple_application_server_custom_image" "example" {
-  custom_image_name  = "example_value"
-  instance_id        = data.alicloud_simple_application_server_disks.example.disks.0.instance_id
-  system_snapshot_id = alicloud_simple_application_server_snapshot.example.id
+resource "alicloud_simple_application_server_snapshot" "default" {
+  disk_id       = data.alicloud_simple_application_server_disks.default.ids.0
+  snapshot_name = var.name
+}
+
+resource "alicloud_simple_application_server_custom_image" "default" {
+  custom_image_name  = var.name
+  instance_id        = alicloud_simple_application_server_instance.default.id
+  system_snapshot_id = alicloud_simple_application_server_snapshot.default.id
   status             = "Share"
-  description        = "example_value"
+  description        = var.name
 }
-
 ```
 
 ## Argument Reference
@@ -77,6 +82,6 @@ The following attributes are exported:
 
 Simple Application Server Custom Image can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_simple_application_server_custom_image.example <id>
 ```

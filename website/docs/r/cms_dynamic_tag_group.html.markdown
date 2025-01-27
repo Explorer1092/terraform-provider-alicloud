@@ -7,65 +7,71 @@ description: |-
   Provides a Alicloud Cloud Monitor Service Dynamic Tag Group resource.
 ---
 
-# alicloud\_cms\_dynamic\_tag\_group
+# alicloud_cms_dynamic_tag_group
 
 Provides a Cloud Monitor Service Dynamic Tag Group resource.
 
-For information about Cloud Monitor Service Dynamic Tag Group and how to use it, see [What is Dynamic Tag Group](https://www.alibabacloud.com/help/doc-detail/150123.html).
+For information about Cloud Monitor Service Dynamic Tag Group and how to use it, see [What is Dynamic Tag Group](https://www.alibabacloud.com/help/en/cloudmonitor/latest/createdynamictaggroup).
 
--> **NOTE:** Available in v1.142.0+.
+-> **NOTE:** Available since v1.142.0.
 
 ## Example Usage
 
 Basic Usage
 
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_cms_dynamic_tag_group&exampleId=a79c7aa3-0bc8-4e94-fab4-8976e8c52dead2436476&activeTab=example&spm=docs.r.cms_dynamic_tag_group.0.a79c7aa30b&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
 ```terraform
-resource "alicloud_cms_alarm_contact_group" "default" {
-  alarm_contact_group_name = "example_value"
-  describe                 = "example_value"
-  enable_subscribed        = true
+variable "name" {
+  default = "terraform-example"
 }
+
+resource "alicloud_cms_alarm_contact_group" "default" {
+  alarm_contact_group_name = var.name
+}
+
 resource "alicloud_cms_dynamic_tag_group" "default" {
+  tag_key            = var.name
   contact_group_list = [alicloud_cms_alarm_contact_group.default.id]
-  tag_key            = "your_tag_key"
   match_express {
-    tag_value                = "your_tag_value"
+    tag_value                = var.name
     tag_value_match_function = "all"
   }
 }
-
 ```
 
 ## Argument Reference
 
 The following arguments are supported:
 
-* `contact_group_list` - (Required, ForceNew) Alarm contact group. The value range of N is 1~100. The alarm notification of the application group is sent to the alarm contact in the alarm contact group.
-* `enable_install_agent` - (Optional) The enable install agent.
-* `enable_subscribe_event` - (Optional) The enable subscribe event.
-* `match_express` - (Optional, ForceNew) The label generates a matching expression that applies the grouping. See the following `Block match_express`.
-* `match_express_filter_relation` - (Optional, ForceNew) The relationship between conditional expressions. Valid values: `and`, `or`.
-* `tag_key` - (Required, ForceNew) The tag key of the tag.
-* `template_id_list` - (Optional, ForceNew) Alarm template ID list.
+* `tag_key` - (Required, ForceNew) The tag keys of the cloud resources.
+* `match_express_filter_relation` - (Optional, ForceNew) The relationship between the conditional expressions for the tag values of the cloud resources. Valid values: `and`, `or`.
+* `contact_group_list` - (Required, ForceNew, List) The alert contact groups. The alert notifications of the application group are sent to the alert contacts that belong to the specified alert contact groups.
+* `template_id_list` - (Optional, ForceNew, List) The IDs of the alert templates.
+* `match_express` - (Required, ForceNew, Set) The conditional expressions used to create an application group based on the tag. See [`match_express`](#match_express) below.
 
-#### Block match_express
+### `match_express`
 
 The match_express supports the following: 
 
-* `tag_value` - (Optional) The tag value. The Tag value must be used in conjunction with the tag value matching method TagValueMatchFunction.
-* `tag_value_match_function` - (Optional) Matching method of tag value. Valid values: `all`, `startWith`,`endWith`,`contains`,`notContains`,`equals`.
+* `tag_value` - (Required, ForceNew) The tag values of the cloud resources.
+* `tag_value_match_function` - (Required, ForceNew) The method that is used to match the tag values of the cloud resources. Valid values: `all`, `startWith`, `endWith`, `contains`, `notContains`, `equals`.
 
 ## Attributes Reference
 
 The following attributes are exported:
 
 * `id` - The resource ID in terraform of Dynamic Tag Group.
-* `status` - The status of the resource. Valid values: `RUNNING`, `FINISH`.
+* `status` - The status of the Dynamic Tag Group.
 
 ## Import
 
 Cloud Monitor Service Dynamic Tag Group can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_cms_dynamic_tag_group.example <id>
 ```

@@ -17,7 +17,9 @@ package dds
 
 // DdsRegion is a nested struct in dds response
 type DdsRegion struct {
-	RegionId string `json:"RegionId" xml:"RegionId"`
-	ZoneIds  string `json:"ZoneIds" xml:"ZoneIds"`
-	Zones    Zones  `json:"Zones" xml:"Zones"`
+	ZoneIds    string `json:"ZoneIds" xml:"ZoneIds"`
+	RegionId   string `json:"RegionId" xml:"RegionId"`
+	RegionName string `json:"RegionName" xml:"RegionName"`
+	EndPoint   string `json:"EndPoint" xml:"EndPoint"`
+	Zones      Zones  `json:"Zones" xml:"Zones"`
 }

@@ -2,6 +2,7 @@ package sls
 
 import (
 	"encoding/json"
+	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
@@ -58,6 +59,7 @@ type GetLogsResponse struct {
 	Logs     []map[string]string `json:"logs"`
 	Contents string              `json:"contents"`
 	HasSQL   bool                `json:"hasSQL"`
+	Header   http.Header         `json:"header"`
 }
 
 // GetLogLinesResponse defines response from GetLogLines call
@@ -124,8 +126,13 @@ type IndexLine struct {
 
 // Index is an index config for a log store.
 type Index struct {
-	Keys map[string]IndexKey `json:"keys,omitempty"`
-	Line *IndexLine          `json:"line,omitempty"`
+	Keys                   map[string]IndexKey `json:"keys,omitempty"`
+	Line                   *IndexLine          `json:"line,omitempty"`
+	Ttl                    uint32              `json:"ttl,omitempty"`
+	MaxTextLen             uint32              `json:"max_text_len,omitempty"`
+	LogReduce              bool                `json:"log_reduce"`
+	LogReduceWhiteListDict []string            `json:"log_reduce_white_list,omitempty"`
+	LogReduceBlackListDict []string            `json:"log_reduce_black_list,omitempty"`
 }
 
 // CreateDefaultIndex return a full text index config

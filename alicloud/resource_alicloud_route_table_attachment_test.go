@@ -73,15 +73,17 @@ func testSweepRouteTableAttachment(region string) error {
 		id := vtb.RouteTableId
 		for _, vswitch := range vtb.VSwitchIds.VSwitchId {
 			skip := true
-			for _, prefix := range prefixes {
-				if strings.HasPrefix(strings.ToLower(name), strings.ToLower(prefix)) {
-					skip = false
-					break
+			if !sweepAll() {
+				for _, prefix := range prefixes {
+					if strings.HasPrefix(strings.ToLower(name), strings.ToLower(prefix)) {
+						skip = false
+						break
+					}
 				}
-			}
-			if skip {
-				log.Printf("[INFO] Skipping Route Table: %s (%s)", name, id)
-				continue
+				if skip {
+					log.Printf("[INFO] Skipping Route Table: %s (%s)", name, id)
+					continue
+				}
 			}
 			log.Printf("[INFO] Unassociating Route Table: %s (%s)", name, id)
 			req := vpc.CreateUnassociateRouteTableRequest()
@@ -121,7 +123,7 @@ func testAccCheckRouteTableAttachmentDestroy(s *terraform.State) error {
 	return nil
 }
 
-func TestAccAlicloudVPCRouteTableAttachmentBasic(t *testing.T) {
+func TestAccAliCloudVPCRouteTableAttachmentBasic(t *testing.T) {
 	var v vpc.RouterTableListType
 	resourceId := "alicloud_route_table_attachment.default"
 	rand := acctest.RandIntRange(1000, 9999)
@@ -157,7 +159,7 @@ func TestAccAlicloudVPCRouteTableAttachmentBasic(t *testing.T) {
 	})
 }
 
-func TestAccAlicloudVPCRouteTableAttachmentMulti(t *testing.T) {
+func TestAccAliCloudVPCRouteTableAttachmentMulti(t *testing.T) {
 	var v vpc.RouterTableListType
 	resourceId := "alicloud_route_table_attachment.default.1"
 	rand := acctest.RandIntRange(1000, 9999)
@@ -180,6 +182,37 @@ func TestAccAlicloudVPCRouteTableAttachmentMulti(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				Config: testAccRouteTableAttachmentConfigMulti(rand),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(nil),
+				),
+			},
+		},
+	})
+}
+
+func TestAccAliCloudVPCRouteTableAttachmentMulti_bugfix(t *testing.T) {
+	var v vpc.RouterTableListType
+	resourceId := "alicloud_route_table_attachment.default.1"
+	rand := acctest.RandIntRange(1000, 9999)
+	ra := resourceAttrInit(resourceId, testAccRouteTableAttachmentBasicCheckMap)
+	serviceFunc := func() interface{} {
+		return &VpcService{testAccProvider.Meta().(*connectivity.AliyunClient)}
+	}
+	rc := resourceCheckInit(resourceId, &v, serviceFunc)
+	rac := resourceAttrCheckInit(rc, ra)
+	testAccCheck := rac.resourceAttrMapUpdateSet()
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheckWithRegions(t, false, connectivity.RouteTableNoSupportedRegions)
+		},
+		// module name
+		IDRefreshName: resourceId,
+		Providers:     testAccProviders,
+		CheckDestroy:  testAccCheckRouteTableAttachmentDestroy,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccRouteTableAttachmentConfigMultiBugFix(rand),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(nil),
 				),
@@ -259,6 +292,47 @@ resource "alicloud_route_table_attachment" "default" {
     count = "${var.number}"
 	vswitch_id = "${element(alicloud_vswitch.default.*.id,count.index)}"
 	route_table_id = "${element(alicloud_route_table.default.*.id,count.index)}"
+}
+`, rand)
+}
+
+func testAccRouteTableAttachmentConfigMultiBugFix(rand int) string {
+	return fmt.Sprintf(
+		`
+variable "name" {
+	default = "tf-testAccRouteTableAttachment%d"
+}
+
+variable "number" {
+	default = "2"
+}
+
+resource "alicloud_vpc" "default" {
+	cidr_block = "172.16.0.0/12"
+	vpc_name = "${var.name}"
+}
+ data "alicloud_zones" "default" {
+	available_resource_creation= "VSwitch"
+}
+
+resource "alicloud_vswitch" "default" {
+  count = "${var.number}"
+  vpc_id = "${ alicloud_vpc.default.id }"
+  cidr_block = "172.16.${count.index}.0/24"
+  availability_zone = "${data.alicloud_zones.default.zones.0.id}"
+  vswitch_name = "${var.name}"
+}
+
+resource "alicloud_route_table" "default" {
+	vpc_id = "${alicloud_vpc.default.id}"
+    route_table_name = "${var.name}"
+    description = "${var.name}_description"
+}
+
+resource "alicloud_route_table_attachment" "default" {
+    count = "${var.number}"
+	vswitch_id = "${element(alicloud_vswitch.default.*.id,count.index)}"
+	route_table_id = "${alicloud_route_table.default.id}"
 }
 `, rand)
 }

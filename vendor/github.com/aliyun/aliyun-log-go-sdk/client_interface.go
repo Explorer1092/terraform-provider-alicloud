@@ -1,6 +1,7 @@
 package sls
 
 import (
+	"net/http"
 	"time"
 )
 
@@ -40,9 +41,17 @@ func CreateTokenAutoUpdateClient(endpoint string, tokenUpdateFunc UpdateTokenFun
 
 // ClientInterface for all log's open api
 type ClientInterface interface {
+	// SetUserAgent set userAgent for sls client
+	SetUserAgent(userAgent string)
+	// SetHTTPClient set a custom http client, all request will send to sls by this client
+	SetHTTPClient(client *http.Client)
 	// #################### Client Operations #####################
 	// ResetAccessKeyToken reset client's access key token
 	ResetAccessKeyToken(accessKeyID, accessKeySecret, securityToken string)
+	// SetRegion Set region for signature v4
+	SetRegion(region string)
+	// SetAuthVersion Set signature version
+	SetAuthVersion(version AuthVersionType)
 	// Close the client
 	Close() error
 
@@ -89,6 +98,16 @@ type ClientInterface interface {
 	// CheckLogstoreExist check logstore exist or not
 	CheckLogstoreExist(project string, logstore string) (bool, error)
 
+	// #################### MetricStore Operations #####################
+	// CreateMetricStore creates a new metric store in SLS.
+	CreateMetricStore(project string, metricStore *LogStore) error
+	// UpdateMetricStore updates a metric store.
+	UpdateMetricStore(project string, metricStore *LogStore) error
+	// DeleteMetricStore deletes a metric store.
+	DeleteMetricStore(project, name string) error
+	// GetMetricStore return a metric store.
+	GetMetricStore(project, name string) (*LogStore, error)
+
 	// #################### Logtail Operations #####################
 	// ListMachineGroup returns machine group name list and the total number of machine groups.
 	// The offset starts from 0 and the size is the max number of machine groups could be returned.
@@ -134,6 +153,15 @@ type ClientInterface interface {
 	RemoveConfigFromMachineGroup(project string, confName, groupName string) (err error)
 
 	// #################### ETL Operations #####################
+	CreateETL(project string, etljob ETL) error
+	UpdateETL(project string, etljob ETL) error
+	GetETL(project string, etlName string) (ETLJob *ETL, err error)
+	ListETL(project string, offset int, size int) (*ListETLResponse, error)
+	DeleteETL(project string, etlName string) error
+	StartETL(project, name string) error
+	StopETL(project, name string) error
+	RestartETL(project string, etljob ETL) error
+
 	CreateEtlMeta(project string, etlMeta *EtlMeta) (err error)
 	UpdateEtlMeta(project string, etlMeta *EtlMeta) (err error)
 	DeleteEtlMeta(project string, etlMetaName, etlMetaKey string) (err error)
@@ -146,8 +174,10 @@ type ClientInterface interface {
 	// #################### Shard Operations #####################
 	// ListShards returns shard id list of this logstore.
 	ListShards(project, logstore string) (shards []*Shard, err error)
-	// SplitShard https://help.aliyun.com/document_detail/29021.html
+	// SplitShard https://help.aliyun.com/document_detail/29021.html,
 	SplitShard(project, logstore string, shardID int, splitKey string) (shards []*Shard, err error)
+	// SplitNumShard https://help.aliyun.com/document_detail/29021.html,
+	SplitNumShard(project, logstore string, shardID, shardsNum int) (shards []*Shard, err error)
 	// MergeShards https://help.aliyun.com/document_detail/29022.html
 	MergeShards(project, logstore string, shardID int) (shards []*Shard, err error)
 
@@ -191,6 +221,13 @@ type ClientInterface interface {
 
 	GetLogsV2(project, logstore string, req *GetLogRequest) (*GetLogsResponse, error)
 	GetLogLinesV2(project, logstore string, req *GetLogRequest) (*GetLogLinesResponse, error)
+
+	// GetHistogramsToCompleted query logs with [from, to) time range to completed
+	GetHistogramsToCompleted(project, logstore string, topic string, from int64, to int64, queryExp string) (*GetHistogramsResponse, error)
+	// GetLogsToCompleted query logs with [from, to) time range to completed
+	GetLogsToCompleted(project, logstore string, topic string, from int64, to int64, queryExp string, maxLineNum int64, offset int64, reverse bool) (*GetLogsResponse, error)
+	// GetLogsToCompletedV2 query logs with [from, to) time range to completed
+	GetLogsToCompletedV2(project, logstore string, req *GetLogRequest) (*GetLogsResponse, error)
 
 	// #################### Index Operations #####################
 	// CreateIndex ...
@@ -303,4 +340,15 @@ type ClientInterface interface {
 	GetExport(project, name string) (*Export, error)
 	ListExport(project, logstore, name, displayName string, offset, size int) (exports []*Export, total, count int, error error)
 	DeleteExport(project string, name string) error
+	RestartExport(project string, export *Export) error
+
+	// UpdateProjectPolicy updates project's policy.
+	UpdateProjectPolicy(project string, policy string) error
+	// DeleteProjectPolicy deletes project's policy.
+	DeleteProjectPolicy(project string) error
+	// GetProjectPolicy return project's policy.
+	GetProjectPolicy(project string) (string, error)
+
+	// #################### AlertPub Msg  #####################
+	PublishAlertEvent(project string, alertResult []byte) error
 }

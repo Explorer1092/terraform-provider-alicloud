@@ -16,16 +16,28 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
 )
 
-func resourceAlicloudEcsLaunchTemplate() *schema.Resource {
+func resourceAliCloudEcsLaunchTemplate() *schema.Resource {
 	return &schema.Resource{
-		Create: resourceAlicloudEcsLaunchTemplateCreate,
-		Read:   resourceAlicloudEcsLaunchTemplateRead,
-		Update: resourceAlicloudEcsLaunchTemplateUpdate,
-		Delete: resourceAlicloudEcsLaunchTemplateDelete,
+		Create: resourceAliCloudEcsLaunchTemplateCreate,
+		Read:   resourceAliCloudEcsLaunchTemplateRead,
+		Update: resourceAliCloudEcsLaunchTemplateUpdate,
+		Delete: resourceAliCloudEcsLaunchTemplateDelete,
 		Importer: &schema.ResourceImporter{
 			State: schema.ImportStatePassthrough,
 		},
 		Schema: map[string]*schema.Schema{
+			"auto_renew": {
+				Type:     schema.TypeBool,
+				Optional: true,
+				Computed: true,
+				ForceNew: true,
+			},
+			"auto_renew_period": {
+				Type:     schema.TypeInt,
+				Optional: true,
+				Computed: true,
+				ForceNew: true,
+			},
 			"auto_release_time": {
 				Type:     schema.TypeString,
 				Optional: true,
@@ -46,7 +58,7 @@ func resourceAlicloudEcsLaunchTemplate() *schema.Resource {
 						"description": {
 							Type:         schema.TypeString,
 							Optional:     true,
-							ValidateFunc: validation.All(validation.StringLenBetween(2, 256), validation.StringDoesNotMatch(regexp.MustCompile(`(^http://.*)|(^https://.*)`), "It cannot begin with \"http://\", \"https://\".")),
+							ValidateFunc: validation.All(StringLenBetween(2, 256), StringDoesNotMatch(regexp.MustCompile(`(^http://.*)|(^https://.*)`), "It cannot begin with \"http://\", \"https://\".")),
 						},
 						"encrypted": {
 							Type:     schema.TypeBool,
@@ -55,7 +67,7 @@ func resourceAlicloudEcsLaunchTemplate() *schema.Resource {
 						"name": {
 							Type:         schema.TypeString,
 							Optional:     true,
-							ValidateFunc: validation.All(validation.StringDoesNotMatch(regexp.MustCompile(`(^http://.*)|(^https://.*)`), "It cannot begin with \"http://\", \"https://\"."), validation.StringMatch(regexp.MustCompile(`^[a-zA-Z\p{Han}][a-zA-Z\p{Han}_0-9\-\.\:]{1,127}$`), `It can contain A-Z, a-z, Chinese characters, numbers, periods (.), colons (:), underscores (_), and hyphens (-).`)),
+							ValidateFunc: validation.All(StringDoesNotMatch(regexp.MustCompile(`(^http://.*)|(^https://.*)`), "It cannot begin with \"http://\", \"https://\"."), StringMatch(regexp.MustCompile(`^[a-zA-Z\p{Han}][a-zA-Z\p{Han}_0-9\-\.\:]{1,127}$`), `It can contain A-Z, a-z, Chinese characters, numbers, periods (.), colons (:), underscores (_), and hyphens (-).`)),
 						},
 						"performance_level": {
 							Type:     schema.TypeString,
@@ -69,6 +81,10 @@ func resourceAlicloudEcsLaunchTemplate() *schema.Resource {
 							Type:     schema.TypeString,
 							Optional: true,
 						},
+						"device": {
+							Type:     schema.TypeString,
+							Optional: true,
+						},
 					},
 				},
 			},
@@ -79,7 +95,7 @@ func resourceAlicloudEcsLaunchTemplate() *schema.Resource {
 			"description": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validation.All(validation.StringLenBetween(2, 256), validation.StringDoesNotMatch(regexp.MustCompile(`(^http://.*)|(^https://.*)`), "It cannot begin with \"http://\", \"https://\".")),
+				ValidateFunc: validation.All(StringLenBetween(2, 256), StringDoesNotMatch(regexp.MustCompile(`(^http://.*)|(^https://.*)`), "It cannot begin with \"http://\", \"https://\".")),
 			},
 			"enable_vm_os_config": {
 				Type:     schema.TypeBool,
@@ -88,7 +104,7 @@ func resourceAlicloudEcsLaunchTemplate() *schema.Resource {
 			"host_name": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validation.All(validation.StringDoesNotMatch(regexp.MustCompile(`(^\..*)|(^\-.*)|(.*\-$)|(.*\.$)`), "It cannot begin or end with period (.), hyphen (-).")),
+				ValidateFunc: validation.All(StringDoesNotMatch(regexp.MustCompile(`(^\..*)|(^\-.*)|(.*\-$)|(.*\.$)`), "It cannot begin or end with period (.), hyphen (-).")),
 			},
 			"image_id": {
 				Type:     schema.TypeString,
@@ -97,49 +113,48 @@ func resourceAlicloudEcsLaunchTemplate() *schema.Resource {
 			"image_owner_alias": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validation.StringInSlice([]string{"system", "self", "others", "marketplace", ""}, false),
+				ValidateFunc: StringInSlice([]string{"system", "self", "others", "marketplace", ""}, false),
 				Default:      "",
 			},
 			"instance_charge_type": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validation.StringInSlice([]string{"PostPaid", "PrePaid"}, false),
+				ValidateFunc: StringInSlice([]string{"PostPaid", "PrePaid"}, false),
 			},
 			"instance_name": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validation.All(validation.StringDoesNotMatch(regexp.MustCompile(`(^http://.*)|(^https://.*)`), "It cannot begin with \"http://\", \"https://\"."), validation.StringMatch(regexp.MustCompile(`^[a-zA-Z\p{Han}][a-zA-Z\p{Han}_0-9\-\.\:]{1,127}$`), `It must begin with an English or a Chinese character. It can contain A-Z, a-z, Chinese characters, numbers, periods (.), colons (:), underscores (_), and hyphens (-).`)),
+				ValidateFunc: validation.All(StringDoesNotMatch(regexp.MustCompile(`(^http://.*)|(^https://.*)`), "It cannot begin with \"http://\", \"https://\"."), StringMatch(regexp.MustCompile(`^[a-zA-Z\p{Han}][a-zA-Z\p{Han}_0-9\-\.\:\,\[\]]{1,127}$`), `It must begin with an English or a Chinese character. It can contain A-Z, a-z, Chinese characters, numbers, colons (:), underscores (_), periods (.), commas (,), brackets ([]), and hyphens (-).`)),
 			},
 			"instance_type": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validation.StringMatch(regexp.MustCompile(`^ecs\..*`), "prefix must be 'ecs.'"),
+				ValidateFunc: StringMatch(regexp.MustCompile(`^ecs\..*`), "prefix must be 'ecs.'"),
 			},
 			"internet_charge_type": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validation.StringInSlice([]string{"PayByBandwidth", "PayByTraffic"}, false),
+				ValidateFunc: StringInSlice([]string{"PayByBandwidth", "PayByTraffic"}, false),
 			},
 			"internet_max_bandwidth_in": {
-				Type:         schema.TypeInt,
-				Optional:     true,
-				Computed:     true,
-				ValidateFunc: validation.IntBetween(1, 200),
+				Type:     schema.TypeInt,
+				Optional: true,
+				Computed: true,
 			},
 			"internet_max_bandwidth_out": {
 				Type:         schema.TypeInt,
 				Optional:     true,
-				ValidateFunc: validation.IntBetween(0, 100),
+				ValidateFunc: IntBetween(0, 100),
 			},
 			"io_optimized": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validation.StringInSlice([]string{"none", "optimized"}, false),
+				ValidateFunc: StringInSlice([]string{"none", "optimized"}, false),
 			},
 			"key_pair_name": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validation.StringLenBetween(2, 128),
+				ValidateFunc: StringLenBetween(2, 128),
 			},
 			"launch_template_name": {
 				Type:          schema.TypeString,
@@ -164,12 +179,12 @@ func resourceAlicloudEcsLaunchTemplate() *schema.Resource {
 						"description": {
 							Type:         schema.TypeString,
 							Optional:     true,
-							ValidateFunc: validation.All(validation.StringLenBetween(2, 256), validation.StringDoesNotMatch(regexp.MustCompile(`(^http://.*)|(^https://.*)`), "It cannot begin with \"http://\", \"https://\".")),
+							ValidateFunc: validation.All(StringLenBetween(2, 256), StringDoesNotMatch(regexp.MustCompile(`(^http://.*)|(^https://.*)`), "It cannot begin with \"http://\", \"https://\".")),
 						},
 						"name": {
 							Type:         schema.TypeString,
 							Optional:     true,
-							ValidateFunc: validation.All(validation.StringDoesNotMatch(regexp.MustCompile(`(^http://.*)|(^https://.*)`), "It cannot begin with \"http://\", \"https://\"."), validation.StringMatch(regexp.MustCompile(`^[a-zA-Z\p{Han}][a-zA-Z\p{Han}_0-9\-\.\:]{1,127}$`), `It can contain A-Z, a-z, Chinese characters, numbers, periods (.), colons (:), underscores (_), and hyphens (-).`)),
+							ValidateFunc: validation.All(StringDoesNotMatch(regexp.MustCompile(`(^http://.*)|(^https://.*)`), "It cannot begin with \"http://\", \"https://\"."), StringMatch(regexp.MustCompile(`^[a-zA-Z\p{Han}][a-zA-Z\p{Han}_0-9\-\.\:]{1,127}$`), `It can contain A-Z, a-z, Chinese characters, numbers, periods (.), colons (:), underscores (_), and hyphens (-).`)),
 						},
 						"primary_ip": {
 							Type:         schema.TypeString,
@@ -191,7 +206,7 @@ func resourceAlicloudEcsLaunchTemplate() *schema.Resource {
 			"network_type": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validation.StringInSlice([]string{"classic", "vpc"}, false),
+				ValidateFunc: StringInSlice([]string{"classic", "vpc"}, false),
 			},
 			"password_inherit": {
 				Type:     schema.TypeBool,
@@ -200,6 +215,14 @@ func resourceAlicloudEcsLaunchTemplate() *schema.Resource {
 			"period": {
 				Type:     schema.TypeInt,
 				Optional: true,
+				Computed: true,
+				ForceNew: true,
+			},
+			"period_unit": {
+				Type:     schema.TypeString,
+				Optional: true,
+				Computed: true,
+				ForceNew: true,
 			},
 			"private_ip_address": {
 				Type:     schema.TypeString,
@@ -216,7 +239,7 @@ func resourceAlicloudEcsLaunchTemplate() *schema.Resource {
 			"security_enhancement_strategy": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validation.StringInSlice([]string{"Active", "Deactive"}, false),
+				ValidateFunc: StringInSlice([]string{"Active", "Deactive"}, false),
 			},
 			"security_group_id": {
 				Type:     schema.TypeString,
@@ -232,7 +255,7 @@ func resourceAlicloudEcsLaunchTemplate() *schema.Resource {
 			"spot_duration": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validation.StringInSlice([]string{"0", "1", "2", "3", "4", "5", "6"}, false),
+				ValidateFunc: StringInSlice([]string{"0", "1", "2", "3", "4", "5", "6"}, false),
 				Default:      "1",
 			},
 			"spot_price_limit": {
@@ -242,7 +265,7 @@ func resourceAlicloudEcsLaunchTemplate() *schema.Resource {
 			"spot_strategy": {
 				Type:         schema.TypeString,
 				Optional:     true,
-				ValidateFunc: validation.StringInSlice([]string{"NoSpot", "SpotAsPriceGo", "SpotWithPriceLimit"}, false),
+				ValidateFunc: StringInSlice([]string{"NoSpot", "SpotAsPriceGo", "SpotWithPriceLimit"}, false),
 			},
 			"system_disk": {
 				Type:     schema.TypeSet,
@@ -255,7 +278,7 @@ func resourceAlicloudEcsLaunchTemplate() *schema.Resource {
 							Type:          schema.TypeString,
 							Optional:      true,
 							Computed:      true,
-							ValidateFunc:  validation.StringInSlice([]string{"all", "cloud", "ephemeral_ssd", "cloud_essd", "cloud_efficiency", "cloud_ssd", "local_disk"}, false),
+							ValidateFunc:  StringInSlice([]string{"all", "cloud", "ephemeral_ssd", "cloud_essd", "cloud_efficiency", "cloud_ssd", "local_disk"}, false),
 							ConflictsWith: []string{"system_disk_category"},
 						},
 						"delete_with_instance": {
@@ -267,7 +290,7 @@ func resourceAlicloudEcsLaunchTemplate() *schema.Resource {
 							Type:          schema.TypeString,
 							Optional:      true,
 							Computed:      true,
-							ValidateFunc:  validation.All(validation.StringLenBetween(2, 256), validation.StringDoesNotMatch(regexp.MustCompile(`(^http://.*)|(^https://.*)`), "It cannot begin with \"http://\", \"https://\".")),
+							ValidateFunc:  validation.All(StringLenBetween(2, 256), StringDoesNotMatch(regexp.MustCompile(`(^http://.*)|(^https://.*)`), "It cannot begin with \"http://\", \"https://\".")),
 							ConflictsWith: []string{"system_disk_description"},
 						},
 						"iops": {
@@ -278,21 +301,24 @@ func resourceAlicloudEcsLaunchTemplate() *schema.Resource {
 							Type:          schema.TypeString,
 							Optional:      true,
 							Computed:      true,
-							ValidateFunc:  validation.All(validation.StringDoesNotMatch(regexp.MustCompile(`(^http://.*)|(^https://.*)`), "It cannot begin with \"http://\", \"https://\"."), validation.StringMatch(regexp.MustCompile(`^[a-zA-Z\p{Han}][a-zA-Z\p{Han}_0-9\-\.\:]{1,127}$`), `It can contain A-Z, a-z, Chinese characters, numbers, periods (.), colons (:), underscores (_), and hyphens (-).`)),
+							ValidateFunc:  validation.All(StringDoesNotMatch(regexp.MustCompile(`(^http://.*)|(^https://.*)`), "It cannot begin with \"http://\", \"https://\"."), StringMatch(regexp.MustCompile(`^[a-zA-Z\p{Han}][a-zA-Z\p{Han}_0-9\-\.\:]{1,127}$`), `It can contain A-Z, a-z, Chinese characters, numbers, periods (.), colons (:), underscores (_), and hyphens (-).`)),
 							ConflictsWith: []string{"system_disk_name"},
 						},
 						"performance_level": {
 							Type:         schema.TypeString,
 							Optional:     true,
-							ValidateFunc: validation.StringInSlice([]string{"PL0", "PL1", "PL2", "PL3"}, false),
-							Default:      "PL0",
+							Computed:     true,
+							ValidateFunc: StringInSlice([]string{"PL0", "PL1", "PL2", "PL3"}, false),
 						},
 						"size": {
 							Type:          schema.TypeInt,
 							Optional:      true,
 							Computed:      true,
-							ValidateFunc:  validation.IntBetween(20, 500),
 							ConflictsWith: []string{"system_disk_size"},
+						},
+						"encrypted": {
+							Type:     schema.TypeBool,
+							Optional: true,
 						},
 					},
 				},
@@ -303,6 +329,22 @@ func resourceAlicloudEcsLaunchTemplate() *schema.Resource {
 				Type:     schema.TypeString,
 				Optional: true,
 				ForceNew: true,
+			},
+			"default_version_number": {
+				Type:          schema.TypeInt,
+				Optional:      true,
+				Computed:      true,
+				ConflictsWith: []string{"update_default_version_number"},
+				ValidateFunc:  validation.IntAtLeast(1),
+			},
+			"update_default_version_number": {
+				Type:          schema.TypeBool,
+				Optional:      true,
+				ConflictsWith: []string{"default_version_number"},
+			},
+			"latest_version_number": {
+				Type:     schema.TypeInt,
+				Computed: true,
 			},
 			"user_data": {
 				Type:          schema.TypeString,
@@ -335,11 +377,29 @@ func resourceAlicloudEcsLaunchTemplate() *schema.Resource {
 				Optional: true,
 				Computed: true,
 			},
+			"http_endpoint": {
+				Type:     schema.TypeString,
+				Optional: true,
+				ForceNew: true,
+				Computed: true,
+			},
+			"http_tokens": {
+				Type:     schema.TypeString,
+				Optional: true,
+				ForceNew: true,
+				Computed: true,
+			},
+			"http_put_response_hop_limit": {
+				Type:     schema.TypeInt,
+				Optional: true,
+				ForceNew: true,
+				Computed: true,
+			},
 			"system_disk_category": {
 				Type:          schema.TypeString,
 				Optional:      true,
 				Computed:      true,
-				ValidateFunc:  validation.StringInSlice([]string{"all", "cloud", "ephemeral_ssd", "cloud_essd", "cloud_efficiency", "cloud_ssd", "local_disk"}, false),
+				ValidateFunc:  StringInSlice([]string{"all", "cloud", "ephemeral_ssd", "cloud_essd", "cloud_efficiency", "cloud_ssd", "local_disk"}, false),
 				Deprecated:    "Field 'system_disk_category' has been deprecated from provider version 1.120.0. New field 'system_disk' instead.",
 				ConflictsWith: []string{"system_disk"},
 			},
@@ -347,7 +407,7 @@ func resourceAlicloudEcsLaunchTemplate() *schema.Resource {
 				Type:          schema.TypeString,
 				Optional:      true,
 				Computed:      true,
-				ValidateFunc:  validation.All(validation.StringLenBetween(2, 256), validation.StringDoesNotMatch(regexp.MustCompile(`(^http://.*)|(^https://.*)`), "It cannot begin with \"http://\", \"https://\".")),
+				ValidateFunc:  validation.All(StringLenBetween(2, 256), StringDoesNotMatch(regexp.MustCompile(`(^http://.*)|(^https://.*)`), "It cannot begin with \"http://\", \"https://\".")),
 				Deprecated:    "Field 'system_disk_description' has been deprecated from provider version 1.120.0. New field 'system_disk' instead.",
 				ConflictsWith: []string{"system_disk"},
 			},
@@ -355,7 +415,7 @@ func resourceAlicloudEcsLaunchTemplate() *schema.Resource {
 				Type:          schema.TypeString,
 				Optional:      true,
 				Computed:      true,
-				ValidateFunc:  validation.All(validation.StringDoesNotMatch(regexp.MustCompile(`(^http://.*)|(^https://.*)`), "It cannot begin with \"http://\", \"https://\"."), validation.StringMatch(regexp.MustCompile(`^[a-zA-Z\p{Han}][a-zA-Z\p{Han}_0-9\-\.\:]{1,127}$`), `It can contain A-Z, a-z, Chinese characters, numbers, periods (.), colons (:), underscores (_), and hyphens (-).`)),
+				ValidateFunc:  validation.All(StringDoesNotMatch(regexp.MustCompile(`(^http://.*)|(^https://.*)`), "It cannot begin with \"http://\", \"https://\"."), StringMatch(regexp.MustCompile(`^[a-zA-Z\p{Han}][a-zA-Z\p{Han}_0-9\-\.\:]{1,127}$`), `It can contain A-Z, a-z, Chinese characters, numbers, periods (.), colons (:), underscores (_), and hyphens (-).`)),
 				Deprecated:    "Field 'system_disk_name' has been deprecated from provider version 1.120.0. New field 'system_disk' instead.",
 				ConflictsWith: []string{"system_disk"},
 			},
@@ -363,7 +423,6 @@ func resourceAlicloudEcsLaunchTemplate() *schema.Resource {
 				Type:          schema.TypeInt,
 				Optional:      true,
 				Computed:      true,
-				ValidateFunc:  validation.IntBetween(20, 500),
 				Deprecated:    "Field 'system_disk_size' has been deprecated from provider version 1.120.0. New field 'system_disk' instead.",
 				ConflictsWith: []string{"system_disk"},
 			},
@@ -371,7 +430,7 @@ func resourceAlicloudEcsLaunchTemplate() *schema.Resource {
 	}
 }
 
-func resourceAlicloudEcsLaunchTemplateCreate(d *schema.ResourceData, meta interface{}) error {
+func resourceAliCloudEcsLaunchTemplateCreate(d *schema.ResourceData, meta interface{}) error {
 	client := meta.(*connectivity.AliyunClient)
 	var response map[string]interface{}
 	action := "CreateLaunchTemplate"
@@ -389,18 +448,47 @@ func resourceAlicloudEcsLaunchTemplateCreate(d *schema.ResourceData, meta interf
 		for _, dataDisks := range v.(*schema.Set).List() {
 			dataDisksMap := make(map[string]interface{})
 			dataDisksArg := dataDisks.(map[string]interface{})
-			dataDisksMap["Category"] = dataDisksArg["category"]
+
+			if category, ok := dataDisksArg["category"].(string); ok && category != "" {
+				dataDisksMap["Category"] = category
+			}
+
+			if description, ok := dataDisksArg["description"].(string); ok && description != "" {
+				dataDisksMap["Description"] = description
+			}
+
+			if name, ok := dataDisksArg["name"].(string); ok && name != "" {
+				dataDisksMap["DiskName"] = name
+			}
+
+			if performanceLevel, ok := dataDisksArg["performance_level"].(string); ok && performanceLevel != "" {
+				dataDisksMap["PerformanceLevel"] = performanceLevel
+			}
+
+			if snapshotId, ok := dataDisksArg["snapshot_id"].(string); ok && snapshotId != "" {
+				dataDisksMap["SnapshotId"] = snapshotId
+			}
+
+			if device, ok := dataDisksArg["device"].(string); ok && device != "" {
+				dataDisksMap["Device"] = device
+			}
+
 			dataDisksMap["DeleteWithInstance"] = requests.NewBoolean(dataDisksArg["delete_with_instance"].(bool))
-			dataDisksMap["Description"] = dataDisksArg["description"]
 			dataDisksMap["Encrypted"] = fmt.Sprintf("%v", dataDisksArg["encrypted"].(bool))
-			dataDisksMap["DiskName"] = dataDisksArg["name"]
-			dataDisksMap["PerformanceLevel"] = dataDisksArg["performance_level"]
 			dataDisksMap["Size"] = requests.NewInteger(dataDisksArg["size"].(int))
-			dataDisksMap["SnapshotId"] = dataDisksArg["snapshot_id"]
+
 			dataDisksMaps = append(dataDisksMaps, dataDisksMap)
 		}
 		request["DataDisk"] = dataDisksMaps
 
+	}
+
+	if v, ok := d.GetOk("auto_renew"); ok {
+		request["AutoRenew"] = v
+	}
+
+	if v, ok := d.GetOk("auto_renew_period"); ok {
+		request["AutoRenewPeriod"] = v
 	}
 
 	if v, ok := d.GetOk("deployment_set_id"); ok {
@@ -491,6 +579,10 @@ func resourceAlicloudEcsLaunchTemplateCreate(d *schema.ResourceData, meta interf
 		request["PasswordInherit"] = v
 	}
 
+	if v, ok := d.GetOk("period_unit"); ok {
+		request["PeriodUnit"] = v
+	}
+
 	if v, ok := d.GetOk("period"); ok {
 		request["Period"] = v
 	}
@@ -543,6 +635,7 @@ func resourceAlicloudEcsLaunchTemplateCreate(d *schema.ResourceData, meta interf
 			systemDiskMap["DiskName"] = systemDiskArg["name"]
 			systemDiskMap["PerformanceLevel"] = systemDiskArg["performance_level"]
 			systemDiskMap["Size"] = requests.NewInteger(systemDiskArg["size"].(int))
+			systemDiskMap["Encrypted"] = requests.NewBoolean(systemDiskArg["encrypted"].(bool))
 		}
 		request["SystemDisk"] = systemDiskMap
 
@@ -618,6 +711,16 @@ func resourceAlicloudEcsLaunchTemplateCreate(d *schema.ResourceData, meta interf
 			request["ZoneId"] = vsw["ZoneId"]
 		}
 	}
+	if v, ok := d.GetOk("http_endpoint"); ok {
+		request["HttpEndpoint"] = v
+	}
+	if v, ok := d.GetOk("http_tokens"); ok {
+		request["HttpTokens"] = v
+	}
+	if v, ok := d.GetOk("http_put_response_hop_limit"); ok {
+		request["HttpPutResponseHopLimit"] = v
+	}
+
 	wait := incrementalWait(3*time.Second, 3*time.Second)
 	err = resource.Retry(d.Timeout(schema.TimeoutCreate), func() *resource.RetryError {
 		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2014-05-26"), StringPointer("AK"), nil, request, &util.RuntimeOptions{})
@@ -637,9 +740,10 @@ func resourceAlicloudEcsLaunchTemplateCreate(d *schema.ResourceData, meta interf
 
 	d.SetId(fmt.Sprint(response["LaunchTemplateId"]))
 
-	return resourceAlicloudEcsLaunchTemplateRead(d, meta)
+	return resourceAliCloudEcsLaunchTemplateRead(d, meta)
 }
-func resourceAlicloudEcsLaunchTemplateRead(d *schema.ResourceData, meta interface{}) error {
+
+func resourceAliCloudEcsLaunchTemplateRead(d *schema.ResourceData, meta interface{}) error {
 	client := meta.(*connectivity.AliyunClient)
 	ecsService := EcsService{client}
 	object, err := ecsService.DescribeEcsLaunchTemplate(d.Id())
@@ -653,16 +757,12 @@ func resourceAlicloudEcsLaunchTemplateRead(d *schema.ResourceData, meta interfac
 	}
 	d.Set("launch_template_name", object["LaunchTemplateName"])
 	d.Set("name", object["LaunchTemplateName"])
+	d.Set("default_version_number", object["DefaultVersionNumber"])
+	d.Set("latest_version_number", object["LatestVersionNumber"])
 
-	describeLaunchTemplateVersions, err := ecsService.DescribeLaunchTemplateVersions(d.Id())
+	describeLaunchTemplateVersionsObject, err := ecsService.DescribeLaunchTemplateVersions(d.Id(), object["LatestVersionNumber"])
 	if err != nil {
 		return WrapError(err)
-	}
-	describeLaunchTemplateVersionsObject := make(map[string]interface{})
-	for _, version := range describeLaunchTemplateVersions {
-		if version.(map[string]interface{})["VersionNumber"] == object["LatestVersionNumber"] {
-			describeLaunchTemplateVersionsObject = version.(map[string]interface{})
-		}
 	}
 	d.Set("auto_release_time", describeLaunchTemplateVersionsObject["LaunchTemplateData"].(map[string]interface{})["AutoReleaseTime"])
 
@@ -679,6 +779,7 @@ func resourceAlicloudEcsLaunchTemplateRead(d *schema.ResourceData, meta interfac
 					"performance_level":    m1["PerformanceLevel"],
 					"size":                 m1["Size"],
 					"snapshot_id":          m1["SnapshotId"],
+					"device":               m1["Device"],
 				}
 				dataDisk = append(dataDisk, temp1)
 
@@ -722,9 +823,12 @@ func resourceAlicloudEcsLaunchTemplateRead(d *schema.ResourceData, meta interfac
 	if err := d.Set("network_interfaces", networkInterface); err != nil {
 		return WrapError(err)
 	}
+	d.Set("auto_renew", formatBool(describeLaunchTemplateVersionsObject["LaunchTemplateData"].(map[string]interface{})["AutoRenew"]))
+	d.Set("auto_renew_period", formatInt(describeLaunchTemplateVersionsObject["LaunchTemplateData"].(map[string]interface{})["AutoRenewPeriod"]))
 	d.Set("network_type", describeLaunchTemplateVersionsObject["LaunchTemplateData"].(map[string]interface{})["NetworkType"])
 	d.Set("password_inherit", describeLaunchTemplateVersionsObject["LaunchTemplateData"].(map[string]interface{})["PasswordInherit"])
 	d.Set("period", formatInt(describeLaunchTemplateVersionsObject["LaunchTemplateData"].(map[string]interface{})["Period"]))
+	d.Set("period_unit", describeLaunchTemplateVersionsObject["LaunchTemplateData"].(map[string]interface{})["PeriodUnit"])
 	d.Set("private_ip_address", describeLaunchTemplateVersionsObject["LaunchTemplateData"].(map[string]interface{})["PrivateIpAddress"])
 	d.Set("ram_role_name", describeLaunchTemplateVersionsObject["LaunchTemplateData"].(map[string]interface{})["RamRoleName"])
 	d.Set("security_enhancement_strategy", describeLaunchTemplateVersionsObject["LaunchTemplateData"].(map[string]interface{})["SecurityEnhancementStrategy"])
@@ -749,6 +853,7 @@ func resourceAlicloudEcsLaunchTemplateRead(d *schema.ResourceData, meta interfac
 	systemDiskMap["name"] = describeLaunchTemplateVersionsObject["LaunchTemplateData"].(map[string]interface{})["SystemDisk.DiskName"]
 	systemDiskMap["performance_level"] = describeLaunchTemplateVersionsObject["LaunchTemplateData"].(map[string]interface{})["SystemDisk.PerformanceLevel"]
 	systemDiskMap["size"] = describeLaunchTemplateVersionsObject["LaunchTemplateData"].(map[string]interface{})["SystemDisk.Size"]
+	systemDiskMap["encrypted"] = describeLaunchTemplateVersionsObject["LaunchTemplateData"].(map[string]interface{})["SystemDisk.Encrypted"]
 	systemDiskSli = append(systemDiskSli, systemDiskMap)
 	d.Set("system_disk", systemDiskSli)
 
@@ -765,9 +870,13 @@ func resourceAlicloudEcsLaunchTemplateRead(d *schema.ResourceData, meta interfac
 	d.Set("vpc_id", describeLaunchTemplateVersionsObject["LaunchTemplateData"].(map[string]interface{})["VpcId"])
 	d.Set("zone_id", describeLaunchTemplateVersionsObject["LaunchTemplateData"].(map[string]interface{})["ZoneId"])
 	d.Set("tags", tagsToMap(describeLaunchTemplateVersionsObject["LaunchTemplateData"].(map[string]interface{})["Tags"].(map[string]interface{})["InstanceTag"]))
+	d.Set("http_endpoint", describeLaunchTemplateVersionsObject["LaunchTemplateData"].(map[string]interface{})["HttpEndpoint"])
+	d.Set("http_tokens", describeLaunchTemplateVersionsObject["LaunchTemplateData"].(map[string]interface{})["HttpTokens"])
+	d.Set("http_put_response_hop_limit", describeLaunchTemplateVersionsObject["LaunchTemplateData"].(map[string]interface{})["HttpPutResponseHopLimit"])
 	return nil
 }
-func resourceAlicloudEcsLaunchTemplateUpdate(d *schema.ResourceData, meta interface{}) error {
+
+func resourceAliCloudEcsLaunchTemplateUpdate(d *schema.ResourceData, meta interface{}) error {
 	client := meta.(*connectivity.AliyunClient)
 	ecsService := EcsService{client}
 	var response map[string]interface{}
@@ -785,19 +894,20 @@ func resourceAlicloudEcsLaunchTemplateUpdate(d *schema.ResourceData, meta interf
 	}
 	// Remove one of the oldest and non-default version when the total number reach 30
 	if len(versions) > 29 {
-		var oldestVersion int64
+		var oldestVersion int
 		for _, version := range versions {
-			if !version.(map[string]interface{})["DefaultVersion"].(bool) && (oldestVersion == 0 || version.(map[string]interface{})["VersionNumber"].(int64) < oldestVersion) {
-				oldestVersion = version.(map[string]interface{})["VersionNumber"].(int64)
+			if !version.(map[string]interface{})["DefaultVersion"].(bool) && (oldestVersion == 0 || formatInt(version.(map[string]interface{})["VersionNumber"]) < oldestVersion) {
+				oldestVersion = formatInt(version.(map[string]interface{})["VersionNumber"])
 			}
 		}
 
-		err = deleteLaunchTemplateVersion(d.Id(), int(oldestVersion), meta)
+		err = deleteLaunchTemplateVersion(d.Id(), oldestVersion, meta)
 		if err != nil {
 			return WrapError(err)
 		}
 	}
 
+	latestVersion := d.Get("latest_version_number")
 	update := false
 	request := map[string]interface{}{
 		"LaunchTemplateId": d.Id(),
@@ -817,14 +927,35 @@ func resourceAlicloudEcsLaunchTemplateUpdate(d *schema.ResourceData, meta interf
 		for i, DataDisksValue := range v.(*schema.Set).List() {
 			DataDisksMap := DataDisksValue.(map[string]interface{})
 			DataDisks[i] = make(map[string]interface{})
-			DataDisks[i]["Category"] = DataDisksMap["category"]
+
+			if category, ok := DataDisksMap["category"].(string); ok && category != "" {
+				DataDisks[i]["Category"] = category
+			}
+
+			if description, ok := DataDisksMap["description"].(string); ok && description != "" {
+				DataDisks[i]["Description"] = description
+			}
+
+			if name, ok := DataDisksMap["name"].(string); ok && name != "" {
+				DataDisks[i]["DiskName"] = name
+			}
+
+			if performanceLevel, ok := DataDisksMap["performance_level"].(string); ok && performanceLevel != "" {
+				DataDisks[i]["PerformanceLevel"] = performanceLevel
+			}
+
+			if snapshotId, ok := DataDisksMap["snapshot_id"].(string); ok && snapshotId != "" {
+				DataDisks[i]["SnapshotId"] = snapshotId
+			}
+
+			if device, ok := DataDisksMap["device"].(string); ok && device != "" {
+				DataDisks[i]["Device"] = device
+			}
+
 			DataDisks[i]["DeleteWithInstance"] = DataDisksMap["delete_with_instance"]
-			DataDisks[i]["Description"] = DataDisksMap["description"]
 			DataDisks[i]["Encrypted"] = fmt.Sprintf("%v", DataDisksMap["encrypted"].(bool))
-			DataDisks[i]["DiskName"] = DataDisksMap["name"]
-			DataDisks[i]["PerformanceLevel"] = DataDisksMap["performance_level"]
 			DataDisks[i]["Size"] = DataDisksMap["size"]
-			DataDisks[i]["SnapshotId"] = DataDisksMap["snapshot_id"]
+
 		}
 		request["DataDisk"] = DataDisks
 
@@ -1029,6 +1160,7 @@ func resourceAlicloudEcsLaunchTemplateUpdate(d *schema.ResourceData, meta interf
 			systemDiskMap["DiskName"] = systemDiskArg["name"]
 			systemDiskMap["PerformanceLevel"] = systemDiskArg["performance_level"]
 			systemDiskMap["Size"] = requests.NewInteger(systemDiskArg["size"].(int))
+			systemDiskMap["Encrypted"] = requests.NewBoolean(systemDiskArg["encrypted"].(bool))
 		}
 		request["SystemDisk"] = systemDiskMap
 	} else {
@@ -1133,54 +1265,44 @@ func resourceAlicloudEcsLaunchTemplateUpdate(d *schema.ResourceData, meta interf
 		if err != nil {
 			return WrapErrorf(err, DefaultErrorMsg, d.Id(), action, AlibabaCloudSdkGoERROR)
 		}
-		d.SetPartial("auto_release_time")
-		d.SetPartial("data_disks")
-		d.SetPartial("deployment_set_id")
-		d.SetPartial("description")
-		d.SetPartial("enable_vm_os_config")
-		d.SetPartial("host_name")
-		d.SetPartial("image_id")
-		d.SetPartial("image_owner_alias")
-		d.SetPartial("instance_charge_type")
-		d.SetPartial("instance_name")
-		d.SetPartial("instance_type")
-		d.SetPartial("internet_charge_type")
-		d.SetPartial("internet_max_bandwidth_in")
-		d.SetPartial("internet_max_bandwidth_out")
-		d.SetPartial("io_optimized")
-		d.SetPartial("key_pair_name")
-		d.SetPartial("launch_template_name")
-		d.SetPartial("name")
-		d.SetPartial("network_interfaces")
-		d.SetPartial("network_type")
-		d.SetPartial("password_inherit")
-		d.SetPartial("period")
-		d.SetPartial("private_ip_address")
-		d.SetPartial("ram_role_name")
-		d.SetPartial("resource_group_id")
-		d.SetPartial("security_enhancement_strategy")
-		d.SetPartial("security_group_id")
-		d.SetPartial("security_group_ids")
-		d.SetPartial("spot_duration")
-		d.SetPartial("spot_price_limit")
-		d.SetPartial("spot_strategy")
-		d.SetPartial("system_disk")
-		d.SetPartial("system_disk_category")
-		d.SetPartial("system_disk_description")
-		d.SetPartial("system_disk_name")
-		d.SetPartial("system_disk_size")
-		d.SetPartial("tags")
-		d.SetPartial("user_data")
-		d.SetPartial("userdata")
-		d.SetPartial("vswitch_id")
-		d.SetPartial("version_description")
-		d.SetPartial("vpc_id")
-		d.SetPartial("zone_id")
+		latestVersion = response["LaunchTemplateVersionNumber"]
+	}
+
+	if d.Get("update_default_version_number").(bool) || d.HasChange("default_version_number") {
+		action := "ModifyLaunchTemplateDefaultVersion"
+		request = map[string]interface{}{
+			"LaunchTemplateId": d.Id(),
+			"RegionId":         client.RegionId,
+		}
+
+		if d.Get("update_default_version_number").(bool) {
+			request["DefaultVersionNumber"] = latestVersion
+		} else if d.HasChange("default_version_number") {
+			request["DefaultVersionNumber"] = d.Get("default_version_number")
+		}
+
+		wait := incrementalWait(3*time.Second, 3*time.Second)
+		err = resource.Retry(d.Timeout(schema.TimeoutUpdate), func() *resource.RetryError {
+			response, err = client.RpcPost("Ecs", "2014-05-26", action, nil, request, false)
+			if err != nil {
+				if NeedRetry(err) {
+					wait()
+					return resource.RetryableError(err)
+				}
+				return resource.NonRetryableError(err)
+			}
+			addDebug(action, response, request)
+			return nil
+		})
+		if err != nil {
+			return WrapErrorf(err, DefaultErrorMsg, d.Id(), action, AlibabaCloudSdkGoERROR)
+		}
 	}
 	d.Partial(false)
-	return resourceAlicloudEcsLaunchTemplateRead(d, meta)
+	return resourceAliCloudEcsLaunchTemplateRead(d, meta)
 }
-func resourceAlicloudEcsLaunchTemplateDelete(d *schema.ResourceData, meta interface{}) error {
+
+func resourceAliCloudEcsLaunchTemplateDelete(d *schema.ResourceData, meta interface{}) error {
 	client := meta.(*connectivity.AliyunClient)
 	action := "DeleteLaunchTemplate"
 	var response map[string]interface{}
@@ -1214,6 +1336,7 @@ func resourceAlicloudEcsLaunchTemplateDelete(d *schema.ResourceData, meta interf
 	}
 	return nil
 }
+
 func getLaunchTemplateVersions(id string, meta interface{}) ([]interface{}, error) {
 	client := meta.(*connectivity.AliyunClient)
 	action := "DescribeLaunchTemplateVersions"

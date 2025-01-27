@@ -7,64 +7,84 @@ description: |-
   Provides a Alicloud RDS Upgrade DB Instance resource.
 ---
 
-# alicloud\_rds\_upgrade\_db\_instance
+# alicloud_rds_upgrade_db_instance
 
 Provides a RDS Upgrade DB Instance resource.
 
 For information about RDS Upgrade DB Instance and how to use it, see [What is ApsaraDB for RDS](https://www.alibabacloud.com/help/en/doc-detail/26092.htm).
 
--> **NOTE:** Available in v1.153.0+.
+-> **NOTE:** Available since v1.153.0+.
 
 ## Example Usage
 
-### Create a RDS MySQL upgrade instance
+### Create a RDS PostgreSQL upgrade instance
+
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_rds_upgrade_db_instance&exampleId=16470adf-305c-f2bc-ab65-c8ec477b1143a99a176a&activeTab=example&spm=docs.r.rds_upgrade_db_instance.0.16470adf30&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
 
 ```terraform
-variable "name" {
-  default = "tf-testaccdbinstance"
+provider "alicloud" {
+  region = "cn-hangzhou"
 }
 
-variable "creation" {
-  default = "Rds"
+data "alicloud_db_zones" "example" {
+  engine                   = "PostgreSQL"
+  engine_version           = "13.0"
+  instance_charge_type     = "PostPaid"
+  category                 = "HighAvailability"
+  db_instance_storage_type = "cloud_essd"
 }
 
-data "alicloud_zones" "example" {
-  available_resource_creation = var.creation
+data "alicloud_db_instance_classes" "example" {
+  zone_id                  = data.alicloud_db_zones.example.zones.0.id
+  engine                   = "PostgreSQL"
+  engine_version           = "13.0"
+  category                 = "HighAvailability"
+  db_instance_storage_type = "cloud_essd"
+  instance_charge_type     = "PostPaid"
+}
+
+data "alicloud_rds_cross_regions" "example" {
 }
 
 resource "alicloud_vpc" "example" {
-  name       = var.name
+  vpc_name   = "terraform-example"
   cidr_block = "172.16.0.0/16"
 }
 
 resource "alicloud_vswitch" "example" {
-  vpc_id     = alicloud_vpc.example.id
-  cidr_block = "172.16.0.0/24"
-  zone_id    = data.alicloud_zones.example.zones[0].id
-  name       = var.name
+  vpc_id       = alicloud_vpc.example.id
+  cidr_block   = "172.16.0.0/24"
+  zone_id      = data.alicloud_db_zones.example.zones.0.id
+  vswitch_name = "terraform-example"
 }
 
 resource "alicloud_db_instance" "example" {
-  engine               = "PostgreSQL"
-  engine_version       = "12.0"
-  instance_type        = "pg.n2.small.2c"
-  instance_storage     = "20"
-  instance_charge_type = "Postpaid"
-  instance_name        = var.name
-  vswitch_id           = alicloud_vswitch.example.id
+  engine                   = "PostgreSQL"
+  engine_version           = "13.0"
+  db_instance_storage_type = "cloud_essd"
+  instance_type            = data.alicloud_db_instance_classes.example.instance_classes.0.instance_class
+  instance_storage         = data.alicloud_db_instance_classes.example.instance_classes.0.storage_range.min
+  instance_charge_type     = "Postpaid"
+  instance_name            = "terraform-example"
+  vswitch_id               = alicloud_vswitch.example.id
+  monitoring_period        = "60"
 }
 
 resource "alicloud_rds_upgrade_db_instance" "example" {
   source_db_instance_id    = alicloud_db_instance.example.id
-  target_major_version     = "13.0"
-  db_instance_class        = "pg.n2.small.2c"
-  db_instance_storage      = "20"
+  target_major_version     = "14.0"
+  db_instance_class        = alicloud_db_instance.example.instance_type
+  db_instance_storage      = alicloud_db_instance.example.instance_storage
+  db_instance_storage_type = alicloud_db_instance.example.db_instance_storage_type
   instance_network_type    = "VPC"
-  db_instance_storage_type = "cloud_ssd"
   collect_stat_mode        = "After"
   switch_over              = "false"
   payment_type             = "PayAsYouGo"
-  db_instance_description  = var.name
+  db_instance_description  = "terraform-example"
   vswitch_id               = alicloud_vswitch.example.id
 }
 ```
@@ -80,8 +100,8 @@ The following arguments are supported:
   * **cloud_essd2**: ESSDs of PL2.
   * **cloud_essd3**: ESSDs of PL3.
 * `payment_type` - (Required) The billing method of the new instance. Valid values: `PayAsYouGo` and `Subscription`.
-* `db_instance_class` - (Required) The instance type of the new instance. For information, see [Primary ApsaraDB RDS instance types](https://www.alibabacloud.com/doc-detail/26312.htm).
-* `db_instance_storage` - (Required) The storage capacity of the new instance. Unit: GB. The storage capacity increases in increments of 5 GB. For more information, see [Primary ApsaraDB RDS instance types](https://www.alibabacloud.com/doc-detail/26312.htm).
+* `db_instance_class` - (Required) The instance type of the new instance. For information, see [Primary ApsaraDB RDS instance types](https://www.alibabacloud.com/help/en/rds/product-overview/primary-apsaradb-rds-instance-types).
+* `db_instance_storage` - (Required) The storage capacity of the new instance. Unit: GB. The storage capacity increases in increments of 5 GB. For more information, see [Primary ApsaraDB RDS instance types](https://www.alibabacloud.com/help/en/rds/product-overview/primary-apsaradb-rds-instance-types).
 
 -> **NOTE:** The default value of this parameter is the storage capacity of the original instance.
 * `vpc_id` - (Optional, Computed) The ID of the VPC to which the new instance belongs.
@@ -95,7 +115,7 @@ The following arguments are supported:
   - true: delete protect.
   - false: no delete protect.
 
--> **NOTE:** `deletion_protection` is valid only when attribute `payment_type` is set to `PayAsYouGo`, supported engine type: **MySQL**, **PostgresSQL**, **MariaDB**, **MSSQL**.
+-> **NOTE:** `deletion_protection` is valid only when attribute `payment_type` is set to `PayAsYouGo`, supported engine type: **MySQL**, **PostgreSQL**, **MariaDB**, **MSSQL**.
 * `acl` - (Optional, Computed) This parameter is only supported by the RDS PostgreSQL cloud disk version. This parameter indicates the authentication method. It is allowed only when the public key of the client certificate authority is enabled. Valid values: `cert` and `perfer` and `verify-ca` and `verify-full (supported by RDS PostgreSQL above 12)`.
 * `auto_upgrade_minor_version` - (Optional, Computed) How to upgrade the minor version of the instance. Valid values:
   * **Auto**: automatically upgrade the minor version.
@@ -123,7 +143,6 @@ The following arguments are supported:
   * MySQL: **5.5/5.6/5.7/8.0**.
   * SQL Server: **2008r2/08r2_ent_ha/2012/2012_ent_ha/2012_std_ha/2012_web/2014_std_ha/2016_ent_ha/2016_std_ha/2016_web/2017_std_ha/2017_ent/2019_std_ha/2019_ent**.
   * PostgreSQL: **9.4/10.0/11.0/12.0/13.0**.
-  * PPAS: **9.3/10.0**.
   * MariaDB: **10.3**.
 * `instance_network_type` - (Required, ForceNew) The network type of the instance. Valid values:
   * **Classic**: Classic Network.
@@ -137,7 +156,7 @@ The following arguments are supported:
 * `released_keep_policy` - (Optional) The released keep policy.
 * `replication_acl` - (Optional, Computed) This parameter is only supported by the RDS PostgreSQL cloud disk version, indicating the authentication method of the replication permission. It is only allowed when the public key of the client certificate authority is enabled. Valid values: `cert` and `perfer` and `verify-ca` and `verify-full (supported by RDS PostgreSQL above 12)`.
 * `resource_group_id` - (Optional) The resource group id.
-* `role_arn` - (Optional) The Alibaba Cloud Resource Name (ARN) of a RAM role. A RAM role is a virtual RAM identity that you can create within your Alibaba Cloud account. For more information, see [RAM role overview](https://www.alibabacloud.com/doc-detail/93689.htm).
+* `role_arn` - (Optional) The Alibaba Cloud Resource Name (ARN) of a RAM role. A RAM role is a virtual RAM identity that you can create within your Alibaba Cloud account. For more information, see [RAM role overview](https://www.alibabacloud.com/help/en/ram/user-guide/ram-role-overview).
 
 -> **NOTE:** This parameter is available only when the instance runs MySQL.
 * `security_ips` - (Optional, Computed) The IP address whitelist of the instance. Separate multiple IP addresses with commas (,) and cannot be repeated. The following two formats are supported:
@@ -160,12 +179,12 @@ The following arguments are supported:
 
 -> **NOTE:** SQL Server 2017 cluster version is currently not supported.
 * `tde_status` - (Optional) Specifies whether to enable TDE. Valid values: `Enabled` and `Disabled`.
-* `zone_id` - (Optional, Computed, ForceNew) The ID of the zone to which the new instance belongs. You can call the [DescribeRegions](https://www.alibabacloud.com/doc-detail/26243.htm) operation to query the most recent region list.
+* `zone_id` - (Optional, Computed, ForceNew) The ID of the zone to which the new instance belongs. You can call the [DescribeRegions](https://www.alibabacloud.com/help/en/rds/developer-reference/api-rds-2014-08-15-describeregions) operation to query the most recent region list.
 
 -> **NOTE:** The default value of this parameter is the ID of the zone to which the original instance belongs.
-* `zone_id_slave_1` - (Optional, Computed, ForceNew) The ID of the zone to which the secondary instance of the new instance belongs. You can specify this parameter only when the original instance runs RDS High-availability Edition. You can select a zone that belongs to the region where the original instance resides. You can call the [DescribeRegions](https://www.alibabacloud.com/help/doc-detail/26243.htm) operation to query zone IDs.
-* `engine` - (Optional, Computed, ForceNew) Database type. Value options: MySQL, SQLServer, PostgreSQL, and PPAS.
-* `parameters` - (Optional, Computed) Set of parameters needs to be set after DB instance was launched. Available parameters can refer to the latest docs [View database parameter templates](https://www.alibabacloud.com/help/doc-detail/26284.htm).
+* `zone_id_slave_1` - (Optional, Computed, ForceNew) The ID of the zone to which the secondary instance of the new instance belongs. You can specify this parameter only when the original instance runs RDS High-availability Edition. You can select a zone that belongs to the region where the original instance resides. You can call the [DescribeRegions](https://www.alibabacloud.com/help/en/rds/developer-reference/api-rds-2014-08-15-describeregions) operation to query zone IDs.
+* `engine` - (Optional, Computed, ForceNew) Database type. Value options: MySQL, SQLServer, PostgreSQL.
+* `parameters` - (Optional, Computed) Set of parameters needs to be set after DB instance was launched. Available parameters can refer to the latest docs [View database parameter templates](https://www.alibabacloud.com/help/doc-detail/26284.htm). See [`parameters`](#parameters) below.
 * `force_restart` - (Optional) Set it to true to make some parameter efficient when modifying them. Default to false.
 * `switch_time_mode` - (Optional) The time at which ApsaraDB RDS switches your workloads over to the new instance. This parameter is used together with the SwitchOver parameter and takes effect only when you set the SwitchOver parameter to true. Valid values:
   * **Immediate**: After data is migrated to the new instance, ApsaraDB RDS immediately switches your workloads over to the new instance.
@@ -186,9 +205,19 @@ The following arguments are supported:
 * `target_major_version` - (Required, ForceNew) The major engine version of the new instance. The value of this parameter must be the major engine version on which an upgrade check is performed.
 
 -> **NOTE** You can call the [UpgradeDBInstanceMajorVersionPrecheck](https://www.alibabacloud.com/help/doc-detail/330050.htm) operation to perform an upgrade check on a major engine version.
-* `pg_hba_conf` - (Optional, Available in 1.155.0+) The configuration of [AD domain](https://www.alibabacloud.com/help/en/doc-detail/349288.htm) (documented below).
+* `tcp_connection_type` - (Optional, Available in 1.171.0+) The availability check method of the instance. Valid values:
+  - **SHORT**: Alibaba Cloud uses short-lived connections to check the availability of the instance.
+  - **LONG**: Alibaba Cloud uses persistent connections to check the availability of the instance.
+* `pg_hba_conf` - (Optional, Available in 1.155.0+) The configuration of [AD domain](https://www.alibabacloud.com/help/en/doc-detail/349288.htm) . See [`pg_hba_conf`](#pg_hba_conf) below.
 
-#### Block pg_hba_conf
+### `parameters`
+
+The parameters mapping supports the following:
+
+* `name` - (Required) The parameter name.
+* `value` - (Required) The parameter value.
+
+### `pg_hba_conf`
 
 The pg_hba_conf mapping supports the following:
 
@@ -213,7 +242,7 @@ The following attributes are exported:
 * `id` - The resource ID in terraform of Upgrade DB Instance.
 * `connection_string` - The database connection address.
 
-### Timeouts
+## Timeouts
 
 The `timeouts` block allows you to specify [timeouts](https://www.terraform.io/docs/configuration-0-11/resources.html#timeouts) for certain actions:
 
@@ -225,6 +254,6 @@ The `timeouts` block allows you to specify [timeouts](https://www.terraform.io/d
 
 RDS Upgrade DB Instance can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_rds_upgrade_db_instance.example <id>
 ```

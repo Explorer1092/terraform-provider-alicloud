@@ -5,8 +5,12 @@ import (
 	"fmt"
 	"log"
 	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
+
+	"github.com/PaesslerAG/jsonpath"
 
 	util "github.com/alibabacloud-go/tea-utils/service"
 
@@ -86,6 +90,44 @@ func (s *PolarDBService) DescribePolarDBClusterAttribute(id string) (instance *p
 		return instance, WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR)
 	}
 	return response, nil
+}
+
+func (s *PolarDBService) DescribeDBClusterAttribute(id string) (object map[string]interface{}, err error) {
+	action := "DescribeDBClusterAttribute"
+	request := map[string]interface{}{
+		"RegionId":    s.client.RegionId,
+		"DBClusterId": id,
+	}
+	var response map[string]interface{}
+	conn, err := s.client.NewPolarDBClient()
+	if err != nil {
+		return nil, WrapError(err)
+	}
+	wait := incrementalWait(3*time.Second, 3*time.Second)
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2017-08-01"), StringPointer("AK"), nil, request, &util.RuntimeOptions{})
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		return nil
+	})
+	addDebug(action, response, request)
+	if err != nil {
+		return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
+	}
+
+	v, err := jsonpath.Get("$", response)
+	if err != nil {
+		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$", response)
+	}
+
+	object = v.(map[string]interface{})
+
+	return object, nil
 }
 
 func (s *PolarDBService) DescribePolarDBAutoRenewAttribute(id string) (instance *polardb.AutoRenewAttribute, err error) {
@@ -319,7 +361,7 @@ func (s *PolarDBService) DescribePolarDBAccountPrivilege(id string) (account *po
 func (s *PolarDBService) WaitForPolarDBConnection(id string, status Status, timeout int) error {
 	deadline := time.Now().Add(time.Duration(timeout) * time.Second)
 	for {
-		object, err := s.DescribePolarDBConnection(id)
+		object, err := s.DescribePolarDBConnectionV2(id, "Public")
 		if err != nil {
 			if NotFoundError(err) {
 				if status == Deleted {
@@ -372,6 +414,11 @@ func (s *PolarDBService) WaitPolardbEndpointConfigEffect(id string, item map[str
 		}
 		if value, ok := item["ReadWriteMode"]; ok {
 			if endpoint.ReadWriteMode != value {
+				effected = false
+			}
+		}
+		if value, ok := item["DBEndpointDescription"]; ok {
+			if endpoint.DBEndpointDescription != value {
 				effected = false
 			}
 		}
@@ -448,6 +495,42 @@ func (s *PolarDBService) WaitForPolarDBEndpoints(d *schema.ResourceData, status 
 		}
 		time.Sleep(DefaultIntervalShort * time.Second)
 	}
+}
+
+func (s *PolarDBService) DescribePolarDBConnectionV2(id string, netType string) (*polardb.Address, error) {
+	parts, err := ParseResourceId(id, 2)
+	if err != nil {
+		return nil, WrapError(err)
+	}
+	deadline := time.Now().Add(time.Duration(DefaultIntervalLong) * time.Second)
+	for {
+		object, err := s.DescribePolarDBInstanceNetInfo(parts[0])
+
+		if err != nil {
+			if NotFoundError(err) {
+				return nil, WrapErrorf(err, NotFoundMsg, AlibabaCloudSdkGoERROR)
+			}
+			return nil, WrapError(err)
+		}
+
+		if object != nil {
+			for _, o := range object {
+				if o.DBEndpointId == parts[1] {
+					for _, p := range o.AddressItems {
+						if p.NetType == netType {
+							return &p, nil
+						}
+					}
+				}
+			}
+		}
+		time.Sleep(DefaultIntervalMini * time.Second)
+		if time.Now().After(deadline) {
+			break
+		}
+	}
+
+	return nil, WrapErrorf(Error(GetNotFoundMessage("DBConnection", id)), NotFoundMsg, ProviderERROR)
 }
 
 func (s *PolarDBService) DescribePolarDBConnection(id string) (*polardb.Address, error) {
@@ -560,7 +643,7 @@ func (s *PolarDBService) DescribePolarDBClusterSSL(d *schema.ResourceData) (ssl 
 	request.RegionId = s.client.RegionId
 	request.DBClusterId = dbClusterId
 	var raw interface{}
-	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+	err = resource.Retry(10*time.Minute, func() *resource.RetryError {
 		raw, err = s.client.WithPolarDBClient(func(polarDBClient *polardb.Client) (interface{}, error) {
 			return polarDBClient.DescribeDBClusterSSL(request)
 		})
@@ -634,6 +717,9 @@ func (s *PolarDBService) WaitForPolarDBDatabase(id string, status Status, timeou
 			if NotFoundError(err) {
 				if status == Deleted {
 					return nil
+				}
+				if status == Running {
+					continue
 				}
 			}
 			return WrapError(err)
@@ -736,15 +822,17 @@ func (s *PolarDBService) WaitForPolarDBInstance(id string, status Status, timeou
 	return nil
 }
 
-func (s *PolarDBService) WaitForPolarDBConnectionPrefix(id, prefix string, timeout int) error {
+func (s *PolarDBService) WaitForPolarDBConnectionPrefix(id, prefix, newPort string, netType string, timeout int) error {
 	deadline := time.Now().Add(time.Duration(timeout) * time.Second)
 	for {
-		object, err := s.DescribePolarDBConnection(id)
+		object, err := s.DescribePolarDBConnectionV2(id, netType)
 		if err != nil {
 			return WrapError(err)
 		}
 		parts := strings.Split(object.ConnectionString, ".")
-		if prefix == parts[0] {
+		port := object.Port
+
+		if (newPort == "" || newPort == port) && (prefix == "" || prefix == parts[0]) {
 			break
 		}
 
@@ -754,6 +842,14 @@ func (s *PolarDBService) WaitForPolarDBConnectionPrefix(id, prefix string, timeo
 		time.Sleep(DefaultIntervalShort * time.Second)
 	}
 	return nil
+}
+
+func (s *PolarDBService) fillingPolarDBEndpointSslCertificateUrl(sslEnabled string, d *schema.ResourceData) {
+	if sslEnabled == "Enable" {
+		d.Set("ssl_certificate_url", "https://apsaradb-public.oss-ap-southeast-1.aliyuncs.com/ApsaraDB-CA-Chain.zip?file=ApsaraDB-CA-Chain.zip&regionId="+s.client.RegionId)
+	} else {
+		d.Set("ssl_certificate_url", "")
+	}
 }
 
 func (s *PolarDBService) RefreshEndpointConfig(d *schema.ResourceData) error {
@@ -789,17 +885,38 @@ func (s *PolarDBService) RefreshEndpointConfig(d *schema.ResourceData) error {
 func (s *PolarDBService) RefreshParameters(d *schema.ResourceData) error {
 	var param []map[string]interface{}
 	documented, ok := d.GetOk("parameters")
-	if !ok {
-		d.Set("parameters", param)
-		return nil
-	}
 	object, err := s.DescribeParameters(d.Id())
 	if err != nil {
 		return WrapError(err)
 	}
-
 	var parameters = make(map[string]interface{})
 	for _, i := range object.RunningParameters.Parameter {
+		// 创建集群传入参数模板参数
+		changeParams := []string{"loose_polar_log_bin", "lower_case_table_names", "default_time_zone", "loose_xengine", "loose_xengine_use_memory_pct"}
+		if IsContain(changeParams, i.ParameterName) {
+			if i.ParameterName == "lower_case_table_names" {
+				if _parameterValue, err := strconv.Atoi(i.ParameterValue); err == nil {
+					d.Set(i.ParameterName, _parameterValue)
+				}
+			} else if d.Get("db_type").(string) == "MySQL" && d.Get("db_version") == "5.6" && i.ParameterName == "loose_polar_log_bin" {
+				// mysql 5.6 loose_polar_log_bin values: ON_WITH_GTID、OFF
+				if i.ParameterValue == "ON_WITH_GTID" {
+					d.Set(i.ParameterName, "ON")
+				}
+			} else if i.ParameterName == "loose_xengine" {
+				if i.ParameterValue == "1" {
+					d.Set("loose_xengine", "ON")
+				} else {
+					d.Set("loose_xengine", "OFF")
+				}
+			} else if i.ParameterName == "loose_xengine_use_memory_pct" {
+				if parameterValue, err := strconv.Atoi(i.ParameterValue); err == nil {
+					d.Set(i.ParameterName, parameterValue)
+				}
+			} else {
+				d.Set(i.ParameterName, i.ParameterValue)
+			}
+		}
 		if i.ParameterName != "" {
 			parameter := map[string]interface{}{
 				"name":  i.ParameterName,
@@ -817,6 +934,10 @@ func (s *PolarDBService) RefreshParameters(d *schema.ResourceData) error {
 				break
 			}
 		}
+	}
+	if !ok {
+		d.Set("parameters", param)
+		return nil
 	}
 	if err := d.Set("parameters", param); err != nil {
 		return WrapError(err)
@@ -859,11 +980,57 @@ func (s *PolarDBService) ModifyParameters(d *schema.ResourceData) error {
 			value := i.(map[string]interface{})["value"].(string)
 			allConfig[key] = value
 		}
-		if err := s.WaitForPolarDBParameter(d.Id(), DefaultTimeoutMedium, allConfig); err != nil {
+		if err := s.WaitForPolarDBParameter(d.Id(), DefaultLongTimeout, allConfig); err != nil {
 			return WrapError(err)
 		}
 	}
 	d.SetPartial("parameters")
+	return nil
+}
+
+func (s *PolarDBService) CreateClusterParamsModifyParameters(d *schema.ResourceData) error {
+	request := polardb.CreateModifyDBClusterParametersRequest()
+	request.RegionId = s.client.RegionId
+	request.DBClusterId = d.Id()
+	config := make(map[string]interface{})
+	allConfig := make(map[string]string)
+	changeParams := []string{"loose_polar_log_bin", "default_time_zone", "loose_xengine", "loose_xengine_use_memory_pct"}
+	for _, i := range changeParams {
+		if v, ok := d.GetOk(i); ok {
+			if d.HasChange(i) {
+				if i == "loose_xengine" {
+					if v == "ON" {
+						v = "1"
+					} else if v == "OFF" {
+						v = "0"
+					}
+				}
+				config[i] = v
+				allConfig[i] = fmt.Sprint(v)
+			}
+		}
+	}
+	cfg, _ := json.Marshal(config)
+	request.Parameters = string(cfg)
+	// wait instance status is Normal before modifying
+	if err := s.WaitForCluster(d.Id(), Running, DefaultLongTimeout); err != nil {
+		return WrapError(err)
+	}
+	raw, err := s.client.WithPolarDBClient(func(polarDBClient *polardb.Client) (interface{}, error) {
+		return polarDBClient.ModifyDBClusterParameters(request)
+	})
+	if err != nil {
+		return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
+	}
+
+	addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+	// wait instance parameter expect after modifying
+	if err := s.WaitForPolarDBParameter(d.Id(), 1200, allConfig); err != nil {
+		return WrapError(err)
+	}
+	for _, i := range changeParams {
+		d.SetPartial(i)
+	}
 	return nil
 }
 
@@ -1074,33 +1241,98 @@ func (s *PolarDBService) ModifyDBSecurityIps(clusterId, ips string) error {
 	return nil
 }
 
-func (s *PolarDBService) DescribeBackupPolicy(id string) (policy *polardb.DescribeBackupPolicyResponse, err error) {
+func (s *PolarDBService) DescribeBackupPolicy(id string) (object map[string]interface{}, err error) {
 
-	request := polardb.CreateDescribeBackupPolicyRequest()
-	request.DBClusterId = id
-	request.RegionId = s.client.RegionId
-	raw, err := s.client.WithPolarDBClient(func(polardbClient *polardb.Client) (interface{}, error) {
-		return polardbClient.DescribeBackupPolicy(request)
+	var response map[string]interface{}
+	conn, err := s.client.NewPolarDBClient()
+	if err != nil {
+		return nil, WrapError(err)
+	}
+	action := "DescribeBackupPolicy"
+	request := map[string]interface{}{
+		"DBClusterId": id,
+		"RegionId":    s.client.RegionId,
+	}
+	runtime := util.RuntimeOptions{}
+	runtime.SetAutoretry(true)
+	wait := incrementalWait(3*time.Second, 3*time.Second)
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2017-08-01"), StringPointer("AK"), nil, request, &runtime)
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		return nil
 	})
+
+	addDebug(action, response, request)
 
 	if err != nil {
 		if IsExpectedErrors(err, []string{"InvalidDBClusterId.NotFound"}) {
-			return nil, WrapErrorf(err, NotFoundMsg, AlibabaCloudSdkGoERROR)
+			return object, WrapErrorf(err, NotFoundMsg, AlibabaCloudSdkGoERROR)
 		}
-		return policy, WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR)
+		return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
 	}
-	addDebug(request.GetActionName(), raw, request.RpcRequest, request)
-
-	return raw.(*polardb.DescribeBackupPolicyResponse), nil
+	v, err := jsonpath.Get("$", response)
+	if err != nil {
+		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$", response)
+	}
+	object = v.(map[string]interface{})
+	return object, nil
 }
 
-func (s *PolarDBService) ModifyDBBackupPolicy(clusterId, backupTime, backupPeriod string) error {
+func (s *PolarDBService) DescribeLogBackupPolicy(id string) (object map[string]interface{}, err error) {
+
+	var response map[string]interface{}
+	conn, err := s.client.NewPolarDBClient()
+	if err != nil {
+		return nil, WrapError(err)
+	}
+	action := "DescribeLogBackupPolicy"
+	request := map[string]interface{}{
+		"DBClusterId": id,
+		"RegionId":    s.client.RegionId,
+	}
+	runtime := util.RuntimeOptions{}
+	runtime.SetAutoretry(true)
+	wait := incrementalWait(3*time.Second, 3*time.Second)
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2017-08-01"), StringPointer("AK"), nil, request, &runtime)
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		return nil
+	})
+	addDebug(action, response, request)
+	if err != nil {
+		if IsExpectedErrors(err, []string{"InvalidDBClusterId.NotFound"}) {
+			return object, WrapErrorf(err, NotFoundMsg, AlibabaCloudSdkGoERROR)
+		}
+		return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
+	}
+	v, err := jsonpath.Get("$", response)
+	if err != nil {
+		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$", response)
+	}
+	object = v.(map[string]interface{})
+	return object, nil
+}
+
+func (s *PolarDBService) ModifyDBBackupPolicy(clusterId, backupTime, backupPeriod, backupRetentionPolicyOnClusterDeletion string) error {
 
 	request := polardb.CreateModifyBackupPolicyRequest()
 	request.RegionId = s.client.RegionId
 	request.DBClusterId = clusterId
 	request.PreferredBackupPeriod = backupPeriod
 	request.PreferredBackupTime = backupTime
+	request.BackupRetentionPolicyOnClusterDeletion = backupRetentionPolicyOnClusterDeletion
 
 	raw, err := s.client.WithPolarDBClient(func(polardbClient *polardb.Client) (interface{}, error) {
 		return polardbClient.ModifyBackupPolicy(request)
@@ -1122,17 +1354,30 @@ func (s *PolarDBService) DescribeDBAuditLogCollectorStatus(id string) (collector
 	request := polardb.CreateDescribeDBClusterAuditLogCollectorRequest()
 	request.RegionId = s.client.RegionId
 	request.DBClusterId = id
-	raw, err := s.client.WithPolarDBClient(func(polardbClient *polardb.Client) (interface{}, error) {
-		return polardbClient.DescribeDBClusterAuditLogCollector(request)
+	var response *polardb.DescribeDBClusterAuditLogCollectorResponse
+	wait := incrementalWait(3*time.Second, 3*time.Second)
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		raw, err := s.client.WithPolarDBClient(func(polardbClient *polardb.Client) (interface{}, error) {
+			return polardbClient.DescribeDBClusterAuditLogCollector(request)
+		})
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		response, _ = raw.(*polardb.DescribeDBClusterAuditLogCollectorResponse)
+		addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+		return nil
 	})
+
 	if err != nil {
 		if IsExpectedErrors(err, []string{"InvalidDBClusterId.NotFound"}) {
 			return "", WrapErrorf(err, NotFoundMsg, AlibabaCloudSdkGoERROR)
 		}
 		return collectorStatus, WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR)
 	}
-	addDebug(request.GetActionName(), raw, request.RpcRequest, request)
-	response := raw.(*polardb.DescribeDBClusterAuditLogCollectorResponse)
 
 	return response.CollectorStatus, nil
 }
@@ -1163,6 +1408,14 @@ func (s *PolarDBService) PolarDBClusterStateRefreshFunc(id string, failStates []
 // Running, we should wait until parameters have expected values.
 func (s *PolarDBService) WaitForPolarDBParameter(clusterId string, timeout int, expects map[string]string) error {
 	deadline := time.Now().Add(time.Duration(timeout) * time.Second)
+	// get engine and engineVersion
+	attrbuteInfo, err := s.DescribePolarDBClusterAttribute(clusterId)
+	if err != nil {
+		return WrapError(err)
+	}
+	dbType := fmt.Sprint(attrbuteInfo.DBType)
+	db_version := fmt.Sprint(attrbuteInfo.DBVersion)
+
 	for {
 		object, err := s.DescribeParameters(clusterId)
 		if err != nil {
@@ -1171,6 +1424,12 @@ func (s *PolarDBService) WaitForPolarDBParameter(clusterId string, timeout int, 
 
 		var actuals = make(map[string]string)
 		for _, i := range object.RunningParameters.Parameter {
+			// mysql 5.6 loose_polar_log_bin values: ON_WITH_GTID、OFF
+			if dbType == "MySQL" && db_version == "5.6" && i.ParameterName == "loose_polar_log_bin" {
+				if i.ParameterValue == "ON_WITH_GTID" {
+					i.ParameterValue = "ON"
+				}
+			}
 			actuals[i.ParameterName] = i.ParameterValue
 		}
 
@@ -1220,6 +1479,36 @@ func (s *PolarDBService) DescribeDBClusterTDE(id string) (map[string]interface{}
 	if err != nil {
 		return nil, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
 	}
+	addDebug(action, response, request)
+	return response, nil
+}
+
+func (s *PolarDBService) CheckKMSAuthorized(id string, tdeRegion string) (map[string]interface{}, error) {
+	action := "CheckKMSAuthorized"
+	request := map[string]interface{}{
+		"RegionId":    s.client.RegionId,
+		"DBClusterId": id,
+	}
+	if tdeRegion != "" {
+		request["tdeRegion"] = tdeRegion
+	}
+	var response map[string]interface{}
+	conn, err := s.client.NewPolarDBClient()
+	if err != nil {
+		return nil, WrapError(err)
+	}
+	wait := incrementalWait(3*time.Second, 3*time.Second)
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2017-08-01"), StringPointer("AK"), nil, request, &util.RuntimeOptions{})
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		return nil
+	})
 	addDebug(action, response, request)
 	return response, nil
 }
@@ -1438,6 +1727,14 @@ func (s *PolarDBService) DescribeDBClusterAccessWhitelist(id string) (instance *
 	return response, nil
 }
 
+func convertPolarDBIpsSetListToString(arr1 *schema.Set) []string {
+	var ips []string
+	for _, v := range arr1.List() {
+		ips = append(ips, v.(string))
+	}
+	return ips
+}
+
 func convertPolarDBIpsSetToString(sourceIps string) []string {
 	ipsMap := make(map[string]string)
 
@@ -1451,4 +1748,267 @@ func convertPolarDBIpsSetToString(sourceIps string) []string {
 		}
 	}
 	return ips
+}
+
+func arrValueEqual(arr1, arr2 []string) bool {
+	sort.Strings(arr2)
+	sort.Strings(arr1)
+	for i, v := range arr1 {
+		if v != arr2[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func (s *PolarDBService) PolarDBClusterCategoryRefreshFunc(id string, failStates []string) resource.StateRefreshFunc {
+	return func() (interface{}, string, error) {
+		object, err := s.DescribePolarDBClusterAttribute(id)
+		if err != nil {
+			if NotFoundError(err) {
+				// Set this to nil as if we didn't find anything.
+				return nil, "", nil
+			}
+			return nil, "", WrapError(err)
+		}
+
+		for _, failState := range failStates {
+			if object.Category == failState {
+				return object, object.Category, WrapError(Error(FailedToReachTargetStatus, object.Category))
+			}
+		}
+		return object, object.Category, nil
+	}
+}
+
+func (s *PolarDBService) DescribePolarDBGlobalDatabaseNetwork(id string) (object map[string]interface{}, err error) {
+	var response map[string]interface{}
+	conn, err := s.client.NewPolarDBClient()
+	if err != nil {
+		return nil, WrapError(err)
+	}
+	action := "DescribeGlobalDatabaseNetwork"
+	request := map[string]interface{}{
+		"GDNId": id,
+	}
+	runtime := util.RuntimeOptions{}
+	runtime.SetAutoretry(true)
+	wait := incrementalWait(3*time.Second, 3*time.Second)
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2017-08-01"), StringPointer("AK"), nil, request, &runtime)
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		return nil
+	})
+	addDebug(action, response, request)
+	if err != nil {
+		if IsExpectedErrors(err, []string{"GDN.NotFound"}) {
+			return object, WrapErrorf(err, NotFoundMsg, AlibabaCloudSdkGoERROR)
+		}
+		return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
+	}
+	v, err := jsonpath.Get("$", response)
+	if err != nil {
+		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$", response)
+	}
+	object = v.(map[string]interface{})
+	return object, nil
+}
+
+func (s *PolarDBService) PolarDBGlobalDatabaseNetworkRefreshFunc(id string, failStates []string) resource.StateRefreshFunc {
+	return func() (interface{}, string, error) {
+
+		object, err := s.DescribePolarDBGlobalDatabaseNetwork(id)
+		if err != nil {
+			if NotFoundError(err) {
+				// Set this to nil as if we didn't find anything.
+				return nil, "", nil
+			}
+			return nil, "", WrapError(err)
+		}
+
+		for _, failState := range failStates {
+			if fmt.Sprint(object["GDNStatus"]) == failState {
+				return object, fmt.Sprint(object["GDNStatus"]), WrapError(Error(FailedToReachTargetStatus, fmt.Sprint(object["GDNStatus"])))
+			}
+		}
+		return object, fmt.Sprint(object["GDNStatus"]), nil
+	}
+}
+
+func (s *PolarDBService) DescribePolarDBParameterGroup(id string) (object map[string]interface{}, err error) {
+	var response map[string]interface{}
+	conn, err := s.client.NewPolarDBClient()
+	if err != nil {
+		return nil, WrapError(err)
+	}
+	action := "DescribeParameterGroup"
+	request := map[string]interface{}{
+		"RegionId":         s.client.RegionId,
+		"ParameterGroupId": id,
+	}
+	runtime := util.RuntimeOptions{}
+	runtime.SetAutoretry(true)
+	wait := incrementalWait(3*time.Second, 3*time.Second)
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2017-08-01"), StringPointer("AK"), nil, request, &runtime)
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		return nil
+	})
+	addDebug(action, response, request)
+	if err != nil {
+		if IsExpectedErrors(err, []string{"ParamGroupsNotExist"}) {
+			return object, WrapErrorf(err, NotFoundMsg, AlibabaCloudSdkGoERROR)
+		}
+		return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
+	}
+	v, err := jsonpath.Get("$.ParameterGroup", response)
+	if err != nil {
+		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$.ParameterGroup", response)
+	}
+	if len(v.([]interface{})) < 1 {
+		return object, WrapErrorf(Error(GetNotFoundMessage("PolarDB", id)), NotFoundWithResponse, response)
+	} else {
+		if fmt.Sprint(v.([]interface{})[0].(map[string]interface{})["ParameterGroupId"]) != id {
+			return object, WrapErrorf(Error(GetNotFoundMessage("PolarDB", id)), NotFoundWithResponse, response)
+		}
+	}
+	object = v.([]interface{})[0].(map[string]interface{})
+	return object, nil
+}
+
+func (s *PolarDBService) DescribeDBClusterServerlessConfig(id string) (object map[string]interface{}, err error) {
+	action := "DescribeDBClusterServerlessConf"
+	request := map[string]interface{}{
+		"RegionId":    s.client.RegionId,
+		"DBClusterId": id,
+	}
+	var response map[string]interface{}
+	conn, err := s.client.NewPolarDBClient()
+	if err != nil {
+		return nil, WrapError(err)
+	}
+	wait := incrementalWait(3*time.Second, 3*time.Second)
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2017-08-01"), StringPointer("AK"), nil, request, &util.RuntimeOptions{})
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		return nil
+	})
+	addDebug(action, response, request)
+	if err != nil {
+		return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
+	}
+
+	v, err := jsonpath.Get("$", response)
+	if err != nil {
+		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$", response)
+	}
+
+	object = v.(map[string]interface{})
+
+	return object, nil
+}
+
+func (s *PolarDBService) DescribeDBClusterVersion(id string) (object map[string]interface{}, err error) {
+	action := "DescribeDBClusterVersion"
+	request := map[string]interface{}{
+		"RegionId":    s.client.RegionId,
+		"DBClusterId": id,
+	}
+	var response map[string]interface{}
+	conn, err := s.client.NewPolarDBClient()
+	if err != nil {
+		return nil, WrapError(err)
+	}
+	wait := incrementalWait(3*time.Second, 3*time.Second)
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2017-08-01"), StringPointer("AK"), nil, request, &util.RuntimeOptions{})
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		return nil
+	})
+	addDebug(action, response, request)
+	if err != nil {
+		return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
+	}
+
+	v, err := jsonpath.Get("$", response)
+	if err != nil {
+		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$", response)
+	}
+
+	object = v.(map[string]interface{})
+
+	return object, nil
+}
+func (s *PolarDBService) DescribeDBClusterAvailableVersion(id string) (instance *polardb.DescribeDBClusterVersionResponse, err error) {
+	request := polardb.CreateDescribeDBClusterVersionRequest()
+	request.RegionId = s.client.RegionId
+	request.DBClusterId = id
+	request.DescribeType = "AVAILABLE_VERSION"
+
+	var response *polardb.DescribeDBClusterVersionResponse
+	wait := incrementalWait(3*time.Second, 3*time.Second)
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		raw, err := s.client.WithPolarDBClient(func(polarDBClient *polardb.Client) (interface{}, error) {
+			return polarDBClient.DescribeDBClusterVersion(request)
+		})
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+		response, _ = raw.(*polardb.DescribeDBClusterVersionResponse)
+		return nil
+	})
+
+	if err != nil {
+		return nil, WrapError(err)
+	}
+	return response, nil
+}
+
+func (s *PolarDBService) PolarDBClusterProxyStateRefreshFunc(id string, failStates []string) resource.StateRefreshFunc {
+	return func() (interface{}, string, error) {
+		object, err := s.DescribePolarDBClusterAttribute(id)
+		if err != nil {
+			if NotFoundError(err) {
+				// Set this to nil as if we didn't find anything.
+				return nil, "", nil
+			}
+			return nil, "", WrapError(err)
+		}
+
+		for _, failState := range failStates {
+			if object.ProxyStatus == failState {
+				return object, object.ProxyStatus, WrapError(Error(FailedToReachTargetStatus, object.ProxyStatus))
+			}
+		}
+		return object, object.ProxyStatus, nil
+	}
 }

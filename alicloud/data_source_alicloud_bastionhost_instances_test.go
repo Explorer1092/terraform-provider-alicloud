@@ -74,7 +74,7 @@ func TestAccAlicloudBastionhostInstancesDataSource(t *testing.T) {
 			"instances.0.description":           fmt.Sprintf("tf_testAcc%d", rand),
 			"instances.0.license_code":          "bhah_ent_50_asset",
 			"instances.0.user_vswitch_id":       CHECKSET,
-			"instances.0.public_network_access": "true",
+			"instances.0.public_network_access": CHECKSET,
 			"instances.0.private_domain":        CHECKSET,
 			"instances.0.instance_status":       CHECKSET,
 			"instances.0.security_group_ids.#":  "1",
@@ -93,7 +93,7 @@ func TestAccAlicloudBastionhostInstancesDataSource(t *testing.T) {
 	}
 
 	preCheck := func() {
-		testAccPreCheckWithAccountSiteType(t, DomesticSite)
+		testAccPreCheck(t)
 	}
 
 	yundunBastionhostInstanceCheckInfo.dataSourceTestCheckWithPreCheck(t, rand, preCheck, nameRegexConf, idsConf, tagsConf, allConf)
@@ -109,10 +109,9 @@ data "alicloud_zones" "default" {
   available_resource_creation = "VSwitch"
 }
 data "alicloud_vpcs" "default" {
-  name_regex = "default-NODELETING"
+    name_regex = "^default-NODELETING$"
 }
 data "alicloud_vswitches" "default" {
-  zone_id = local.zone_id
   vpc_id  = data.alicloud_vpcs.default.ids.0
 }
 resource "alicloud_vswitch" "this" {
@@ -124,7 +123,7 @@ resource "alicloud_vswitch" "this" {
 }
 resource "alicloud_security_group" "default" {
   vpc_id = data.alicloud_vpcs.default.ids.0
-  name   = var.name
+  security_group_name   = var.name
 }
 locals {
   vswitch_id  = length(data.alicloud_vswitches.default.ids) > 0 ? data.alicloud_vswitches.default.ids.0 : concat(alicloud_vswitch.this.*.id, [""])[0]
@@ -137,6 +136,9 @@ resource "alicloud_bastionhost_instance" "default" {
   license_code       = "bhah_ent_50_asset"
   period             = "1"
   vswitch_id         = local.vswitch_id
+  plan_code =  "cloudbastion"
+  storage =           "5"
+  bandwidth =      "10"
   security_group_ids = ["${alicloud_security_group.default.id}"]
   tags 				 = {
 		Created = "TF"

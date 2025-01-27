@@ -7,23 +7,35 @@ description: |-
   Provides a RAM Group Policy attachment resource.
 ---
 
-# alicloud\_ram\_group\_policy\_attachment
+# alicloud_ram_group_policy_attachment
 
 Provides a RAM Group Policy attachment resource. 
 
+-> **NOTE:** Available since v1.0.0+.
+
 ## Example Usage
+
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_ram_group_policy_attachment&exampleId=5eb5fe16-5720-9ea8-8358-931b0db0648e21f2be4a&activeTab=example&spm=docs.r.ram_group_policy_attachment.0.5eb5fe1657&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
 
 ```terraform
 # Create a RAM Group Policy attachment.
 resource "alicloud_ram_group" "group" {
   name     = "groupName"
   comments = "this is a group comments."
-  force    = true
+}
+
+resource "random_integer" "default" {
+  min = 10000
+  max = 99999
 }
 
 resource "alicloud_ram_policy" "policy" {
-  name        = "policyName"
-  document    = <<EOF
+  policy_name     = "tf-example-${random_integer.default.result}"
+  policy_document = <<EOF
     {
       "Statement": [
         {
@@ -41,12 +53,11 @@ resource "alicloud_ram_policy" "policy" {
         "Version": "1"
     }
   EOF
-  description = "this is a policy test"
-  force       = true
+  description     = "this is a policy test"
 }
 
 resource "alicloud_ram_group_policy_attachment" "attach" {
-  policy_name = alicloud_ram_policy.policy.name
+  policy_name = alicloud_ram_policy.policy.policy_name
   policy_type = alicloud_ram_policy.policy.type
   group_name  = alicloud_ram_group.group.name
 }
@@ -69,6 +80,6 @@ The following attributes are exported:
 
 RAM Group Policy attachment can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_ram_group_policy_attachment.example group:my-policy:Custom:my-group
 ```

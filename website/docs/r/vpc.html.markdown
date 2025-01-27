@@ -2,78 +2,142 @@
 subcategory: "VPC"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_vpc"
-sidebar_current: "docs-alicloud-resource-vpc"
 description: |-
-  Provides a Alicloud VPC resource.
+  Provides a Alicloud VPC VPC resource.
 ---
 
-# alicloud\_vpc
+# alicloud_vpc
 
-Provides a VPC resource.
+Provides a VPC VPC resource.
 
--> **NOTE:** Terraform will auto build a router and a route table while it uses `alicloud_vpc` to build a vpc resource.
+A VPC instance creates a VPC. You can fully control your own VPC, such as selecting IP address ranges, configuring routing tables, and gateways. You can use Alibaba cloud resources such as cloud servers, apsaradb for RDS, and load balancer in your own VPC. 
 
-## Example Usage
+-> **NOTE:** This resource will auto build a router and a route table while it uses `alicloud_vpc` to build a vpc resource. 
 
-Basic Usage
-
-```terraform
-resource "alicloud_vpc" "vpc" {
-  vpc_name   = "tf_test_foo"
-  cidr_block = "172.16.0.0/12"
-}
-```
+-> **NOTE:** Available since v1.0.0.
 
 ## Module Support
 
 You can use the existing [vpc module](https://registry.terraform.io/modules/alibaba/vpc/alicloud) 
 to create a VPC and several VSwitches one-click.
 
+For information about VPC Vpc and how to use it, see [What is Vpc](https://www.alibabacloud.com/help/en/virtual-private-cloud/latest/what-is-a-vpc).
+
+## Example Usage
+
+Basic Usage
+
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_vpc&exampleId=d5070149-7922-e5bb-2494-de31dd34464d70a607da&activeTab=example&spm=docs.r.vpc.0.d507014979&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
+```terraform
+variable "name" {
+  default = "terraform-example"
+}
+
+
+resource "alicloud_vpc" "default" {
+  ipv6_isp    = "BGP"
+  description = "test"
+  cidr_block  = "10.0.0.0/8"
+  vpc_name    = var.name
+  enable_ipv6 = true
+}
+```
+
 ## Argument Reference
 
 The following arguments are supported:
+* `is_default` - (Optional) Specifies whether to create the default VPC in the specified region. Valid values:
+  - `true`
+  - `false`(default)
 
-* `cidr_block` - (Optional) The CIDR block for the VPC. The `cidr_block` is Optional and default value is `172.16.0.0/12` after v1.119.0+.
-* `vpc_name` - (Optional, Available in v1.119.0+) The name of the VPC. Defaults to null.
-* `name` - (Optional, Deprecated in v1.119.0+) Field `name` has been deprecated from provider version 1.119.0. New field `vpc_name` instead.
-* `description` - (Optional) The VPC description. Defaults to null.
-* `resource_group_id` - (Optional, Available in 1.40.0+, Modifiable in 1.115.0+) The Id of resource group which the VPC belongs.
-* `tags` - (Optional, Available in v1.55.3+) A mapping of tags to assign to the resource.
-* `secondary_cidr_blocks` - (Optional,Available in v1.112.0+) The secondary CIDR blocks for the VPC.
-* `dry_run` - (Optional, ForceNew, Available in v1.119.0+) Specifies whether to precheck this request only. Valid values: `true` and `false`.
-* `user_cidrs` - (Optional, ForceNew, Available in v1.119.0+) The user cidrs of the VPC.
-* `enable_ipv6` - (Optional, Available in v1.119.0+) Specifies whether to enable the IPv6 CIDR block. Valid values: `false` (Default): disables IPv6 CIDR blocks. `true`: enables IPv6 CIDR blocks. If the `enable_ipv6` is `true`, the system will automatically create a free version of an IPv6 gateway for your private network and assign an IPv6 network segment assigned as /56.
+* `cidr_block` - (Optional, Computed) The CIDR block of the VPC.
+  - You can specify one of the following CIDR blocks or their subsets as the primary IPv4 CIDR block of the VPC: 192.168.0.0/16, 172.16.0.0/12, and 10.0.0.0/8. These CIDR blocks are standard private CIDR blocks as defined by Request for Comments (RFC) documents. The subnet mask must be 8 to 28 bits in length.
+  - You can also use a custom CIDR block other than 100.64.0.0/10, 224.0.0.0/4, 127.0.0.0/8, 169.254.0.0/16, and their subnets as the primary IPv4 CIDR block of the VPC.
+* `classic_link_enabled` - (Optional) The status of ClassicLink function.
+* `description` - (Optional) The new description of the VPC.
 
--> **NOTE:** Currently, the IPv4 / IPv6 dual-stack VPC function is under public testing. Only the following regions support IPv4 / IPv6 dual-stack VPC: `cn-hangzhou`, `cn-shanghai`, `cn-shenzhen`, `cn-beijing`, `cn-huhehaote`, `cn-hongkong` and `ap-southeast-1`, and need to apply for public beta qualification. To use, please [submit an application](https://help.aliyun.com/document_detail/100334.html).
+  The description must be 1 to 256 characters in length, and cannot start with `http://` or `https://`.
+* `dns_hostname_status` - (Optional, Available since v1.240.0) The status of VPC DNS Hostname. Valid values: `ENABLED`, `DISABLED`.
+* `dry_run` - (Optional, Available since v1.119.0) Specifies whether to perform a dry run. Valid values:
+  - `true`: performs a dry run. The system checks the required parameters, request syntax, and limits. If the request fails the dry run, an error message is returned. If the request passes the dry run, the `DryRunOperation` error code is returned.
+  - `false` (default): performs a dry run and sends the request. If the request passes the dry run, a 2xx HTTP status code is returned and the operation is performed.
+* `enable_ipv6` - (Optional, Available since v1.119.0)  Specifies whether to enable IPv6. Valid values:
+  - `false` (default)
+  - `true`
+* `ipv4_cidr_mask` - (Optional, Int, Available since v1.240.0) Allocate VPC from The IPAM address pool by entering a mask.
 
-### Timeouts
+-> **NOTE:**  when you specify the IPAM address pool to create a VPC, enter at least one of the CidrBlock or Ipv4CidrMask parameters.
 
--> **NOTE:** Available in 1.79.0+.
+* `ipv4_ipam_pool_id` - (Optional) The ID of the IP Address Manager (IPAM) pool that contains IPv4 addresses.
+* `ipv6_cidr_block` - (Optional, ForceNew, Computed) The IPv6 CIDR block of the default VPC.
 
-The `timeouts` block allows you to specify [timeouts](https://www.terraform.io/docs/configuration-0-11/resources.html#timeouts) for certain actions:
+-> **NOTE:**  When `EnableIpv6` is set to `true`, this parameter is required.
 
-* `create` - (Defaults to 10 mins) Used when creating the vpc (until it reaches the initial `Available` status). 
-* `delete` - (Defaults to 10 mins) Used when terminating the vpc. 
+* `ipv6_isp` - (Optional) The IPv6 address segment type of the VPC. Value:
+  - `BGP` (default): Alibaba Cloud BGP IPv6.
+  - `ChinaMobile`: China Mobile (single line).
+  - `ChinaUnicom`: China Unicom (single line).
+  - `ChinaTelecom`: China Telecom (single line).
+
+-> **NOTE:**  If a single-line bandwidth whitelist is enabled, this field can be set to `ChinaTelecom` (China Telecom), `ChinaUnicom` (China Unicom), or `ChinaMobile` (China Mobile).
+
+* `resource_group_id` - (Optional, Computed, Available since v1.115) The ID of the resource group to which you want to move the resource.
+
+-> **NOTE:**   You can use resource groups to facilitate resource grouping and permission management for an Alibaba Cloud. For more information, see [What is resource management?](https://www.alibabacloud.com/help/en/doc-detail/94475.html)
+
+* `route_table_id` - (Optional, ForceNew, Computed) The ID of the route table that you want to query.
+* `secondary_cidr_blocks` - (Optional, Computed, List, Deprecated since v1.185.0) Field 'secondary_cidr_blocks' has been deprecated from provider version 1.185.0 and it will be removed in the future version. Please use the new resource 'alicloud_vpc_ipv4_cidr_block'. `secondary_cidr_blocks` attributes and `alicloud_vpc_ipv4_cidr_block` resource cannot be used at the same time.
+* `secondary_cidr_mask` - (Optional, Int, Available since v1.240.0) Add an additional CIDR block from the IPAM address pool to the VPC by entering a mask.
+
+-> **NOTE:**  Specify the IPAM address pool to add an additional CIDR block to the VPC. Enter at least one of the SecondaryCidrBlock or SecondaryCidrMask parameters.
+
+* `system_route_table_description` - (Optional) The description of the route table.
+
+  The description must be 1 to 256 characters in length, and cannot start with `http://` or `https://`.
+* `system_route_table_name` - (Optional) The name of the route table.
+
+  The name must be 1 to 128 characters in length and cannot start with `http://` or `https://`.
+* `tags` - (Optional, Map, Available since v1.55.3) The tags of Vpc.
+* `user_cidrs` - (Optional, ForceNew, Computed, List, Available since v1.119.0) A list of user CIDRs.
+* `vpc_name` - (Optional, Available since v1.119.0) The new name of the VPC.
+
+  The name must be 1 to 128 characters in length and cannot start with `http://` or `https://`.
+
+The following arguments will be discarded. Please use new fields as soon as possible:
+* `name` - (Deprecated since v1.119.0). Field 'name' has been deprecated from provider version 1.119.0. New field 'vpc_name' instead.
+* `router_table_id` - (Deprecated since v1.227.1). Field 'router_table_id' has been deprecated from provider version 1.227.1. New field 'route_table_id' instead.
 
 ## Attributes Reference
 
 The following attributes are exported:
-
-* `id` - The ID of the VPC.
-* `cidr_block` - The CIDR block for the VPC.
-* `name` - The name of the VPC.
-* `description` - The description of the VPC.
-* `router_id` - The ID of the router created by default on VPC creation.
-* `route_table_id` - The route table ID of the router created by default on VPC creation.
-* `router_table_id` - (Deprecated) It has been deprecated and replaced with `route_table_id`.
-* `ipv6_cidr_block` - (Available in v1.119.0+) ) The ipv6 cidr block of VPC.
+* `id` - The ID of the resource supplied above.
+* `create_time` - The creation time of the VPC.
+* `ipv6_cidr_blocks` - The IPv6 CIDR block information of the VPC.
+  * `ipv6_cidr_block` - The IPv6 CIDR block of the VPC.
+  * `ipv6_isp` - Valid values: `BGP` (default): Alibaba Cloud BGP IPv6.
+  - `ChinaMobile`: China Mobile (single line).
+  - `ChinaUnicom`: China Unicom (single line).
+  - `ChinaTelecom`: China Telecom (single line).
+* `region_id` - (Available since v1.240.0) The region ID of the VPC to which the route table belongs.
+* `router_id` - The router ID of the VPC.
 * `status` - The status of the VPC.
+
+## Timeouts
+
+The `timeouts` block allows you to specify [timeouts](https://www.terraform.io/docs/configuration-0-11/resources.html#timeouts) for certain actions:
+* `create` - (Defaults to 5 mins) Used when create the VPC.
+* `delete` - (Defaults to 5 mins) Used when delete the VPC.
+* `update` - (Defaults to 5 mins) Used when update the VPC.
 
 ## Import
 
-VPC can be imported using the id, e.g.
+VPC VPC can be imported using the id, e.g.
 
+```shell
+$ terraform import alicloud_vpc.example <id>
 ```
-$ terraform import alicloud_vpc.example vpc-abc123456
-```
-

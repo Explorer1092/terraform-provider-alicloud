@@ -7,39 +7,59 @@ description: |-
   Provides a Alicloud OOS Application Group resource.
 ---
 
-# alicloud\_oos\_application\_group
+# alicloud_oos_application_group
 
 Provides a OOS Application Group resource.
 
-For information about OOS Application Group and how to use it, see [What is Application Group](https://www.alibabacloud.com/help/en/doc-detail/120556.html).
+For information about OOS Application Group and how to use it, see [What is Application Group](https://www.alibabacloud.com/help/en/operation-orchestration-service/latest/api-oos-2019-06-01-createapplicationgroup).
 
--> **NOTE:** Available in v1.146.0+.
+-> **NOTE:** Available since v1.146.0.
 
 ## Example Usage
 
 Basic Usage
 
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_oos_application_group&exampleId=81fd02c9-75a4-9cf3-ff63-671f74e22682543633d7&activeTab=example&spm=docs.r.oos_application_group.0.81fd02c975&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
 ```terraform
+provider "alicloud" {
+  region = "cn-hangzhou"
+}
+variable "name" {
+  default = "terraform-example"
+}
+
+resource "random_integer" "default" {
+  min = 10000
+  max = 99999
+}
+
 data "alicloud_resource_manager_resource_groups" "default" {}
 
 resource "alicloud_oos_application" "default" {
   resource_group_id = data.alicloud_resource_manager_resource_groups.default.groups.0.id
-  application_name  = "example_value"
-  description       = "example_value"
+  application_name  = "${var.name}-${random_integer.default.result}"
+  description       = var.name
   tags = {
     Created = "TF"
   }
+}
+data "alicloud_regions" "default" {
+  current = true
 }
 
 resource "alicloud_oos_application_group" "default" {
   application_group_name = var.name
   application_name       = alicloud_oos_application.default.id
-  deploy_region_id       = "example_value"
-  description            = "example_value"
-  import_tag_key         = "example_value"
+  deploy_region_id       = data.alicloud_regions.default.regions.0.id
+  description            = var.name
+  import_tag_key         = "example_key"
   import_tag_value       = "example_value"
 }
-
 ```
 
 ## Argument Reference
@@ -64,6 +84,6 @@ The following attributes are exported:
 
 OOS Application Group can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_oos_application_group.example <application_name>:<application_group_name>
 ```

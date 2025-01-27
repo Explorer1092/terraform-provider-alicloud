@@ -20,7 +20,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 )
 
-func TestAccAlicloudCenTransitRouterRouteEntry_basic(t *testing.T) {
+func TestAccAliCloudCenTransitRouterRouteEntry_basic(t *testing.T) {
 	checkoutSupportedRegions(t, true, connectivity.VbrSupportRegions)
 	var v map[string]interface{}
 	resourceId := "alicloud_cen_transit_router_route_entry.default"
@@ -104,7 +104,7 @@ func TestAccAlicloudCenTransitRouterRouteEntry_basic(t *testing.T) {
 	})
 }
 
-func TestAccAlicloudCenTransitRouterRouteEntry_basic1(t *testing.T) {
+func TestAccAliCloudCenTransitRouterRouteEntry_basic1(t *testing.T) {
 	checkoutSupportedRegions(t, true, connectivity.VbrSupportRegions)
 	var v map[string]interface{}
 	resourceId := "alicloud_cen_transit_router_route_entry.default"
@@ -215,7 +215,7 @@ resource "alicloud_cen_transit_router_vbr_attachment" "default" {
 `, name, acctest.RandIntRange(1, 2999))
 }
 
-func TestAccAlicloudCenTransitRouterRouteEntry_unit(t *testing.T) {
+func TestUnitAlicloudCenTransitRouterRouteEntry(t *testing.T) {
 	p := Provider().(*schema.Provider).ResourcesMap
 	d, _ := schema.InternalMap(p["alicloud_cen_transit_router_route_entry"].Schema).Data(nil, nil)
 	dCreate, _ := schema.InternalMap(p["alicloud_cen_transit_router_route_entry"].Schema).Data(nil, nil)

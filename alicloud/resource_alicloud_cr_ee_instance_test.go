@@ -10,7 +10,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 )
 
-func TestAccAlicloudCREEInstance_Basic(t *testing.T) {
+func TestAccAliCloudCREEInstance_Basic(t *testing.T) {
 	var v *cr_ee.GetInstanceResponse
 	resourceId := "alicloud_cr_ee_instance.default"
 	ra := resourceAttrInit(resourceId, nil)
@@ -30,23 +30,23 @@ func TestAccAlicloudCREEInstance_Basic(t *testing.T) {
 		},
 		IDRefreshName: resourceId,
 		Providers:     testAccProviders,
-		CheckDestroy:  nil,
+		CheckDestroy:  rac.checkResourceDestroy(),
 		Steps: []resource.TestStep{
 			{
 				Config: testAccConfig(map[string]interface{}{
-					"payment_type":   "Subscription",
-					"period":         "1",
-					"renew_period":   "0",
+					"payment_type": "Subscription",
+					"period":       "1",
+					//"renew_period":   "0",
 					"renewal_status": "ManualRenewal",
 					"instance_type":  "Basic",
 					"instance_name":  name,
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
-						"status":         CHECKSET,
-						"created_time":   CHECKSET,
-						"end_time":       CHECKSET,
-						"renew_period":   "0",
+						"status":       CHECKSET,
+						"created_time": CHECKSET,
+						"end_time":     CHECKSET,
+						//"renew_period":   "0",
 						"renewal_status": "ManualRenewal",
 						"instance_name":  name,
 						"instance_type":  "Basic",
@@ -54,25 +54,26 @@ func TestAccAlicloudCREEInstance_Basic(t *testing.T) {
 					}),
 				),
 			},
-			{
-				Config: testAccConfig(map[string]interface{}{
-					"password": "YourPassword123",
-				}),
-				Check: resource.ComposeTestCheckFunc(
-					testAccCheck(map[string]string{}),
-				),
-			},
-			{
-				Config: testAccConfig(map[string]interface{}{
-					"kms_encrypted_password": "${alicloud_kms_ciphertext.default.ciphertext_blob}",
-					"kms_encryption_context": map[string]string{
-						"name": name,
-					},
-				}),
-				Check: resource.ComposeTestCheckFunc(
-					testAccCheck(map[string]string{}),
-				),
-			},
+			// Currently, the API does not support sts
+			//{
+			//	Config: testAccConfig(map[string]interface{}{
+			//		"password": "YourPassword123",
+			//	}),
+			//	Check: resource.ComposeTestCheckFunc(
+			//		testAccCheck(map[string]string{}),
+			//	),
+			//},
+			//{
+			//	Config: testAccConfig(map[string]interface{}{
+			//		"kms_encrypted_password": "${alicloud_kms_ciphertext.default.ciphertext_blob}",
+			//		"kms_encryption_context": map[string]string{
+			//			"name": name,
+			//		},
+			//	}),
+			//	Check: resource.ComposeTestCheckFunc(
+			//		testAccCheck(map[string]string{}),
+			//	),
+			//},
 			{
 				ResourceName:            resourceId,
 				ImportState:             true,
@@ -83,7 +84,7 @@ func TestAccAlicloudCREEInstance_Basic(t *testing.T) {
 	})
 }
 
-func TestAccAlicloudCREEInstance_Standard(t *testing.T) {
+func TestAccAliCloudCREEInstance_Standard(t *testing.T) {
 	var v *cr_ee.GetInstanceResponse
 	resourceId := "alicloud_cr_ee_instance.default"
 	ra := resourceAttrInit(resourceId, nil)
@@ -100,7 +101,7 @@ func TestAccAlicloudCREEInstance_Standard(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccPreCheck(t)
-			testAccPreCheckWithTime(t, []int{1})
+			testAccPreCheckWithAccountSiteType(t, DomesticSite)
 		},
 		IDRefreshName: resourceId,
 		Providers:     testAccProviders,
@@ -128,25 +129,26 @@ func TestAccAlicloudCREEInstance_Standard(t *testing.T) {
 					}),
 				),
 			},
-			{
-				Config: testAccConfig(map[string]interface{}{
-					"password": "YourPassword123",
-				}),
-				Check: resource.ComposeTestCheckFunc(
-					testAccCheck(map[string]string{}),
-				),
-			},
-			{
-				Config: testAccConfig(map[string]interface{}{
-					"kms_encrypted_password": "${alicloud_kms_ciphertext.default.ciphertext_blob}",
-					"kms_encryption_context": map[string]string{
-						"name": name,
-					},
-				}),
-				Check: resource.ComposeTestCheckFunc(
-					testAccCheck(map[string]string{}),
-				),
-			},
+			// Currently, the API does not support sts
+			//{
+			//	Config: testAccConfig(map[string]interface{}{
+			//		"password": "YourPassword123",
+			//	}),
+			//	Check: resource.ComposeTestCheckFunc(
+			//		testAccCheck(map[string]string{}),
+			//	),
+			//},
+			//{
+			//	Config: testAccConfig(map[string]interface{}{
+			//		"kms_encrypted_password": "${alicloud_kms_ciphertext.default.ciphertext_blob}",
+			//		"kms_encryption_context": map[string]string{
+			//			"name": name,
+			//		},
+			//	}),
+			//	Check: resource.ComposeTestCheckFunc(
+			//		testAccCheck(map[string]string{}),
+			//	),
+			//},
 			{
 				ResourceName:            resourceId,
 				ImportState:             true,
@@ -157,7 +159,7 @@ func TestAccAlicloudCREEInstance_Standard(t *testing.T) {
 	})
 }
 
-func TestAccAlicloudCREEInstance_Advanced(t *testing.T) {
+func TestAccAliCloudCREEInstance_Advanced(t *testing.T) {
 	var v *cr_ee.GetInstanceResponse
 	resourceId := "alicloud_cr_ee_instance.default"
 	ra := resourceAttrInit(resourceId, nil)
@@ -174,7 +176,6 @@ func TestAccAlicloudCREEInstance_Advanced(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccPreCheck(t)
-			testAccPreCheckWithTime(t, []int{1})
 		},
 		IDRefreshName: resourceId,
 		Providers:     testAccProviders,
@@ -202,25 +203,26 @@ func TestAccAlicloudCREEInstance_Advanced(t *testing.T) {
 					}),
 				),
 			},
-			{
-				Config: testAccConfig(map[string]interface{}{
-					"password": "YourPassword123",
-				}),
-				Check: resource.ComposeTestCheckFunc(
-					testAccCheck(map[string]string{}),
-				),
-			},
-			{
-				Config: testAccConfig(map[string]interface{}{
-					"kms_encrypted_password": "${alicloud_kms_ciphertext.default.ciphertext_blob}",
-					"kms_encryption_context": map[string]string{
-						"name": name,
-					},
-				}),
-				Check: resource.ComposeTestCheckFunc(
-					testAccCheck(map[string]string{}),
-				),
-			},
+			// Currently, the API does not support sts
+			//{
+			//	Config: testAccConfig(map[string]interface{}{
+			//		"password": "YourPassword123",
+			//	}),
+			//	Check: resource.ComposeTestCheckFunc(
+			//		testAccCheck(map[string]string{}),
+			//	),
+			//},
+			//{
+			//	Config: testAccConfig(map[string]interface{}{
+			//		"kms_encrypted_password": "${alicloud_kms_ciphertext.default.ciphertext_blob}",
+			//		"kms_encryption_context": map[string]string{
+			//			"name": name,
+			//		},
+			//	}),
+			//	Check: resource.ComposeTestCheckFunc(
+			//		testAccCheck(map[string]string{}),
+			//	),
+			//},
 			{
 				ResourceName:            resourceId,
 				ImportState:             true,
@@ -254,4 +256,231 @@ func resourceCrEEInstanceConfigDependence(name string) string {
 	  }
 	}
 	`, name)
+}
+
+// Case 实例生命周期测试_2_new 7970_modified
+func TestAccAliCloudCrInstance_basic7970_modified(t *testing.T) {
+	var v map[string]interface{}
+	resourceId := "alicloud_cr_ee_instance.default"
+	ra := resourceAttrInit(resourceId, AlicloudCrInstanceMap7970_modified)
+	rc := resourceCheckInitWithDescribeMethod(resourceId, &v, func() interface{} {
+		return &CrServiceV2{testAccProvider.Meta().(*connectivity.AliyunClient)}
+	}, "DescribeCrInstance")
+	rac := resourceAttrCheckInit(rc, ra)
+	testAccCheck := rac.resourceAttrMapUpdateSet()
+	rand := acctest.RandIntRange(10000, 99999)
+	name := fmt.Sprintf("tf-testacc-basic-%d", rand)
+	testAccConfig := resourceTestAccConfigFunc(resourceId, name, AlicloudCrInstanceBasicDependence7970_modified)
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheckWithRegions(t, true, []connectivity.Region{"cn-hangzhou"})
+			testAccPreCheck(t)
+		},
+		IDRefreshName: resourceId,
+		Providers:     testAccProviders,
+		CheckDestroy:  rac.checkResourceDestroy(),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"instance_name":      name,
+					"period":             "1",
+					"renewal_status":     "AutoRenewal",
+					"instance_type":      "Standard",
+					"payment_type":       "Subscription",
+					"renew_period":       "1",
+					"resource_group_id":  "${data.alicloud_resource_manager_resource_groups.default.ids.0}",
+					"default_oss_bucket": "false",
+					"custom_oss_bucket":  "${alicloud_oss_bucket.defaultkcvHCP.bucket}",
+					"image_scanner":      "ACR",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"instance_name":      name,
+						"period":             "1",
+						"renewal_status":     "AutoRenewal",
+						"instance_type":      "Standard",
+						"payment_type":       "Subscription",
+						"renew_period":       "1",
+						"resource_group_id":  CHECKSET,
+						"default_oss_bucket": "false",
+						"custom_oss_bucket":  CHECKSET,
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"resource_group_id": "${data.alicloud_resource_manager_resource_groups.default.ids.1}",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"resource_group_id": CHECKSET,
+					}),
+				),
+			},
+			{
+				ResourceName:            resourceId,
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"custom_oss_bucket", "default_oss_bucket", "instance_type", "period", "image_scanner"},
+			},
+		},
+	})
+}
+
+var AlicloudCrInstanceMap7970_modified = map[string]string{
+	"status":               CHECKSET,
+	"end_time":             CHECKSET,
+	"create_time":          CHECKSET,
+	"instance_endpoints.#": CHECKSET,
+}
+
+func AlicloudCrInstanceBasicDependence7970_modified(name string) string {
+	return fmt.Sprintf(`
+variable "name" {
+    default = "%s"
+}
+
+resource "alicloud_ram_role" "defaultRole" {
+  name = "AliyunContainerRegistryCustomizedOSSBucketRole"
+
+  description = var.name
+  document = <<EOF
+{
+    "Statement": [
+        {
+            "Action": "sts:AssumeRole",
+            "Effect": "Allow",
+            "Principal": {
+                "Service": [
+                    "cr.aliyuncs.com"
+                ]
+            }
+        }
+    ],
+    "Version": "1"
+}
+  EOF
+}
+
+resource "alicloud_ram_policy" "defaultLPolicy" {
+  policy_name = "AliyunContainerRegistryCustomizedOSSBucketRolePolicy"
+  description = var.name
+
+  document = <<EOF
+
+{
+    "Version": "1",
+    "Statement": [
+        {
+            "Action": [
+                "oss:GetObject",
+                "oss:PutObject",
+                "oss:DeleteObject",
+                "oss:ListParts",
+                "oss:AbortMultipartUpload",
+                "oss:InitiateMultipartUpload",
+                "oss:CompleteMultipartUpload",
+                "oss:DeleteMultipleObjects",
+                "oss:ListMultipartUploads",
+                "oss:ListObjects",
+                "oss:DeleteObjectVersion",
+                "oss:GetObjectVersion",
+                "oss:ListObjectVersions",
+                "oss:PutObjectTagging",
+                "oss:GetObjectTagging",
+                "oss:DeleteObjectTagging"
+            ],
+            "Resource": [
+                "acs:oss:*:*:cri-*",
+                "acs:oss:*:*:cri-*/*",
+                "acs:oss:*:*:${var.name}",
+                "acs:oss:*:*:${var.name}/*"
+            ],
+            "Effect": "Allow",
+            "Condition": {
+
+            }
+        },
+        {
+            "Action": [
+                "oss:PutBucket",
+                "oss:GetBucket",
+                "oss:GetBucketLocation",
+                "oss:PutBucketEncryption",
+                "oss:GetBucketEncryption",
+                "oss:PutBucketAcl",
+                "oss:GetBucketAcl",
+                "oss:PutBucketLogging",
+                "oss:GetBucketReferer",
+                "oss:PutBucketReferer",
+                "oss:GetBucketLogging",
+                "oss:PutBucketVersioning",
+                "oss:GetBucketVersioning",
+                "oss:GetBucketLifecycle",
+                "oss:PutBucketLifecycle",
+                "oss:DeleteBucketLifecycle",
+                "oss:GetBucketTransferAcceleration"
+            ],
+            "Resource": [
+                "acs:oss:*:*:cri-*",
+                "acs:oss:*:*:cri-*/*",
+                "acs:oss:*:*:${var.name}",
+                "acs:oss:*:*:${var.name}/*"
+            ],
+            "Effect": "Allow",
+            "Condition": {
+
+            }
+        },
+        {
+            "Effect": "Allow",
+            "Action": "oss:ListBuckets",
+            "Resource": [
+                "acs:oss:*:*:*",
+                "acs:oss:*:*:*/*"
+            ],
+            "Condition": {
+
+            }
+        },
+        {
+            "Action": [
+                "vpc:DescribeVpcs"
+            ],
+            "Resource": "acs:vpc:*:*:vpc/*",
+            "Effect": "Allow",
+            "Condition": {
+
+            }
+        },
+        {
+            "Action": [
+                "cms:QueryMetricLast",
+                "cms:QueryMetricList"
+            ],
+            "Resource": "*",
+            "Effect": "Allow"
+        }
+    ]
+}
+  EOF
+}
+
+resource "alicloud_ram_role_policy_attachment" "RolePolicyAttachment" {
+  policy_type = "Custom"
+  role_name   = alicloud_ram_role.defaultRole.name
+  policy_name = alicloud_ram_policy.defaultLPolicy.policy_name
+}
+
+data "alicloud_resource_manager_resource_groups" "default" {}
+
+resource "alicloud_oss_bucket" "defaultkcvHCP" {
+	depends_on = [
+			alicloud_ram_role_policy_attachment.RolePolicyAttachment]
+  storage_class = "Standard"
+  bucket = var.name
+}
+
+
+`, name)
 }

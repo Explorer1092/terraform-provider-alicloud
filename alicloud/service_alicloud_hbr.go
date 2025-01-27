@@ -48,15 +48,19 @@ func (s *HbrService) convertDetailToString(details []interface{}) (string, error
 
 func (s *HbrService) DescribeHbrVault(id string) (object map[string]interface{}, err error) {
 	var response map[string]interface{}
+	action := "DescribeVaults"
+
 	conn, err := s.client.NewHbrClient()
 	if err != nil {
 		return nil, WrapError(err)
 	}
-	action := "DescribeVaults"
+
 	request := map[string]interface{}{
 		"VaultRegionId": s.client.RegionId,
 		"VaultId":       id,
 	}
+
+	idExist := false
 	runtime := util.RuntimeOptions{}
 	runtime.SetAutoretry(true)
 	wait := incrementalWait(3*time.Second, 3*time.Second)
@@ -72,24 +76,35 @@ func (s *HbrService) DescribeHbrVault(id string) (object map[string]interface{},
 		return nil
 	})
 	addDebug(action, response, request)
+
 	if err != nil {
 		return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
 	}
+
 	if fmt.Sprint(response["Success"]) == "false" {
 		return object, WrapError(fmt.Errorf("%s failed, response: %v", action, response))
 	}
-	v, err := jsonpath.Get("$.Vaults.Vault", response)
+
+	resp, err := jsonpath.Get("$.Vaults.Vault", response)
 	if err != nil {
 		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$.Vaults.Vault", response)
 	}
-	if len(v.([]interface{})) < 1 {
-		return object, WrapErrorf(Error(GetNotFoundMessage("HBR", id)), NotFoundWithResponse, response)
-	} else {
-		if fmt.Sprint(v.([]interface{})[0].(map[string]interface{})["VaultId"]) != id {
-			return object, WrapErrorf(Error(GetNotFoundMessage("HBR", id)), NotFoundWithResponse, response)
+
+	if v, ok := resp.([]interface{}); !ok || len(v) < 1 {
+		return object, WrapErrorf(Error(GetNotFoundMessage("HBR:Vault", id)), NotFoundWithResponse, response)
+	}
+
+	for _, v := range resp.([]interface{}) {
+		if fmt.Sprint(v.(map[string]interface{})["VaultId"]) == id {
+			idExist = true
+			return v.(map[string]interface{}), nil
 		}
 	}
-	object = v.([]interface{})[0].(map[string]interface{})
+
+	if !idExist {
+		return object, WrapErrorf(Error(GetNotFoundMessage("HBR:Vault", id)), NotFoundWithResponse, response)
+	}
+
 	return object, nil
 }
 
@@ -490,6 +505,7 @@ func (s *HbrService) HbrEcsBackupClientStateRefreshFunc(id string, failStates []
 		return object, fmt.Sprint(object["Status"]), nil
 	}
 }
+
 func (s *HbrService) DescribeHbrRestoreJob(id string) (object map[string]interface{}, err error) {
 	var response map[string]interface{}
 	conn, err := s.client.NewHbrClient()
@@ -575,6 +591,7 @@ func (s *HbrService) HbrRestoreJobStateRefreshFunc(id string, failStates []strin
 		return object, fmt.Sprint(object["Status"]), nil
 	}
 }
+
 func (s *HbrService) DescribeHbrServerBackupPlan(id string) (object map[string]interface{}, err error) {
 	var response map[string]interface{}
 	conn, err := s.client.NewHbrClient()
@@ -690,4 +707,209 @@ func (s *HbrService) DescribeHbrReplicationVault(id string) (object map[string]i
 		return object, WrapErrorf(Error(GetNotFoundMessage("HBR", id)), NotFoundWithResponse, response)
 	}
 	return
+}
+
+func (s *HbrService) DescribeHbrHanaInstance(id string) (object map[string]interface{}, err error) {
+	var response map[string]interface{}
+	conn, err := s.client.NewHbrClient()
+	if err != nil {
+		return nil, WrapError(err)
+	}
+	action := "DescribeHanaInstances"
+	parts, err := ParseResourceId(id, 2)
+	if err != nil {
+		err = WrapError(err)
+		return
+	}
+	request := map[string]interface{}{
+		"ClusterId": parts[1],
+		"VaultId":   parts[0],
+	}
+	runtime := util.RuntimeOptions{}
+	runtime.SetAutoretry(true)
+	wait := incrementalWait(3*time.Second, 3*time.Second)
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2017-09-08"), StringPointer("AK"), nil, request, &runtime)
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		return nil
+	})
+	addDebug(action, response, request)
+	if err != nil {
+		return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
+	}
+	if fmt.Sprint(response["Success"]) == "false" {
+		return object, WrapError(fmt.Errorf("%s failed, response: %v", action, response))
+	}
+	v, err := jsonpath.Get("$.Hanas.Hana", response)
+	if err != nil {
+		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$.Hanas.Hana", response)
+	}
+	if len(v.([]interface{})) < 1 {
+		return object, WrapErrorf(Error(GetNotFoundMessage("HBR", id)), NotFoundWithResponse, response)
+	} else {
+		if fmt.Sprint(v.([]interface{})[0].(map[string]interface{})["ClusterId"]) != parts[1] {
+			return object, WrapErrorf(Error(GetNotFoundMessage("HBR", id)), NotFoundWithResponse, response)
+		}
+	}
+	object = v.([]interface{})[0].(map[string]interface{})
+	return object, nil
+}
+
+func (s *HbrService) DescribeHbrHanaBackupPlan(id string) (object map[string]interface{}, err error) {
+	var response map[string]interface{}
+	conn, err := s.client.NewHbrClient()
+	if err != nil {
+		return nil, WrapError(err)
+	}
+	action := "DescribeHanaBackupPlans"
+	parts, err := ParseResourceId(id, 3)
+	if err != nil {
+		err = WrapError(err)
+		return
+	}
+	request := map[string]interface{}{
+		"ClusterId":  parts[2],
+		"VaultId":    parts[1],
+		"PageNumber": 1,
+		"PageSize":   PageSizeLarge,
+	}
+	idExist := false
+	for {
+		runtime := util.RuntimeOptions{}
+		runtime.SetAutoretry(true)
+		wait := incrementalWait(3*time.Second, 3*time.Second)
+		err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+			response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2017-09-08"), StringPointer("AK"), nil, request, &runtime)
+			if err != nil {
+				if NeedRetry(err) {
+					wait()
+					return resource.RetryableError(err)
+				}
+				return resource.NonRetryableError(err)
+			}
+			return nil
+		})
+		addDebug(action, response, request)
+		if err != nil {
+			return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
+		}
+		if fmt.Sprint(response["Success"]) == "false" {
+			return object, WrapError(fmt.Errorf("%s failed, response: %v", action, response))
+		}
+		v, err := jsonpath.Get("$.HanaBackupPlans.HanaBackupPlan", response)
+		if err != nil {
+			return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$.HanaBackupPlans.HanaBackupPlan", response)
+		}
+		if len(v.([]interface{})) < 1 {
+			return object, WrapErrorf(Error(GetNotFoundMessage("HBR", id)), NotFoundWithResponse, response)
+		}
+		for _, v := range v.([]interface{}) {
+			if fmt.Sprint(v.(map[string]interface{})["PlanId"]) == parts[0] {
+				idExist = true
+				return v.(map[string]interface{}), nil
+			}
+		}
+		if len(v.([]interface{})) < request["PageSize"].(int) {
+			break
+		}
+		request["PageNumber"] = request["PageNumber"].(int) + 1
+	}
+	if !idExist {
+		return object, WrapErrorf(Error(GetNotFoundMessage("HBR", id)), NotFoundWithResponse, response)
+	}
+	return
+}
+
+func (s *HbrService) DescribeHbrHanaBackupClient(id string) (object map[string]interface{}, err error) {
+	var response map[string]interface{}
+	action := "DescribeClients"
+
+	conn, err := s.client.NewHbrClient()
+	if err != nil {
+		return object, WrapError(err)
+	}
+
+	parts, err := ParseResourceId(id, 2)
+	if err != nil {
+		return nil, WrapError(err)
+	}
+
+	request := map[string]interface{}{
+		"VaultId":    parts[0],
+		"ClientId":   parts[1],
+		"ClientType": "ECS_AGENT",
+	}
+
+	idExist := false
+	runtime := util.RuntimeOptions{}
+	runtime.SetAutoretry(true)
+	wait := incrementalWait(3*time.Second, 3*time.Second)
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2017-09-08"), StringPointer("AK"), nil, request, &runtime)
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		return nil
+	})
+	addDebug(action, response, request)
+
+	if err != nil {
+		if IsExpectedErrors(err, []string{"VaultNotExist"}) {
+			return object, WrapErrorf(Error(GetNotFoundMessage("Hbr:HanaBackupClient", id)), NotFoundWithResponse, response)
+		}
+		return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
+	}
+
+	if fmt.Sprint(response["Success"]) == "false" {
+		return object, WrapError(fmt.Errorf("%s failed, response: %v", action, response))
+	}
+
+	resp, err := jsonpath.Get("$.Clients.Client", response)
+	if err != nil {
+		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$.Clients.Client", response)
+	}
+
+	for _, v := range resp.([]interface{}) {
+		if fmt.Sprint(v.(map[string]interface{})["ClientId"]) == parts[1] {
+			idExist = true
+			return v.(map[string]interface{}), nil
+		}
+	}
+
+	if !idExist {
+		return object, WrapErrorf(Error(GetNotFoundMessage("Hbr:HanaBackupClient", id)), NotFoundWithResponse, response)
+	}
+
+	return object, nil
+}
+
+func (s *HbrService) HbrHanaBackupClientStateRefreshFunc(id string, failStates []string) resource.StateRefreshFunc {
+	return func() (interface{}, string, error) {
+		object, err := s.DescribeHbrHanaBackupClient(id)
+		if err != nil {
+			if NotFoundError(err) {
+				// Set this to nil as if we didn't find anything.
+				return nil, "", nil
+			}
+			return nil, "", WrapError(err)
+		}
+
+		for _, failState := range failStates {
+			if fmt.Sprint(object["Status"]) == failState {
+				return object, fmt.Sprint(object["Status"]), WrapError(Error(FailedToReachTargetStatus, fmt.Sprint(object["Status"])))
+			}
+		}
+
+		return object, fmt.Sprint(object["Status"]), nil
+	}
 }

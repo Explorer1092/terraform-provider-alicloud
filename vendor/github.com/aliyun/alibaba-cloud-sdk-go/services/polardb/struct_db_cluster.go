@@ -21,13 +21,17 @@ type DBCluster struct {
 	Category             string                      `json:"Category" xml:"Category"`
 	DBType               string                      `json:"DBType" xml:"DBType"`
 	Engine               string                      `json:"Engine" xml:"Engine"`
+	StoragePayType       string                      `json:"StoragePayType" xml:"StoragePayType"`
 	CreateTime           string                      `json:"CreateTime" xml:"CreateTime"`
 	DBClusterNetworkType string                      `json:"DBClusterNetworkType" xml:"DBClusterNetworkType"`
+	ServerlessType       string                      `json:"ServerlessType" xml:"ServerlessType"`
+	AiType               string                      `json:"AiType" xml:"AiType"`
 	RegionId             string                      `json:"RegionId" xml:"RegionId"`
 	DeletedTime          string                      `json:"DeletedTime" xml:"DeletedTime"`
 	DBNodeNumber         int                         `json:"DBNodeNumber" xml:"DBNodeNumber"`
 	ResourceGroupId      string                      `json:"ResourceGroupId" xml:"ResourceGroupId"`
 	Role                 string                      `json:"Role" xml:"Role"`
+	VswitchId            string                      `json:"VswitchId" xml:"VswitchId"`
 	ExpireTime           string                      `json:"ExpireTime" xml:"ExpireTime"`
 	VpcId                string                      `json:"VpcId" xml:"VpcId"`
 	Expired              string                      `json:"Expired" xml:"Expired"`
@@ -35,12 +39,15 @@ type DBCluster struct {
 	DBVersion            string                      `json:"DBVersion" xml:"DBVersion"`
 	PayType              string                      `json:"PayType" xml:"PayType"`
 	DBClusterId          string                      `json:"DBClusterId" xml:"DBClusterId"`
+	CompressStorageUsed  int64                       `json:"CompressStorageUsed" xml:"CompressStorageUsed"`
 	DBClusterStatus      string                      `json:"DBClusterStatus" xml:"DBClusterStatus"`
+	StrictConsistency    string                      `json:"StrictConsistency" xml:"StrictConsistency"`
 	ZoneId               string                      `json:"ZoneId" xml:"ZoneId"`
 	StorageUsed          int64                       `json:"StorageUsed" xml:"StorageUsed"`
+	StorageSpace         int64                       `json:"StorageSpace" xml:"StorageSpace"`
 	IsDeleted            int                         `json:"IsDeleted" xml:"IsDeleted"`
 	DBClusterDescription string                      `json:"DBClusterDescription" xml:"DBClusterDescription"`
 	LockMode             string                      `json:"LockMode" xml:"LockMode"`
-	DBNodes              DBNodesInDescribeDBClusters `json:"DBNodes" xml:"DBNodes"`
 	Tags                 TagsInDescribeDBClusters    `json:"Tags" xml:"Tags"`
+	DBNodes              DBNodesInDescribeDBClusters `json:"DBNodes" xml:"DBNodes"`
 }

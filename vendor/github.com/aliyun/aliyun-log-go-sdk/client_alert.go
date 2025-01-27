@@ -204,7 +204,7 @@ type Schedule struct {
 
 type AlertConfiguration struct {
 	Condition        string          `json:"condition"`
-	MuteUntil        int64           `json:"muteUntil"`
+	MuteUntil        int64           `json:"muteUntil,omitempty"`
 	NotificationList []*Notification `json:"notificationList"`
 	NotifyThreshold  int32           `json:"notifyThreshold"`
 	Throttling       string          `json:"throttling"`
@@ -228,6 +228,8 @@ type AlertConfiguration struct {
 
 	PolicyConfiguration PolicyConfiguration `json:"policyConfiguration"`
 	AutoAnnotation      bool                `json:"autoAnnotation"`
+
+	Tags []string `json:"tags,omitempty"`
 }
 
 func (c *Client) CreateSavedSearch(project string, savedSearch *SavedSearch) error {
@@ -546,4 +548,19 @@ func (c *Client) ListAlert(project, alertName, dashboard string, offset, size in
 		err = NewClientError(err)
 	}
 	return listAlert.Results, listAlert.Total, listAlert.Count, err
+}
+
+func (c *Client) PublishAlertEvent(project string, alertResult []byte) error {
+	h := map[string]string{
+		"x-log-bodyrawsize": fmt.Sprintf("%v", len(alertResult)),
+		"Content-Type":      "application/json",
+	}
+
+	uri := "/event/alerthub?type=raw"
+	r, err := c.request(project, "POST", uri, h, alertResult)
+	if err != nil {
+		return err
+	}
+	r.Body.Close()
+	return nil
 }

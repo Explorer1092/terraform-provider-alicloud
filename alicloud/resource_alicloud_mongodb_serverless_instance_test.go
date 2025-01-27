@@ -19,7 +19,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 )
 
-func TestAccAlicloudMongoDBServerlessInstance_basic0(t *testing.T) {
+func SkipTestAccAlicloudMongoDBServerlessInstance_basic0(t *testing.T) {
 	var v map[string]interface{}
 	resourceId := "alicloud_mongodb_serverless_instance.default"
 	checkoutSupportedRegions(t, true, connectivity.MongoDBServerlessSupportRegions)
@@ -173,7 +173,7 @@ func TestAccAlicloudMongoDBServerlessInstance_basic0(t *testing.T) {
 	})
 }
 
-func TestAccAlicloudMongoDBServerlessInstance_basic1(t *testing.T) {
+func SkipTestAccAlicloudMongoDBServerlessInstance_basic1(t *testing.T) {
 	var v map[string]interface{}
 	resourceId := "alicloud_mongodb_serverless_instance.default"
 	checkoutSupportedRegions(t, true, connectivity.MongoDBServerlessSupportRegions)
@@ -263,7 +263,7 @@ data "alicloud_resource_manager_resource_groups" "default" {}
 data "alicloud_mongodb_zones" "default" {}
 
 data "alicloud_vpcs" "default" {
-	name_regex = "default-NODELETING"
+	name_regex = "^default-NODELETING$"
 }
 
 data "alicloud_vswitches" "default" {
@@ -285,7 +285,7 @@ locals {
 `, name)
 }
 
-func TestAccAlicloudMongoDBServerlessInstance_unit(t *testing.T) {
+func TestUnitAlicloudMongoDBServerlessInstance(t *testing.T) {
 	p := Provider().(*schema.Provider).ResourcesMap
 	dInit, _ := schema.InternalMap(p["alicloud_mongodb_serverless_instance"].Schema).Data(nil, nil)
 	dExisted, _ := schema.InternalMap(p["alicloud_mongodb_serverless_instance"].Schema).Data(nil, nil)

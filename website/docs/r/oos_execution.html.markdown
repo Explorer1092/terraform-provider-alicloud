@@ -7,15 +7,26 @@ description: |-
   Provides a OOS Execution resource.
 ---
 
-# alicloud\_oos\_execution
+# alicloud_oos_execution
 
 Provides a OOS Execution resource. For information about Alicloud OOS Execution and how to use it, see [What is Resource Alicloud OOS Execution](https://www.alibabacloud.com/help/doc-detail/120771.htm).
 
--> **NOTE:** Available in 1.93.0+.
+-> **NOTE:** Available since v1.93.0.
 
 ## Example Usage
 
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_oos_execution&exampleId=7bac5c9b-d872-f1bd-7010-aae94025a21433b48066&activeTab=example&spm=docs.r.oos_execution.0.7bac5c9bd8&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
 ```terraform
+resource "random_integer" "default" {
+  min = 10000
+  max = 99999
+}
+
 resource "alicloud_oos_template" "default" {
   content       = <<EOF
   {
@@ -41,8 +52,8 @@ resource "alicloud_oos_template" "default" {
       }]
   }
   EOF
-  template_name = "test-name"
-  version_name  = "test"
+  template_name = "tf-example-name-${random_integer.default.result}"
+  version_name  = "example"
   tags = {
     "Created" = "TF",
     "For"     = "acceptance Test"
@@ -90,17 +101,17 @@ The following attributes are exported:
 * `template_id` - The id of template.
 * `update_date` - The time when the execution was updated.
 
-### Timeouts
+## Timeouts
 
 
 The `timeouts` block allows you to specify [timeouts](https://www.terraform.io/docs/configuration-0-11/resources.html#timeouts) for certain actions:
 
-* `create` - (Defaults to 11 mins) Used when creating the alicloud_oos_execution (until it reaches the initial `Running` status).
+* `create` - (Defaults to 11 mins) Used when creating the alicloud_oos_execution.
 
 ## Import
 
 OOS Execution can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_oos_execution.example exec-ef6xxxx
 ```

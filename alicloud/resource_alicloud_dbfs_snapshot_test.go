@@ -40,7 +40,7 @@ func testSweepDbfsSnapshot(region string) error {
 
 	rawClient, err := sharedClientForRegion(region)
 	if err != nil {
-		return fmt.Errorf("error getting Alicloud client: %s", err)
+		return fmt.Errorf("error getting AliCloud client: %s", err)
 	}
 	aliyunClient := rawClient.(*connectivity.AliyunClient)
 	prefixes := []string{
@@ -118,11 +118,11 @@ func testSweepDbfsSnapshot(region string) error {
 	return nil
 }
 
-func TestAccAlicloudDBFSSnapshot_basic0(t *testing.T) {
+func TestAccAliCloudDbfsSnapshot_basic0(t *testing.T) {
 	var v map[string]interface{}
-	resourceId := "alicloud_dbfs_snapshot.default"
 	checkoutSupportedRegions(t, true, connectivity.DBFSSystemSupportRegions)
-	ra := resourceAttrInit(resourceId, AlicloudDBFSSnapshotMap0)
+	resourceId := "alicloud_dbfs_snapshot.default"
+	ra := resourceAttrInit(resourceId, AliCloudDbfsSnapshotMap0)
 	rc := resourceCheckInitWithDescribeMethod(resourceId, &v, func() interface{} {
 		return &DbfsService{testAccProvider.Meta().(*connectivity.AliyunClient)}
 	}, "DescribeDbfsSnapshot")
@@ -130,7 +130,7 @@ func TestAccAlicloudDBFSSnapshot_basic0(t *testing.T) {
 	testAccCheck := rac.resourceAttrMapUpdateSet()
 	rand := acctest.RandIntRange(10000, 99999)
 	name := fmt.Sprintf("tf-testacc%sdbfssnapshot%d", defaultRegionToTest, rand)
-	testAccConfig := resourceTestAccConfigFunc(resourceId, name, AlicloudDBFSSnapshotBasicDependence0)
+	testAccConfig := resourceTestAccConfigFunc(resourceId, name, AliCloudDbfsSnapshotBasicDependence0)
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccPreCheck(t)
@@ -141,8 +141,7 @@ func TestAccAlicloudDBFSSnapshot_basic0(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				Config: testAccConfig(map[string]interface{}{
-					"depends_on":  []string{"alicloud_dbfs_instance_attachment.default"},
-					"instance_id": "${alicloud_dbfs_instance.default.id}",
+					"instance_id": "${data.alicloud_dbfs_instances.default.instances.0.id}",
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
@@ -151,50 +150,22 @@ func TestAccAlicloudDBFSSnapshot_basic0(t *testing.T) {
 				),
 			},
 			{
-				ResourceName:            resourceId,
-				ImportState:             true,
-				ImportStateVerify:       true,
-				ImportStateVerifyIgnore: []string{"force"},
-			},
-		},
-	})
-}
-
-func TestAccAlicloudDBFSSnapshot_basic1(t *testing.T) {
-	var v map[string]interface{}
-	resourceId := "alicloud_dbfs_snapshot.default"
-	checkoutSupportedRegions(t, true, connectivity.DBFSSystemSupportRegions)
-	ra := resourceAttrInit(resourceId, AlicloudDBFSSnapshotMap0)
-	rc := resourceCheckInitWithDescribeMethod(resourceId, &v, func() interface{} {
-		return &DbfsService{testAccProvider.Meta().(*connectivity.AliyunClient)}
-	}, "DescribeDbfsSnapshot")
-	rac := resourceAttrCheckInit(rc, ra)
-	testAccCheck := rac.resourceAttrMapUpdateSet()
-	rand := acctest.RandIntRange(10000, 99999)
-	name := fmt.Sprintf("tf-testacc%sdbfssnapshot%d", defaultRegionToTest, rand)
-	testAccConfig := resourceTestAccConfigFunc(resourceId, name, AlicloudDBFSSnapshotBasicDependence0)
-	resource.Test(t, resource.TestCase{
-		PreCheck: func() {
-			testAccPreCheck(t)
-		},
-		IDRefreshName: resourceId,
-		Providers:     testAccProviders,
-		CheckDestroy:  rac.checkResourceDestroy(),
-		Steps: []resource.TestStep{
-			{
 				Config: testAccConfig(map[string]interface{}{
-					"depends_on":     []string{"alicloud_dbfs_instance_attachment.default"},
-					"description":    "${var.name}",
-					"instance_id":    "${alicloud_dbfs_instance.default.id}",
-					"retention_days": "30",
-					"snapshot_name":  "${var.name}",
+					"snapshot_name": name,
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
-						"description":    name,
-						"instance_id":    CHECKSET,
-						"retention_days": "30",
-						"snapshot_name":  name,
+						"snapshot_name": name,
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"description": "DbfsSnapshot",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"description": "DbfsSnapshot",
 					}),
 				),
 			},
@@ -208,69 +179,70 @@ func TestAccAlicloudDBFSSnapshot_basic1(t *testing.T) {
 	})
 }
 
-var AlicloudDBFSSnapshotMap0 = map[string]string{
-	"instance_id": CHECKSET,
-	"force":       NOSET,
-	"status":      CHECKSET,
+func TestAccAliCloudDbfsSnapshot_basic0_twin(t *testing.T) {
+	var v map[string]interface{}
+	checkoutSupportedRegions(t, true, connectivity.DBFSSystemSupportRegions)
+	resourceId := "alicloud_dbfs_snapshot.default"
+	ra := resourceAttrInit(resourceId, AliCloudDbfsSnapshotMap0)
+	rc := resourceCheckInitWithDescribeMethod(resourceId, &v, func() interface{} {
+		return &DbfsService{testAccProvider.Meta().(*connectivity.AliyunClient)}
+	}, "DescribeDbfsSnapshot")
+	rac := resourceAttrCheckInit(rc, ra)
+	testAccCheck := rac.resourceAttrMapUpdateSet()
+	rand := acctest.RandIntRange(10000, 99999)
+	name := fmt.Sprintf("tf-testacc%sdbfssnapshot%d", defaultRegionToTest, rand)
+	testAccConfig := resourceTestAccConfigFunc(resourceId, name, AliCloudDbfsSnapshotBasicDependence0)
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		IDRefreshName: resourceId,
+		Providers:     testAccProviders,
+		CheckDestroy:  rac.checkResourceDestroy(),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"instance_id":    "${data.alicloud_dbfs_instances.default.instances.0.id}",
+					"retention_days": "50",
+					"snapshot_name":  name,
+					"description":    "DbfsSnapshot",
+					"force":          "true",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"instance_id":    CHECKSET,
+						"retention_days": "50",
+						"snapshot_name":  name,
+						"description":    "DbfsSnapshot",
+					}),
+				),
+			},
+			{
+				ResourceName:            resourceId,
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"force"},
+			},
+		},
+	})
 }
 
-func AlicloudDBFSSnapshotBasicDependence0(name string) string {
+var AliCloudDbfsSnapshotMap0 = map[string]string{
+	"status": CHECKSET,
+}
+
+func AliCloudDbfsSnapshotBasicDependence0(name string) string {
 	return fmt.Sprintf(` 
-variable "name" {
-  default = "%s"
-}
-locals {
-  zone_id = "cn-hangzhou-i"
-}
-data "alicloud_vpcs" "default" {
-	name_regex = "default-NODELETING"
-}
+	variable "name" {
+  		default = "%s"
+	}
 
-data "alicloud_vswitches" "default" {
-	vpc_id  = data.alicloud_vpcs.default.ids.0
-	zone_id = local.zone_id
-}
-
-resource "alicloud_security_group" "default" {
-  name        = var.name
-  description = "tf test"
-  vpc_id      = data.alicloud_vpcs.default.ids.0
-}
-
-data "alicloud_images" "default" {
-  owners      = "system"
-  name_regex  = "^centos_8"
-  most_recent = true
-}
-
-resource "alicloud_instance" "default" {
-  image_id          = data.alicloud_images.default.images[0].id
-  instance_name     = var.name
-  instance_type     = "ecs.g7se.large"
-  availability_zone = local.zone_id
-  vswitch_id        = data.alicloud_vswitches.default.ids[0]
-  system_disk_category = "cloud_essd"
-  security_groups = [
-    alicloud_security_group.default.id
-  ]
-}
-
-resource "alicloud_dbfs_instance" "default" {
-  category          = "standard"
-  zone_id           = alicloud_instance.default.availability_zone
-  performance_level = "PL1"
-  instance_name     = var.name
-  size              = 100
-}
-
-resource "alicloud_dbfs_instance_attachment" "default" {
-  ecs_id      = alicloud_instance.default.id
-  instance_id = alicloud_dbfs_instance.default.id
-}
+	data "alicloud_dbfs_instances" "default" {
+	}
 `, name)
 }
 
-func TestAccAlicloudDBFSSnapshot_unit(t *testing.T) {
+func TestUnitAliCloudDbfsSnapshot(t *testing.T) {
 	p := Provider().(*schema.Provider).ResourcesMap
 	d, _ := schema.InternalMap(p["alicloud_dbfs_snapshot"].Schema).Data(nil, nil)
 	dCreate, _ := schema.InternalMap(p["alicloud_dbfs_snapshot"].Schema).Data(nil, nil)
@@ -354,7 +326,7 @@ func TestAccAlicloudDBFSSnapshot_unit(t *testing.T) {
 				StatusCode: tea.Int(400),
 			}
 		})
-		err := resourceAlicloudDbfsSnapshotCreate(d, rawClient)
+		err := resourceAliCloudDbfsSnapshotCreate(d, rawClient)
 		patches.Reset()
 		assert.NotNil(t, err)
 	})
@@ -371,7 +343,7 @@ func TestAccAlicloudDBFSSnapshot_unit(t *testing.T) {
 			}
 			return responseMock["CreateNormal"]("")
 		})
-		err := resourceAlicloudDbfsSnapshotCreate(d, rawClient)
+		err := resourceAliCloudDbfsSnapshotCreate(d, rawClient)
 		patches.Reset()
 		assert.NotNil(t, err)
 	})
@@ -388,7 +360,7 @@ func TestAccAlicloudDBFSSnapshot_unit(t *testing.T) {
 			}
 			return responseMock["CreateNormal"]("")
 		})
-		err := resourceAlicloudDbfsSnapshotCreate(dCreate, rawClient)
+		err := resourceAliCloudDbfsSnapshotCreate(dCreate, rawClient)
 		patches.Reset()
 		assert.Nil(t, err)
 	})
@@ -404,7 +376,7 @@ func TestAccAlicloudDBFSSnapshot_unit(t *testing.T) {
 			}
 			return responseMock["CreateNormal"]("")
 		})
-		err := resourceAlicloudDbfsSnapshotCreate(d, rawClient)
+		err := resourceAliCloudDbfsSnapshotCreate(d, rawClient)
 		patches.Reset()
 		assert.NotNil(t, err)
 	})
@@ -419,7 +391,7 @@ func TestAccAlicloudDBFSSnapshot_unit(t *testing.T) {
 		patches := gomonkey.ApplyMethod(reflect.TypeOf(&client.Client{}), "DoRequest", func(_ *client.Client, _ *string, _ *string, _ *string, _ *string, _ *string, _ map[string]interface{}, _ map[string]interface{}, _ *util.RuntimeOptions) (map[string]interface{}, error) {
 			return responseMock["UpdateNormal"]("")
 		})
-		err := resourceAlicloudDbfsSnapshotUpdate(resourceData1, rawClient)
+		err := resourceAliCloudDbfsSnapshotUpdate(resourceData1, rawClient)
 		patches.Reset()
 		assert.Nil(t, err)
 	})
@@ -434,7 +406,7 @@ func TestAccAlicloudDBFSSnapshot_unit(t *testing.T) {
 				StatusCode: tea.Int(400),
 			}
 		})
-		err := resourceAlicloudDbfsSnapshotDelete(d, rawClient)
+		err := resourceAliCloudDbfsSnapshotDelete(d, rawClient)
 		patches.Reset()
 		assert.NotNil(t, err)
 	})
@@ -452,7 +424,7 @@ func TestAccAlicloudDBFSSnapshot_unit(t *testing.T) {
 			}
 			return responseMock["DeleteNormal"]("")
 		})
-		err := resourceAlicloudDbfsSnapshotDelete(d, rawClient)
+		err := resourceAliCloudDbfsSnapshotDelete(d, rawClient)
 		patches.Reset()
 		assert.NotNil(t, err)
 	})
@@ -470,7 +442,7 @@ func TestAccAlicloudDBFSSnapshot_unit(t *testing.T) {
 		patchDescribe := gomonkey.ApplyMethod(reflect.TypeOf(&DbfsService{}), "DescribeDbfsSnapshot", func(*DbfsService, string) (map[string]interface{}, error) {
 			return responseMock["NoRetryError"]("NoRetryError")
 		})
-		err := resourceAlicloudDbfsSnapshotDelete(d, rawClient)
+		err := resourceAliCloudDbfsSnapshotDelete(d, rawClient)
 		patches.Reset()
 		patchDescribe.Reset()
 		assert.NotNil(t, err)
@@ -487,7 +459,7 @@ func TestAccAlicloudDBFSSnapshot_unit(t *testing.T) {
 			}
 			return responseMock["DeleteNormal"]("")
 		})
-		err := resourceAlicloudDbfsSnapshotDelete(d, rawClient)
+		err := resourceAliCloudDbfsSnapshotDelete(d, rawClient)
 		patches.Reset()
 		assert.NotNil(t, err)
 	})
@@ -504,7 +476,7 @@ func TestAccAlicloudDBFSSnapshot_unit(t *testing.T) {
 			}
 			return responseMock["ReadNormal"]("")
 		})
-		err := resourceAlicloudDbfsSnapshotRead(d, rawClient)
+		err := resourceAliCloudDbfsSnapshotRead(d, rawClient)
 		patchRequest.Reset()
 		assert.Nil(t, err)
 	})
@@ -519,7 +491,7 @@ func TestAccAlicloudDBFSSnapshot_unit(t *testing.T) {
 			}
 			return responseMock["ReadNormal"]("")
 		})
-		err := resourceAlicloudDbfsSnapshotRead(d, rawClient)
+		err := resourceAliCloudDbfsSnapshotRead(d, rawClient)
 		patcheDorequest.Reset()
 		assert.NotNil(t, err)
 	})

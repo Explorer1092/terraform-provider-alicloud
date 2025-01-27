@@ -21,15 +21,85 @@ Copies a custom image from one region to another. You can use copied images to p
 
 ## Example Usage
 
-```
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_image_copy&exampleId=42d87a67-8b5a-f558-c48e-b4c3970e8fe954386fd7&activeTab=example&spm=docs.r.image_copy.0.42d87a678b&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
+```terraform
+provider "alicloud" {
+  alias  = "sh"
+  region = "cn-shanghai"
+}
+provider "alicloud" {
+  alias  = "hz"
+  region = "cn-hangzhou"
+}
+
+data "alicloud_zones" "default" {
+  provider                    = alicloud.hz
+  available_resource_creation = "Instance"
+}
+
+data "alicloud_instance_types" "default" {
+  provider             = alicloud.hz
+  instance_type_family = "ecs.sn1ne"
+}
+
+data "alicloud_images" "default" {
+  provider   = alicloud.hz
+  name_regex = "^ubuntu_18.*64"
+  owners     = "system"
+}
+
+resource "alicloud_vpc" "default" {
+  provider   = alicloud.hz
+  vpc_name   = "terraform-example"
+  cidr_block = "172.17.3.0/24"
+}
+
+resource "alicloud_vswitch" "default" {
+  provider     = alicloud.hz
+  vswitch_name = "terraform-example"
+  cidr_block   = "172.17.3.0/24"
+  vpc_id       = alicloud_vpc.default.id
+  zone_id      = data.alicloud_zones.default.zones.0.id
+}
+
+resource "alicloud_security_group" "default" {
+  provider = alicloud.hz
+  name     = "terraform-example"
+  vpc_id   = alicloud_vpc.default.id
+}
+
+resource "alicloud_instance" "default" {
+  provider                   = alicloud.hz
+  availability_zone          = data.alicloud_zones.default.zones.0.id
+  instance_name              = "terraform-example"
+  security_groups            = [alicloud_security_group.default.id]
+  vswitch_id                 = alicloud_vswitch.default.id
+  instance_type              = data.alicloud_instance_types.default.ids[0]
+  image_id                   = data.alicloud_images.default.ids[0]
+  internet_max_bandwidth_out = 10
+}
+
+resource "alicloud_image" "default" {
+  provider    = alicloud.hz
+  instance_id = alicloud_instance.default.id
+  image_name  = "terraform-example"
+  description = "terraform-example"
+}
+
 resource "alicloud_image_copy" "default" {
-  source_image_id    = "m-bp1gxyhdswlsn18tu***"
-  source_region_id   = "cn-hangzhou"
-  image_name         = "test-image"
-  description        = "test-image"
-  tags               = {
-         FinanceDept = "FinanceDeptJoshua"
-     }
+  provider         = alicloud.sh
+  source_image_id  = alicloud_image.default.id
+  source_region_id = "cn-hangzhou"
+  image_name       = "terraform-example"
+  description      = "terraform-example"
+  tags = {
+    FinanceDept = "FinanceDeptJoshua"
+  }
 }
 ```
 
@@ -66,6 +136,6 @@ The `timeouts` block allows you to specify [timeouts](https://www.terraform.io/d
  
 image can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_image_copy.default m-uf66871ape***yg1q***
 ```

@@ -89,14 +89,16 @@ func testSweepAlbSecurityPolicy(region string) error {
 			}
 
 			skip := true
-			for _, prefix := range prefixes {
-				if strings.HasPrefix(strings.ToLower(item["SecurityPolicyName"].(string)), strings.ToLower(prefix)) {
-					skip = false
+			if !sweepAll() {
+				for _, prefix := range prefixes {
+					if strings.HasPrefix(strings.ToLower(item["SecurityPolicyName"].(string)), strings.ToLower(prefix)) {
+						skip = false
+					}
 				}
-			}
-			if skip {
-				log.Printf("[INFO] Skipping ALB Security Policy: %s", item["SecurityPolicyName"].(string))
-				continue
+				if skip {
+					log.Printf("[INFO] Skipping ALB Security Policy: %s", item["SecurityPolicyName"].(string))
+					continue
+				}
 			}
 			action := "DeleteSecurityPolicy"
 			request := map[string]interface{}{
@@ -309,7 +311,7 @@ data "alicloud_resource_manager_resource_groups" "default" {}
 `, name)
 }
 
-func TestAccAlicloudALBSecurityPolicy_unit(t *testing.T) {
+func TestUnitAlicloudALBSecurityPolicy(t *testing.T) {
 	p := Provider().(*schema.Provider).ResourcesMap
 	d, _ := schema.InternalMap(p["alicloud_alb_security_policy"].Schema).Data(nil, nil)
 	dCreate, _ := schema.InternalMap(p["alicloud_alb_security_policy"].Schema).Data(nil, nil)

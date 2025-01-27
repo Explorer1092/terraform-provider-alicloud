@@ -1,5 +1,5 @@
 ---
-subcategory: "Serverless Workflow"
+subcategory: "Serverless Workflow (FnF)"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_fnf_execution"
 sidebar_current: "docs-alicloud-resource-fnf-execution"
@@ -7,21 +7,31 @@ description: |-
   Provides a Alicloud Serverless Workflow Execution resource.
 ---
 
-# alicloud\_fnf\_execution
+# alicloud_fnf_execution
 
 Provides a Serverless Workflow Execution resource.
 
 For information about Serverless Workflow Execution and how to use it, see [What is Execution](https://www.alibabacloud.com/help/en/doc-detail/122628.html).
 
--> **NOTE:** Available in v1.149.0+.
+-> **NOTE:** Available since v1.149.0+.
 
 ## Example Usage
 
 Basic Usage
 
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_fnf_execution&exampleId=6141d824-e267-2cd5-942e-7b613c3b93af47e5c8cf&activeTab=example&spm=docs.r.fnf_execution.0.6141d824e2&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
 ```terraform
+provider "alicloud" {
+  region = "cn-shanghai"
+}
+
 variable "name" {
-  default = "tf-testacc-fnfflow"
+  default = "tf-example-fnfflow"
 }
 
 resource "alicloud_ram_role" "default" {
@@ -81,7 +91,7 @@ The following attributes are exported:
 
 * `id` - The resource ID of Execution. The value formats as `<flow_name>:<execution_name>`.
 
-### Timeouts
+## Timeouts
 
 The `timeouts` block allows you to specify [timeouts](https://www.terraform.io/docs/configuration-0-11/resources.html#timeouts) for certain actions:
 
@@ -92,6 +102,6 @@ The `timeouts` block allows you to specify [timeouts](https://www.terraform.io/d
 
 Serverless Workflow Execution can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_fnf_execution.example <flow_name>:<execution_name>
 ```

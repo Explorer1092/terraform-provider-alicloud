@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"regexp"
+	"sort"
 	"strings"
 
 	"time"
@@ -123,6 +124,7 @@ func (s *EcsService) DescribeInstance(id string) (instance ecs.Instance, err err
 	request := ecs.CreateDescribeInstancesRequest()
 	request.RegionId = s.client.RegionId
 	request.InstanceIds = convertListToJsonString([]interface{}{id})
+	request.AdditionalAttributes = &[]string{"META_OPTIONS", "NETWORK_PRIMARY_ENI_IP", "LOGIN_AS_NON_ROOT"}
 
 	var response *ecs.DescribeInstancesResponse
 	wait := incrementalWait(1*time.Second, 1*time.Second)
@@ -173,13 +175,19 @@ func (s *EcsService) DescribeInstanceAttribute(id string) (instance ecs.Describe
 	return *response, nil
 }
 
-func (s *EcsService) DescribeInstanceSystemDisk(id, rg string) (disk ecs.Disk, err error) {
+func (s *EcsService) DescribeInstanceSystemDisk(instanceId, rg, diskId string) (disk ecs.Disk, err error) {
 	request := ecs.CreateDescribeDisksRequest()
-	request.InstanceId = id
-	request.DiskType = string(DiskTypeSystem)
+	if diskId != "" {
+		request.DiskIds = convertListToJsonString([]interface{}{diskId})
+	} else {
+		request.InstanceId = instanceId
+		request.DiskType = string(DiskTypeSystem)
+		// resource_group_id may cause failure to query the system disk of the instance, because the newly created instance may fail to query through the resource_group_id parameter, so temporarily remove this parameter.
+		if rg != "" {
+			request.ResourceGroupId = rg
+		}
+	}
 	request.RegionId = s.client.RegionId
-	// resource_group_id may cause failure to query the system disk of the instance, because the newly created instance may fail to query through the resource_group_id parameter, so temporarily remove this parameter.
-	// request.ResourceGroupId = rg
 	var response *ecs.DescribeDisksResponse
 	wait := incrementalWait(1*time.Second, 1*time.Second)
 	err = resource.Retry(10*time.Minute, func() *resource.RetryError {
@@ -199,10 +207,10 @@ func (s *EcsService) DescribeInstanceSystemDisk(id, rg string) (disk ecs.Disk, e
 		return nil
 	})
 	if err != nil {
-		return disk, WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR)
+		return disk, WrapErrorf(err, DefaultErrorMsg, instanceId, request.GetActionName(), AlibabaCloudSdkGoERROR)
 	}
-	if len(response.Disks.Disk) < 1 || response.Disks.Disk[0].InstanceId != id {
-		return disk, WrapErrorf(Error(GetNotFoundMessage("Instance", id)), NotFoundMsg, ProviderERROR, response.RequestId)
+	if len(response.Disks.Disk) < 1 {
+		return disk, WrapErrorf(Error(GetNotFoundMessage("Instance", instanceId+" system disk")), NotFoundWithResponse, response)
 	}
 	return response.Disks.Disk[0], nil
 }
@@ -266,16 +274,19 @@ func (s *EcsService) DescribeSecurityGroup(id string) (group ecs.DescribeSecurit
 	request := ecs.CreateDescribeSecurityGroupAttributeRequest()
 	request.SecurityGroupId = id
 	request.RegionId = s.client.RegionId
+
 	raw, err := s.client.WithEcsClient(func(ecsClient *ecs.Client) (interface{}, error) {
 		return ecsClient.DescribeSecurityGroupAttribute(request)
 	})
+	addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+
 	if err != nil {
 		if IsExpectedErrors(err, []string{"InvalidSecurityGroupId.NotFound"}) {
 			err = WrapErrorf(err, NotFoundMsg, AlibabaCloudSdkGoERROR)
 		}
 		return
 	}
-	addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+
 	response, _ := raw.(*ecs.DescribeSecurityGroupAttributeResponse)
 	if response.SecurityGroupId != id {
 		err = WrapErrorf(Error(GetNotFoundMessage("Security Group", id)), NotFoundMsg, ProviderERROR, response.RequestId)
@@ -335,6 +346,7 @@ func (s *EcsService) DescribeSecurityGroupRule(id string) (rule ecs.Permission, 
 		return rule, WrapError(err)
 	}
 	groupId, direction, ipProtocol, portRange, nicType, cidr_ip, policy := parts[0], parts[1], parts[2], parts[3], parts[4], parts[5], parts[6]
+	cidr_ip = strings.Replace(cidr_ip, "_", ":", -1)
 	priority, err := strconv.Atoi(parts[7])
 	if err != nil {
 		return rule, WrapError(err)
@@ -361,17 +373,30 @@ func (s *EcsService) DescribeSecurityGroupRule(id string) (rule ecs.Permission, 
 
 	for _, ru := range response.Permissions.Permission {
 		if strings.ToLower(string(ru.IpProtocol)) == ipProtocol && ru.PortRange == portRange {
-			cidr := ru.SourceCidrIp
-			if direction == string(DirectionIngress) && cidr == "" {
-				cidr = ru.SourceGroupId
+
+			var cidr string
+			var prefixListId string
+			if direction == string(DirectionIngress) {
+				if cidr = ru.SourceCidrIp; cidr == "" {
+					cidr = ru.SourceGroupId
+				}
+				if cidr == "" {
+					cidr = ru.Ipv6SourceCidrIp
+				}
+				prefixListId = ru.SourcePrefixListId
 			}
+
 			if direction == string(DirectionEgress) {
 				if cidr = ru.DestCidrIp; cidr == "" {
 					cidr = ru.DestGroupId
 				}
+				if cidr == "" {
+					cidr = ru.Ipv6DestCidrIp
+				}
+				prefixListId = ru.DestPrefixListId
 			}
 
-			if cidr == cidr_ip && strings.ToLower(string(ru.Policy)) == policy && ru.Priority == strconv.Itoa(priority) {
+			if (cidr == cidr_ip || prefixListId == cidr_ip) && strings.ToLower(string(ru.Policy)) == policy && ru.Priority == strconv.Itoa(priority) {
 				return ru, nil
 			}
 		}
@@ -783,13 +808,15 @@ func (s *EcsService) updateImage(d *schema.ResourceData) error {
 		raw, err := s.client.WithEcsClient(func(ecsClient *ecs.Client) (interface{}, error) {
 			return ecsClient.ModifyImageAttribute(request)
 		})
+		addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+
 		if err != nil {
 			return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
 		}
+
 		d.SetPartial("name")
 		d.SetPartial("image_name")
 		d.SetPartial("description")
-		addDebug(request.GetActionName(), raw, request.RpcRequest, request)
 	}
 
 	d.Partial(false)
@@ -820,52 +847,88 @@ func (s *EcsService) DescribeNetworkInterface(id string) (networkInterface ecs.N
 }
 
 func (s *EcsService) DescribeEcsNetworkInterfaceAttachment(id string) (object map[string]interface{}, err error) {
-	parts, err := ParseResourceId(id, 2)
-
 	var response map[string]interface{}
+	action := "DescribeNetworkInterfaces"
+
 	conn, err := s.client.NewEcsClient()
 	if err != nil {
 		return nil, WrapError(err)
 	}
-	action := "DescribeNetworkInterfaces"
+
+	parts, err := ParseResourceId(id, 2)
+	if err != nil {
+		return nil, WrapError(err)
+	}
+
 	request := map[string]interface{}{
 		"RegionId":           s.client.RegionId,
 		"NetworkInterfaceId": []string{parts[0]},
-		"InstanceId":         parts[1],
+		"MaxResults":         PageSizeXLarge,
 	}
-	runtime := util.RuntimeOptions{}
-	runtime.SetAutoretry(true)
-	wait := incrementalWait(3*time.Second, 3*time.Second)
-	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
-		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2014-05-26"), StringPointer("AK"), nil, request, &runtime)
-		if err != nil {
-			if NeedRetry(err) {
-				wait()
-				return resource.RetryableError(err)
+
+	idExist := false
+	for {
+		runtime := util.RuntimeOptions{}
+		runtime.SetAutoretry(true)
+		wait := incrementalWait(3*time.Second, 3*time.Second)
+		err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+			response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2014-05-26"), StringPointer("AK"), nil, request, &runtime)
+			if err != nil {
+				if NeedRetry(err) {
+					wait()
+					return resource.RetryableError(err)
+				}
+				return resource.NonRetryableError(err)
 			}
-			return resource.NonRetryableError(err)
-		}
+			return nil
+		})
 		addDebug(action, response, request)
-		return nil
-	})
-	if err != nil {
-		if IsExpectedErrors(err, []string{"InvalidEcsId.NotFound", "InvalidEniId.NotFound", "InvalidSecurityGroupId.NotFound", "InvalidVSwitchId.NotFound"}) {
-			return object, WrapErrorf(Error(GetNotFoundMessage("ECS:NetworkInterface", id)), NotFoundMsg, ProviderERROR, fmt.Sprint(response["RequestId"]))
+
+		if err != nil {
+			if IsExpectedErrors(err, []string{"InvalidEcsId.NotFound", "InvalidEniId.NotFound", "InvalidSecurityGroupId.NotFound", "InvalidVSwitchId.NotFound"}) {
+				return object, WrapErrorf(Error(GetNotFoundMessage("Ecs:NetworkInterfaceAttachment", id)), NotFoundMsg, ProviderERROR, fmt.Sprint(response["RequestId"]))
+			}
+			return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
 		}
-		return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
-	}
-	v, err := jsonpath.Get("$.NetworkInterfaceSets.NetworkInterfaceSet", response)
-	if err != nil {
-		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$.NetworkInterfaceSets.NetworkInterfaceSet", response)
-	}
-	if len(v.([]interface{})) < 1 {
-		return object, WrapErrorf(Error(GetNotFoundMessage("ECS", id)), NotFoundWithResponse, response)
-	} else {
-		if v.([]interface{})[0].(map[string]interface{})["NetworkInterfaceId"].(string) != parts[0] {
-			return object, WrapErrorf(Error(GetNotFoundMessage("ECS", id)), NotFoundWithResponse, response)
+
+		resp, err := jsonpath.Get("$.NetworkInterfaceSets.NetworkInterfaceSet", response)
+		if err != nil {
+			return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$.NetworkInterfaceSets.NetworkInterfaceSet", response)
+		}
+
+		if v, ok := resp.([]interface{}); !ok || len(v) < 1 {
+			return object, WrapErrorf(Error(GetNotFoundMessage("Ecs:NetworkInterfaceAttachment", id)), NotFoundWithResponse, response)
+		}
+
+		for _, v := range resp.([]interface{}) {
+			if fmt.Sprint(v.(map[string]interface{})["Type"]) == "Member" || fmt.Sprint(v.(map[string]interface{})["Type"]) == "slave" {
+				if attachment, ok := v.(map[string]interface{})["Attachment"]; ok {
+					attachmentArg := attachment.(map[string]interface{})
+
+					if fmt.Sprint(v.(map[string]interface{})["NetworkInterfaceId"]) == parts[0] && fmt.Sprint(attachmentArg["InstanceId"]) == parts[1] {
+						idExist = true
+						return v.(map[string]interface{}), nil
+					}
+				}
+			}
+
+			if fmt.Sprint(v.(map[string]interface{})["NetworkInterfaceId"]) == parts[0] && fmt.Sprint(v.(map[string]interface{})["InstanceId"]) == parts[1] {
+				idExist = true
+				return v.(map[string]interface{}), nil
+			}
+		}
+
+		if nextToken, ok := response["NextToken"].(string); ok && nextToken != "" {
+			request["NextToken"] = nextToken
+		} else {
+			break
 		}
 	}
-	object = v.([]interface{})[0].(map[string]interface{})
+
+	if !idExist {
+		return object, WrapErrorf(Error(GetNotFoundMessage("Ecs:NetworkInterfaceAttachment", id)), NotFoundWithResponse, response)
+	}
+
 	return object, nil
 }
 
@@ -1023,7 +1086,7 @@ func (s *EcsService) QueryPrivateIps(eniId string) ([]string, error) {
 }
 
 func (s *EcsService) WaitForVpcAttributesChanged(instanceId, vswitchId, privateIp string) error {
-	deadline := time.Now().Add(DefaultTimeout * time.Second)
+	deadline := time.Now().Add(5 * time.Minute)
 	for {
 		if time.Now().After(deadline) {
 			return WrapError(Error("Wait for VPC attributes changed timeout"))
@@ -1035,11 +1098,13 @@ func (s *EcsService) WaitForVpcAttributesChanged(instanceId, vswitchId, privateI
 			return WrapError(err)
 		}
 
-		if instance.VpcAttributes.PrivateIpAddress.IpAddress[0] != privateIp {
-			continue
+		if len(privateIp) > 0 && len(instance.VpcAttributes.PrivateIpAddress.IpAddress) > 0 {
+			if instance.VpcAttributes.PrivateIpAddress.IpAddress[0] != privateIp {
+				continue
+			}
 		}
 
-		if instance.VpcAttributes.VSwitchId != vswitchId {
+		if len(vswitchId) > 0 && instance.VpcAttributes.VSwitchId != vswitchId {
 			continue
 		}
 
@@ -1281,31 +1346,6 @@ func (s *EcsService) DescribeReservedInstance(id string) (reservedInstance ecs.R
 		return reservedInstance, GetNotFoundErrorFromString(GetNotFoundMessage("PurchaseReservedInstance", id))
 	}
 	return response.ReservedInstances.ReservedInstance[0], nil
-}
-
-func (s *EcsService) WaitForReservedInstance(id string, status Status, timeout int) error {
-	deadLine := time.Now().Add(time.Duration(timeout) * time.Second)
-	for {
-		reservedInstance, err := s.DescribeReservedInstance(id)
-		if err != nil {
-			if NotFoundError(err) {
-				if status == Deleted {
-					return nil
-				}
-			} else {
-				return WrapError(err)
-			}
-		}
-
-		if reservedInstance.Status == string(status) {
-			return nil
-		}
-
-		if time.Now().After(deadLine) {
-			return WrapErrorf(GetTimeErrorFromString("ECS WaitForSnapshotPolicy"), WaitTimeoutMsg, id, GetFunc(1), timeout, reservedInstance.Status, string(status), ProviderERROR)
-		}
-		time.Sleep(DefaultIntervalShort * time.Second)
-	}
 }
 
 func (s *EcsService) DescribeLaunchTemplate(id string) (set ecs.LaunchTemplateSet, err error) {
@@ -1817,7 +1857,7 @@ func (s *EcsService) EcsAutoSnapshotPolicyStateRefreshFunc(id string, failStates
 	}
 }
 
-func (s *EcsService) DescribeLaunchTemplateVersions(id string) (object []interface{}, err error) {
+func (s *EcsService) DescribeLaunchTemplateVersions(id string, version interface{}) (object map[string]interface{}, err error) {
 	var response map[string]interface{}
 	conn, err := s.client.NewEcsClient()
 	if err != nil {
@@ -1825,8 +1865,9 @@ func (s *EcsService) DescribeLaunchTemplateVersions(id string) (object []interfa
 	}
 	action := "DescribeLaunchTemplateVersions"
 	request := map[string]interface{}{
-		"RegionId":         s.client.RegionId,
-		"LaunchTemplateId": id,
+		"RegionId":              s.client.RegionId,
+		"LaunchTemplateId":      id,
+		"LaunchTemplateVersion": []interface{}{version},
 	}
 	runtime := util.RuntimeOptions{}
 	runtime.SetAutoretry(true)
@@ -1851,7 +1892,7 @@ func (s *EcsService) DescribeLaunchTemplateVersions(id string) (object []interfa
 			return object, WrapErrorf(Error(GetNotFoundMessage("ECS", id)), NotFoundWithResponse, response)
 		}
 	}
-	object = v.([]interface{})
+	object = v.([]interface{})[0].(map[string]interface{})
 	return object, nil
 }
 
@@ -1971,43 +2012,77 @@ func (s *EcsService) DescribeEcsLaunchTemplate(id string) (object map[string]int
 
 func (s *EcsService) DescribeEcsSnapshot(id string) (object map[string]interface{}, err error) {
 	var response map[string]interface{}
+	action := "DescribeSnapshots"
+
 	conn, err := s.client.NewEcsClient()
 	if err != nil {
 		return nil, WrapError(err)
 	}
-	action := "DescribeSnapshots"
+
 	ids, err := json.Marshal([]string{id})
 	if err != nil {
 		return object, err
 	}
+
 	request := map[string]interface{}{
 		"RegionId":    s.client.RegionId,
 		"SnapshotIds": string(ids),
+		"PageSize":    PageSizeLarge,
+		"PageNumber":  1,
 	}
-	runtime := util.RuntimeOptions{}
-	runtime.SetAutoretry(true)
-	response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2014-05-26"), StringPointer("AK"), nil, request, &runtime)
-	if err != nil {
-		if IsExpectedErrors(err, []string{"InvalidFilterKey.NotFound", "InvalidFilterValue", "InvalidSnapshotIds.Malformed,InvalidStatus.NotFound,InvalidSnapshotType.NotFound", "InvalidSnapshotLinkId.NotFound", "InvalidSnapshotType.NotFound", "InvalidSourceDiskType", "InvalidStatus.NotFound", "InvalidUsage"}) {
-			err = WrapErrorf(Error(GetNotFoundMessage("EcsSnapshot", id)), NotFoundMsg, ProviderERROR)
-			return object, err
+
+	idExist := false
+	for {
+		runtime := util.RuntimeOptions{}
+		runtime.SetAutoretry(true)
+		wait := incrementalWait(3*time.Second, 5*time.Second)
+		err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+			response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2014-05-26"), StringPointer("AK"), nil, request, &runtime)
+			if err != nil {
+				if NeedRetry(err) {
+					wait()
+					return resource.RetryableError(err)
+				}
+				return resource.NonRetryableError(err)
+			}
+			return nil
+		})
+		addDebug(action, response, request)
+
+		if err != nil {
+			if IsExpectedErrors(err, []string{"InvalidFilterKey.NotFound", "InvalidFilterValue", "InvalidSnapshotIds.Malformed,InvalidStatus.NotFound,InvalidSnapshotType.NotFound", "InvalidSnapshotLinkId.NotFound", "InvalidSnapshotType.NotFound", "InvalidSourceDiskType", "InvalidStatus.NotFound", "InvalidUsage"}) {
+				return object, WrapErrorf(Error(GetNotFoundMessage("Ecs:Snapshot", id)), NotFoundWithResponse, response)
+			}
+			return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
 		}
-		err = WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
-		return object, err
-	}
-	addDebug(action, response, request)
-	v, err := jsonpath.Get("$.Snapshots.Snapshot", response)
-	if err != nil {
-		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$.Snapshots.Snapshot", response)
-	}
-	if len(v.([]interface{})) < 1 {
-		return object, WrapErrorf(Error(GetNotFoundMessage("ECS", id)), NotFoundWithResponse, response)
-	} else {
-		if v.([]interface{})[0].(map[string]interface{})["SnapshotId"].(string) != id {
-			return object, WrapErrorf(Error(GetNotFoundMessage("ECS", id)), NotFoundWithResponse, response)
+
+		resp, err := jsonpath.Get("$.Snapshots.Snapshot", response)
+		if err != nil {
+			return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$.Snapshots.Snapshot", response)
 		}
+
+		if v, ok := resp.([]interface{}); !ok || len(v) < 1 {
+			return object, WrapErrorf(Error(GetNotFoundMessage("Ecs:Snapshot", id)), NotFoundWithResponse, response)
+		}
+
+		for _, v := range resp.([]interface{}) {
+			if fmt.Sprint(v.(map[string]interface{})["SnapshotId"]) == id {
+				idExist = true
+				return v.(map[string]interface{}), nil
+			}
+		}
+
+		if len(resp.([]interface{})) < request["PageSize"].(int) {
+			break
+		}
+
+		request["PageNumber"] = request["PageNumber"].(int) + 1
 	}
-	object = v.([]interface{})[0].(map[string]interface{})
+
+	if !idExist {
+		return object, WrapErrorf(Error(GetNotFoundMessage("Ecs:Snapshot", id)), NotFoundWithResponse, response)
+	}
+
 	return object, nil
 }
 
@@ -2027,6 +2102,7 @@ func (s *EcsService) EcsSnapshotStateRefreshFunc(id string, failStates []string)
 				return object, object["Status"].(string), WrapError(Error(FailedToReachTargetStatus, object["Status"].(string)))
 			}
 		}
+
 		return object, object["Status"].(string), nil
 	}
 }
@@ -2152,10 +2228,10 @@ func (s *EcsService) DescribeEcsDisk(id string) (object map[string]interface{}, 
 		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$.Disks.Disk", response)
 	}
 	if len(v.([]interface{})) < 1 {
-		return object, WrapErrorf(Error(GetNotFoundMessage("ECS", id)), NotFoundWithResponse, response)
+		return object, WrapErrorf(Error(GetNotFoundMessage("ECS:Disk", id)), NotFoundWithResponse, response)
 	} else {
 		if v.([]interface{})[0].(map[string]interface{})["DiskId"].(string) != id {
-			return object, WrapErrorf(Error(GetNotFoundMessage("ECS", id)), NotFoundWithResponse, response)
+			return object, WrapErrorf(Error(GetNotFoundMessage("ECS:Disk", id)), NotFoundWithResponse, response)
 		}
 	}
 	object = v.([]interface{})[0].(map[string]interface{})
@@ -2179,6 +2255,20 @@ func (s *EcsService) EcsDiskStateRefreshFunc(id string, failStates []string) res
 			}
 		}
 		return object, fmt.Sprint(object["Status"]), nil
+	}
+}
+
+func (s *EcsService) EcsDiskPropertyRefreshFunc(id, property string) resource.StateRefreshFunc {
+	return func() (interface{}, string, error) {
+		object, err := s.DescribeEcsDisk(id)
+		if err != nil {
+			if NotFoundError(err) {
+				// Set this to nil as if we didn't find anything.
+				return nil, "", nil
+			}
+			return nil, "", WrapError(err)
+		}
+		return object, fmt.Sprint(object[property]), nil
 	}
 }
 
@@ -2245,6 +2335,7 @@ func (s *EcsService) EcsNetworkInterfaceStateRefreshFunc(id string, failStates [
 				return object, fmt.Sprint(object["Status"]), WrapError(Error(FailedToReachTargetStatus, fmt.Sprint(object["Status"])))
 			}
 		}
+
 		return object, fmt.Sprint(object["Status"]), nil
 	}
 }
@@ -2351,14 +2442,17 @@ func (s *EcsService) DescribeEcsDedicatedHostCluster(id string) (object map[stri
 
 func (s *EcsService) DescribeEcsSessionManagerStatus(id string) (object map[string]interface{}, err error) {
 	var response map[string]interface{}
+	action := "DescribeUserBusinessBehavior"
+
 	conn, err := s.client.NewEcsClient()
 	if err != nil {
 		return nil, WrapError(err)
 	}
-	action := "DescribeUserBusinessBehavior"
+
 	request := map[string]interface{}{
 		"statusKey": id,
 	}
+
 	runtime := util.RuntimeOptions{}
 	runtime.SetAutoretry(true)
 	wait := incrementalWait(3*time.Second, 3*time.Second)
@@ -2374,15 +2468,40 @@ func (s *EcsService) DescribeEcsSessionManagerStatus(id string) (object map[stri
 		return nil
 	})
 	addDebug(action, response, request)
+
 	if err != nil {
 		return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
 	}
+
 	v, err := jsonpath.Get("$", response)
 	if err != nil {
 		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$", response)
 	}
+
 	object = v.(map[string]interface{})
+
 	return object, nil
+}
+
+func (s *EcsService) EcsSessionManagerStatusStateRefreshFunc(id string, failStates []string) resource.StateRefreshFunc {
+	return func() (interface{}, string, error) {
+		object, err := s.DescribeEcsSessionManagerStatus(id)
+		if err != nil {
+			if NotFoundError(err) {
+				// Set this to nil as if we didn't find anything.
+				return nil, "", nil
+			}
+			return nil, "", WrapError(err)
+		}
+
+		for _, failState := range failStates {
+			if fmt.Sprint(object["StatusValue"]) == failState {
+				return object, object["StatusValue"].(string), WrapError(Error(FailedToReachTargetStatus, object["StatusValue"].(string)))
+			}
+		}
+
+		return object, fmt.Sprint(object["StatusValue"]), nil
+	}
 }
 
 func (s *EcsService) DescribeEcsPrefixList(id string) (object map[string]interface{}, err error) {
@@ -2713,4 +2832,998 @@ func (s *EcsService) EcsNetworkInterfacePermissionStateRefreshFunc(id string, fa
 		}
 		return object, fmt.Sprint(object["PermissionState"]), nil
 	}
+}
+
+func (s *EcsService) DescribeEcsInvocation(id string) (object map[string]interface{}, err error) {
+	var response map[string]interface{}
+	conn, err := s.client.NewEcsClient()
+	if err != nil {
+		return nil, WrapError(err)
+	}
+	action := "DescribeInvocations"
+	request := map[string]interface{}{
+		"RegionId": s.client.RegionId,
+		"InvokeId": id,
+	}
+	runtime := util.RuntimeOptions{}
+	runtime.SetAutoretry(true)
+	wait := incrementalWait(3*time.Second, 3*time.Second)
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2014-05-26"), StringPointer("AK"), nil, request, &runtime)
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		return nil
+	})
+	addDebug(action, response, request)
+	if err != nil {
+		return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
+	}
+	v, err := jsonpath.Get("$.Invocations.Invocation", response)
+	if err != nil {
+		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$.Invocations.Invocation", response)
+	}
+	if len(v.([]interface{})) < 1 {
+		return object, WrapErrorf(Error(GetNotFoundMessage("ECS", id)), NotFoundWithResponse, response)
+	} else {
+		if fmt.Sprint(v.([]interface{})[0].(map[string]interface{})["InvokeId"]) != id {
+			return object, WrapErrorf(Error(GetNotFoundMessage("ECS", id)), NotFoundWithResponse, response)
+		}
+	}
+	object = v.([]interface{})[0].(map[string]interface{})
+	return object, nil
+}
+
+func (s *EcsService) EcsInvocationStateRefreshFunc(id string, failStates []string) resource.StateRefreshFunc {
+	return func() (interface{}, string, error) {
+		object, err := s.DescribeEcsInvocation(id)
+		if err != nil {
+			if NotFoundError(err) {
+				// Set this to nil as if we didn't find anything.
+				return nil, "", nil
+			}
+			return nil, "", WrapError(err)
+		}
+
+		for _, failState := range failStates {
+			if fmt.Sprint(object["InvocationStatus"]) == failState {
+				return object, fmt.Sprint(object["InvocationStatus"]), WrapError(Error(FailedToReachTargetStatus, fmt.Sprint(object["InvocationStatus"])))
+			}
+		}
+		return object, fmt.Sprint(object["InvocationStatus"]), nil
+	}
+}
+
+func (s *EcsService) DescribeEcsSystemDisk(id string) (object map[string]interface{}, err error) {
+	var response map[string]interface{}
+	conn, err := s.client.NewEcsClient()
+	if err != nil {
+		return nil, WrapError(err)
+	}
+	action := "DescribeDisks"
+	request := map[string]interface{}{
+		"RegionId":   s.client.RegionId,
+		"InstanceId": id,
+		"DiskType":   "system",
+	}
+	runtime := util.RuntimeOptions{}
+	runtime.SetAutoretry(true)
+	wait := incrementalWait(3*time.Second, 3*time.Second)
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2014-05-26"), StringPointer("AK"), nil, request, &runtime)
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		addDebug(action, response, request)
+		return nil
+	})
+	if err != nil {
+		if IsExpectedErrors(err, []string{"InvalidDiskChargeType.NotFound", "InvalidDiskIds.ValueNotSupported", "InvalidFilterKey.NotFound", "InvalidFilterValue", "InvalidLockReason.NotFound"}) {
+			return object, WrapErrorf(Error(GetNotFoundMessage("ECS:Disk", id)), NotFoundMsg, ProviderERROR, fmt.Sprint(response["RequestId"]))
+		}
+		return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
+	}
+	v, err := jsonpath.Get("$.Disks.Disk", response)
+	if err != nil {
+		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$.Disks.Disk", response)
+	}
+	if len(v.([]interface{})) < 1 {
+		return object, WrapErrorf(Error(GetNotFoundMessage("ECS", id)), NotFoundWithResponse, response)
+	} else {
+		if v.([]interface{})[0].(map[string]interface{})["InstanceId"].(string) != id {
+			return object, WrapErrorf(Error(GetNotFoundMessage("ECS", id)), NotFoundWithResponse, response)
+		}
+	}
+	object = v.([]interface{})[0].(map[string]interface{})
+	return object, nil
+}
+
+func (s *EcsService) SetInstanceSetResourceTags(d *schema.ResourceData, resourceType string, instanceIds []string) error {
+
+	if d.HasChange("tags") {
+		added, removed := parsingTags(d)
+		conn, err := s.client.NewEcsClient()
+		if err != nil {
+			return WrapError(err)
+		}
+
+		removedTagKeys := make([]string, 0)
+		for _, v := range removed {
+			if !ignoredTags(v, "") {
+				removedTagKeys = append(removedTagKeys, v)
+			}
+		}
+
+		instanceIdChunks := SplitSlice(convertListStringToListInterface(instanceIds), 50)
+		for _, instanceIdChunk := range instanceIdChunks {
+
+			if len(removedTagKeys) > 0 {
+				action := "UntagResources"
+				request := map[string]interface{}{
+					"RegionId":     s.client.RegionId,
+					"ResourceType": resourceType,
+				}
+				for i, key := range instanceIdChunk {
+					request[fmt.Sprintf("ResourceId.%d", i+1)] = key
+				}
+				for i, key := range removedTagKeys {
+					request[fmt.Sprintf("TagKey.%d", i+1)] = key
+				}
+				wait := incrementalWait(2*time.Second, 1*time.Second)
+				err := resource.Retry(10*time.Minute, func() *resource.RetryError {
+					response, err := conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2014-05-26"), StringPointer("AK"), nil, request, &util.RuntimeOptions{})
+					if err != nil {
+						if NeedRetry(err) {
+							wait()
+							return resource.RetryableError(err)
+
+						}
+						return resource.NonRetryableError(err)
+					}
+					addDebug(action, response, request)
+					return nil
+				})
+				if err != nil {
+					return WrapErrorf(err, DefaultErrorMsg, d.Id(), action, AlibabaCloudSdkGoERROR)
+				}
+			}
+			if len(added) > 0 {
+				action := "TagResources"
+				request := map[string]interface{}{
+					"RegionId":     s.client.RegionId,
+					"ResourceType": resourceType,
+				}
+				for i, key := range instanceIdChunk {
+					request[fmt.Sprintf("ResourceId.%d", i+1)] = key
+				}
+				count := 1
+				for key, value := range added {
+					request[fmt.Sprintf("Tag.%d.Key", count)] = key
+					request[fmt.Sprintf("Tag.%d.Value", count)] = value
+					count++
+				}
+
+				wait := incrementalWait(2*time.Second, 1*time.Second)
+				err := resource.Retry(10*time.Minute, func() *resource.RetryError {
+					response, err := conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2014-05-26"), StringPointer("AK"), nil, request, &util.RuntimeOptions{})
+					if err != nil {
+						if NeedRetry(err) {
+							wait()
+							return resource.RetryableError(err)
+
+						}
+						return resource.NonRetryableError(err)
+					}
+					addDebug(action, response, request)
+					return nil
+				})
+				if err != nil {
+					return WrapErrorf(err, DefaultErrorMsg, d.Id(), action, AlibabaCloudSdkGoERROR)
+				}
+			}
+			d.SetPartial("tags")
+		}
+	}
+	return nil
+}
+
+func (s *EcsService) DescribeEcsInstanceSet(id string) (objects []map[string]interface{}, err error) {
+	var response map[string]interface{}
+	conn, err := s.client.NewEcsClient()
+	if err != nil {
+		return nil, WrapError(err)
+	}
+
+	instanceIds, err := decodeFromBase64String(id)
+	if err != nil {
+		return objects, WrapError(err)
+	}
+
+	action := "DescribeInstances"
+	request := map[string]interface{}{
+		"RegionId":    s.client.RegionId,
+		"InstanceIds": convertListToJsonString(convertListStringToListInterface(instanceIds)),
+		"PageNumber":  1,
+		"PageSize":    PageSizeXLarge,
+	}
+	runtime := util.RuntimeOptions{}
+	runtime.SetAutoretry(true)
+	wait := incrementalWait(3*time.Second, 3*time.Second)
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2014-05-26"), StringPointer("AK"), nil, request, &runtime)
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		return nil
+	})
+	addDebug(action, response, request)
+	if err != nil {
+		if IsExpectedErrors(err, []string{"InvalidInstanceIds.NotFound"}) {
+			return objects, WrapErrorf(Error(GetNotFoundMessage("ECS", id)), NotFoundMsg, ProviderERROR, fmt.Sprint(response["RequestId"]))
+		}
+		return objects, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
+	}
+	resp, err := jsonpath.Get("$.Instances.Instance", response)
+	if err != nil {
+		return objects, WrapErrorf(err, FailedGetAttributeMsg, id, "$.Instances.Instance", response)
+	}
+	if len(resp.([]interface{})) < 1 {
+		return objects, WrapErrorf(Error(GetNotFoundMessage("ECS", id)), NotFoundWithResponse, response)
+	}
+
+	result, _ := resp.([]interface{})
+	for _, v := range result {
+		item := v.(map[string]interface{})
+		objects = append(objects, item)
+	}
+
+	return objects, nil
+}
+
+func (s *EcsService) EcsInstanceSetStateRefreshFunc(id string, failStates []string) resource.StateRefreshFunc {
+	return func() (interface{}, string, error) {
+		objects, err := s.DescribeEcsInstanceSetCloudAssistantStatus(id)
+		if err != nil {
+			if NotFoundError(err) {
+				// Set this to nil as if we didn't find anything.
+				return nil, "", nil
+			}
+			return nil, "", WrapError(err)
+		}
+
+		count := 0
+		for _, object := range objects {
+			if fmt.Sprint(object["CloudAssistantStatus"]) == "true" {
+				count++
+			}
+		}
+
+		if count == len(objects) {
+			return objects, "Running", nil
+		}
+
+		return objects, "Starting", nil
+	}
+}
+
+func (s *EcsService) DescribeEcsInstanceSetCloudAssistantStatus(id string) (objects []map[string]interface{}, err error) {
+	var response map[string]interface{}
+	conn, err := s.client.NewEcsClient()
+	if err != nil {
+		return nil, WrapError(err)
+	}
+
+	instanceIds, err := decodeFromBase64String(id)
+	if err != nil {
+		return objects, WrapError(err)
+	}
+
+	action := "DescribeCloudAssistantStatus"
+	request := map[string]interface{}{
+		"RegionId":   s.client.RegionId,
+		"PageNumber": 1,
+		"PageSize":   PageSizeXLarge,
+	}
+
+	for i, instanceId := range instanceIds {
+		request[fmt.Sprintf("InstanceId.%d", i+1)] = instanceId
+	}
+
+	runtime := util.RuntimeOptions{}
+	runtime.SetAutoretry(true)
+	wait := incrementalWait(3*time.Second, 3*time.Second)
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2014-05-26"), StringPointer("AK"), nil, request, &runtime)
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		return nil
+	})
+	addDebug(action, response, request)
+	if err != nil {
+		if IsExpectedErrors(err, []string{"InvalidInstanceIds.NotFound"}) {
+			return objects, WrapErrorf(Error(GetNotFoundMessage("ECS", id)), NotFoundMsg, ProviderERROR, fmt.Sprint(response["RequestId"]))
+		}
+		return objects, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
+	}
+	resp, err := jsonpath.Get("$.InstanceCloudAssistantStatusSet.InstanceCloudAssistantStatus", response)
+	if err != nil {
+		return objects, WrapErrorf(err, FailedGetAttributeMsg, id, "$.InstanceCloudAssistantStatusSet.InstanceCloudAssistantStatus", response)
+	}
+	if len(resp.([]interface{})) < 1 {
+		return objects, WrapErrorf(Error(GetNotFoundMessage("ECS", id)), NotFoundWithResponse, response)
+	}
+
+	result, _ := resp.([]interface{})
+	for _, v := range result {
+		item := v.(map[string]interface{})
+		objects = append(objects, item)
+	}
+
+	return objects, nil
+}
+
+func (s *EcsService) EcsInstanceVmSetStateRefreshFuncWithoutOsCheck(id string, failStates []string) resource.StateRefreshFunc {
+	return func() (interface{}, string, error) {
+		objects, err := s.DescribeEcsInstanceVmSetStatus(id)
+		if err != nil {
+			if NotFoundError(err) {
+				// Set this to nil as if we didn't find anything.
+				return nil, "", nil
+			}
+			return nil, "", WrapError(err)
+		}
+
+		count := 0
+		for _, object := range objects {
+			if fmt.Sprint(object["Status"]) == "Running" {
+				count++
+			}
+		}
+
+		if count == len(objects) {
+			return objects, "Running", nil
+		}
+
+		return objects, "Starting", nil
+	}
+}
+
+func (s *EcsService) DescribeEcsInstanceVmSetStatus(id string) (objects []map[string]interface{}, err error) {
+	var response map[string]interface{}
+	conn, err := s.client.NewEcsClient()
+	if err != nil {
+		return nil, WrapError(err)
+	}
+
+	instanceIds, err := decodeFromBase64String(id)
+	if err != nil {
+		return objects, WrapError(err)
+	}
+
+	action := "DescribeInstances"
+	request := map[string]interface{}{
+		"RegionId":   s.client.RegionId,
+		"PageNumber": 1,
+		"PageSize":   PageSizeXLarge,
+	}
+
+	instanceIdsStr, _ := json.Marshal(instanceIds)
+	request["InstanceIds"] = string(instanceIdsStr)
+
+	runtime := util.RuntimeOptions{}
+	runtime.SetAutoretry(true)
+	wait := incrementalWait(3*time.Second, 3*time.Second)
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2014-05-26"), StringPointer("AK"), nil, request, &runtime)
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		return nil
+	})
+	addDebug(action, response, request)
+	if err != nil {
+		if IsExpectedErrors(err, []string{"InvalidInstanceIds.NotFound"}) {
+			return objects, WrapErrorf(Error(GetNotFoundMessage("ECS", id)), NotFoundMsg, ProviderERROR, fmt.Sprint(response["RequestId"]))
+		}
+		return objects, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
+	}
+	resp, err := jsonpath.Get("$.Instances.Instance", response)
+	if err != nil {
+		return objects, WrapErrorf(err, FailedGetAttributeMsg, id, "$.Instances.Instance", response)
+	}
+	if len(resp.([]interface{})) < 1 {
+		return objects, WrapErrorf(Error(GetNotFoundMessage("ECS", id)), NotFoundWithResponse, response)
+	}
+
+	result, _ := resp.([]interface{})
+	for _, v := range result {
+		item := v.(map[string]interface{})
+		objects = append(objects, item)
+	}
+
+	return objects, nil
+}
+
+func (s *EcsService) DescribeEcsActivation(id string) (object map[string]interface{}, err error) {
+	var response map[string]interface{}
+	conn, err := s.client.NewEcsClient()
+	if err != nil {
+		return nil, WrapError(err)
+	}
+	action := "DescribeActivations"
+	request := map[string]interface{}{
+		"RegionId":     s.client.RegionId,
+		"ActivationId": id,
+	}
+	runtime := util.RuntimeOptions{}
+	runtime.SetAutoretry(true)
+	wait := incrementalWait(3*time.Second, 3*time.Second)
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2014-05-26"), StringPointer("AK"), nil, request, &runtime)
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		return nil
+	})
+	addDebug(action, response, request)
+	if err != nil {
+		return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
+	}
+	v, err := jsonpath.Get("$.ActivationList", response)
+	if err != nil {
+		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$.ActivationList", response)
+	}
+	if len(v.([]interface{})) < 1 {
+		return object, WrapErrorf(Error(GetNotFoundMessage("ECS", id)), NotFoundWithResponse, response)
+	} else {
+		if fmt.Sprint(v.([]interface{})[0].(map[string]interface{})["ActivationId"]) != id {
+			return object, WrapErrorf(Error(GetNotFoundMessage("ECS", id)), NotFoundWithResponse, response)
+		}
+	}
+	object = v.([]interface{})[0].(map[string]interface{})
+	return object, nil
+}
+
+func (s *EcsService) DescribeInstanceMaintenanceAttribute(id string) (object map[string]interface{}, err error) {
+	var response map[string]interface{}
+	conn, err := s.client.NewEcsClient()
+	if err != nil {
+		return nil, WrapError(err)
+	}
+	action := "DescribeInstanceMaintenanceAttributes"
+	request := map[string]interface{}{
+		"RegionId":   s.client.RegionId,
+		"InstanceId": []string{id},
+	}
+	runtime := util.RuntimeOptions{}
+	runtime.SetAutoretry(true)
+	wait := incrementalWait(3*time.Second, 3*time.Second)
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2014-05-26"), StringPointer("AK"), nil, request, &runtime)
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		return nil
+	})
+	addDebug(action, response, request)
+	if err != nil {
+		return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
+	}
+	v, err := jsonpath.Get("$.MaintenanceAttributes.MaintenanceAttribute", response)
+	if err != nil {
+		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$.MaintenanceAttributes.MaintenanceAttribute", response)
+	}
+	if len(v.([]interface{})) < 1 {
+		return object, WrapErrorf(Error(GetNotFoundMessage("ECS", id)), NotFoundWithResponse, response)
+	} else {
+		if fmt.Sprint(v.([]interface{})[0].(map[string]interface{})["InstanceId"]) != id {
+			return object, WrapErrorf(Error(GetNotFoundMessage("ECS", id)), NotFoundWithResponse, response)
+		}
+	}
+	object = v.([]interface{})[0].(map[string]interface{})
+	return object, nil
+}
+
+func (s *EcsService) DescribeSystemFailureDeleteEventInstanceIds(instanceIds []string) (ids []string, err error) {
+	var response map[string]interface{}
+	conn, err := s.client.NewEcsClient()
+	if err != nil {
+		return nil, WrapError(err)
+	}
+	action := "DescribeInstanceHistoryEvents"
+	request := map[string]interface{}{
+		"RegionId":     s.client.RegionId,
+		"EventType":    "SystemFailure.Delete",
+		"PageSize":     PageSizeXLarge,
+		"PageNumber":   1,
+		"ResourceType": "instance",
+	}
+
+	for i, instanceId := range instanceIds {
+		request[fmt.Sprintf("ResourceId.%d", i)] = instanceId
+	}
+
+	for {
+		runtime := util.RuntimeOptions{}
+		runtime.SetAutoretry(true)
+		wait := incrementalWait(3*time.Second, 3*time.Second)
+		err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+			response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2014-05-26"), StringPointer("AK"), nil, request, &runtime)
+			if err != nil {
+				if NeedRetry(err) {
+					wait()
+					return resource.RetryableError(err)
+				}
+				return resource.NonRetryableError(err)
+			}
+			return nil
+		})
+		addDebug(action, response, request)
+		if err != nil {
+			return ids, WrapErrorf(err, DataDefaultErrorMsg, action, AlibabaCloudSdkGoERROR)
+		}
+		resp, err := jsonpath.Get("$.InstanceSystemEventSet.InstanceSystemEventType", response)
+		if err != nil {
+			return ids, WrapErrorf(err, FailedGetAttributeMsg, action, "$.ImagePipeline.ImagePipelineSet", response)
+		}
+		result, _ := resp.([]interface{})
+		for _, v := range result {
+			item := v.(map[string]interface{})
+			ids = append(ids, fmt.Sprint(item["InstanceId"]))
+		}
+
+		if len(result) < request["PageSize"].(int) {
+			break
+		}
+		request["PageNumber"] = request["PageNumber"].(int) + 1
+	}
+
+	return ids, nil
+}
+func (s *EcsService) DescribeReservedInstanceAutoRenewAttribute(id string) (object map[string]interface{}, err error) {
+	conn, err := s.client.NewEcsClient()
+	if err != nil {
+		return object, WrapError(err)
+	}
+
+	request := map[string]interface{}{
+		"ReservedInstanceId": []string{id},
+		"RegionId":           s.client.RegionId,
+	}
+
+	var response map[string]interface{}
+	action := "DescribeReservedInstanceAutoRenewAttribute"
+	runtime := util.RuntimeOptions{}
+	runtime.SetAutoretry(true)
+	wait := incrementalWait(3*time.Second, 3*time.Second)
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		resp, err := conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2014-05-26"), StringPointer("AK"), nil, request, &runtime)
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		response = resp
+		addDebug(action, response, request)
+		return nil
+	})
+	if err != nil {
+		return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
+	}
+	v, err := jsonpath.Get("$.ReservedInstanceRenewAttributes.ReservedInstanceRenewAttribute", response)
+	if err != nil {
+		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$.ReservedInstanceRenewAttributes.ReservedInstanceRenewAttribute", response)
+	}
+	if len(v.([]interface{})) < 1 {
+		return object, WrapErrorf(Error(GetNotFoundMessage("ReservedInstance", id)), NotFoundWithResponse, response)
+	}
+	return v.([]interface{})[0].(map[string]interface{}), nil
+}
+func (s *EcsService) DescribeEcsReservedInstance(id string) (object map[string]interface{}, err error) {
+	conn, err := s.client.NewEcsClient()
+	if err != nil {
+		return object, WrapError(err)
+	}
+
+	request := map[string]interface{}{
+		"ReservedInstanceId": id,
+		"RegionId":           s.client.RegionId,
+	}
+
+	var response map[string]interface{}
+	action := "DescribeReservedInstances"
+	runtime := util.RuntimeOptions{}
+	runtime.SetAutoretry(true)
+	wait := incrementalWait(3*time.Second, 3*time.Second)
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		resp, err := conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2014-05-26"), StringPointer("AK"), nil, request, &runtime)
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		response = resp
+		addDebug(action, response, request)
+		return nil
+	})
+	if err != nil {
+		return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
+	}
+	v, err := jsonpath.Get("$.ReservedInstances.ReservedInstance", response)
+	if err != nil {
+		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$.ReservedInstances.ReservedInstance", response)
+	}
+	if len(v.([]interface{})) < 1 {
+		return object, WrapErrorf(Error(GetNotFoundMessage("ReservedInstance", id)), NotFoundWithResponse, response)
+	}
+	return v.([]interface{})[0].(map[string]interface{}), nil
+}
+func (s *EcsService) EcsReservedInstanceStateRefreshFunc(d *schema.ResourceData, failStates []string) resource.StateRefreshFunc {
+	return func() (interface{}, string, error) {
+		object, err := s.DescribeEcsReservedInstance(d.Id())
+		if err != nil {
+			if NotFoundError(err) {
+				return nil, "", nil
+			}
+			return nil, "", WrapError(err)
+		}
+		for _, failState := range failStates {
+			if fmt.Sprint(object["Status"]) == failState {
+				return object, fmt.Sprint(object["Status"]), WrapError(Error(FailedToReachTargetStatus, fmt.Sprint(object["Status"])))
+			}
+		}
+		return object, fmt.Sprint(object["Status"]), nil
+	}
+}
+
+func (s *EcsService) WaitForModifyIpv6AddressCount(id string, count int, timeout int) error {
+	deadline := time.Now().Add(time.Duration(timeout) * time.Second)
+	var ipv6SetList []interface{}
+	for {
+		object, err := s.DescribeEcsNetworkInterface(id)
+		if err != nil {
+			return WrapError(err)
+		}
+
+		if v, ok := object["Ipv6Sets"].(map[string]interface{})["Ipv6Set"]; ok {
+			ipv6SetList = v.([]interface{})
+
+			if len(ipv6SetList) == count {
+				return nil
+			}
+		} else if count == 0 {
+			return nil
+		}
+
+		if time.Now().After(deadline) {
+			return WrapErrorf(err, WaitTimeoutMsg, id, GetFunc(1), timeout, len(ipv6SetList), count, ProviderERROR)
+		}
+	}
+}
+
+func (s *EcsService) WaitForModifyIpv6Address(id string, addressList []string, timeout int) error {
+	deadline := time.Now().Add(time.Duration(timeout) * time.Second)
+
+	sort.Strings(addressList)
+	for {
+		ipv6SetList := make([]string, 0)
+		object, err := s.DescribeEcsNetworkInterface(id)
+		if err != nil {
+			return WrapError(err)
+		}
+
+		if v, ok := object["Ipv6Sets"].(map[string]interface{})["Ipv6Set"]; ok {
+			for _, v := range v.([]interface{}) {
+				ipv6Set := v.(map[string]interface{})
+				ipv6SetList = append(ipv6SetList, fmt.Sprint(ipv6Set["Ipv6Address"]))
+			}
+			sort.Strings(ipv6SetList)
+			if len(ipv6SetList) != len(addressList) {
+				continue
+			}
+
+			if len(ipv6SetList) == 0 {
+				return nil
+			}
+
+			diff := false
+			for key, value := range ipv6SetList {
+				if value != addressList[key] {
+					diff = true
+					continue
+				}
+			}
+			if !diff {
+				return nil
+			}
+
+		} else if len(addressList) == 0 {
+			return nil
+		}
+
+		if time.Now().After(deadline) {
+			return WrapErrorf(err, WaitTimeoutMsg, id, GetFunc(1), timeout, ipv6SetList, addressList, ProviderERROR)
+		}
+	}
+}
+
+func (s *EcsService) WaitForModifyIpv4PrefixCount(id string, count int, timeout int) error {
+	deadline := time.Now().Add(time.Duration(timeout) * time.Second)
+	var ipv4PrefixSetList []interface{}
+	for {
+		object, err := s.DescribeEcsNetworkInterface(id)
+		if err != nil {
+			return WrapError(err)
+		}
+
+		if v, ok := object["Ipv4PrefixSets"].(map[string]interface{})["Ipv4PrefixSet"]; ok {
+			ipv4PrefixSetList = v.([]interface{})
+
+			if len(ipv4PrefixSetList) == count {
+				return nil
+			}
+		} else if count == 0 {
+			return nil
+		}
+
+		if time.Now().After(deadline) {
+			return WrapErrorf(err, WaitTimeoutMsg, id, GetFunc(1), timeout, len(ipv4PrefixSetList), count, ProviderERROR)
+		}
+	}
+}
+
+func (s *EcsService) WaitForModifyIpv4Prefix(id string, addressList []string, timeout int) error {
+	deadline := time.Now().Add(time.Duration(timeout) * time.Second)
+
+	sort.Strings(addressList)
+	for {
+		ipv4PrefixSetList := make([]string, 0)
+		object, err := s.DescribeEcsNetworkInterface(id)
+		if err != nil {
+			return WrapError(err)
+		}
+
+		if v, ok := object["Ipv4PrefixSets"].(map[string]interface{})["Ipv4PrefixSet"]; ok {
+			for _, v := range v.([]interface{}) {
+				ipv4PrefixSet := v.(map[string]interface{})
+				ipv4PrefixSetList = append(ipv4PrefixSetList, fmt.Sprint(ipv4PrefixSet["Ipv4Prefix"]))
+			}
+			sort.Strings(ipv4PrefixSetList)
+			if len(ipv4PrefixSetList) != len(addressList) {
+				continue
+			}
+
+			if len(ipv4PrefixSetList) == 0 {
+				return nil
+			}
+
+			diff := false
+			for key, value := range ipv4PrefixSetList {
+				if value != addressList[key] {
+					diff = true
+					continue
+				}
+			}
+			if !diff {
+				return nil
+			}
+
+		} else if len(addressList) == 0 {
+			return nil
+		}
+
+		if time.Now().After(deadline) {
+			return WrapErrorf(err, WaitTimeoutMsg, id, GetFunc(1), timeout, ipv4PrefixSetList, addressList, ProviderERROR)
+		}
+	}
+}
+
+func (s *EcsService) DescribeEcsCapacityReservation(id string) (object map[string]interface{}, err error) {
+	conn, err := s.client.NewEcsClient()
+	if err != nil {
+		return object, WrapError(err)
+	}
+
+	request := map[string]interface{}{
+		"PrivatePoolOptions.Ids": convertListToJsonString([]interface{}{id}),
+		"RegionId":               s.client.RegionId,
+		"Status":                 "Active",
+	}
+
+	var response map[string]interface{}
+	action := "DescribeCapacityReservations"
+	runtime := util.RuntimeOptions{}
+	runtime.SetAutoretry(true)
+	wait := incrementalWait(3*time.Second, 3*time.Second)
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		resp, err := conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2014-05-26"), StringPointer("AK"), nil, request, &runtime)
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		response = resp
+		addDebug(action, response, request)
+		return nil
+	})
+	if err != nil {
+		if IsExpectedErrors(err, []string{"Invalid.PrivatePoolOptions.Ids"}) {
+			return object, WrapErrorf(err, NotFoundMsg, AlibabaCloudSdkGoERROR)
+		}
+		return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
+	}
+	v, err := jsonpath.Get("$.CapacityReservationSet.CapacityReservationItem", response)
+	if err != nil {
+		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$.CapacityReservationSet.CapacityReservationItem", response)
+	}
+	if len(v.([]interface{})) < 1 {
+		return object, WrapErrorf(Error(GetNotFoundMessage("CapacityReservation", id)), NotFoundWithResponse, response)
+	}
+	return v.([]interface{})[0].(map[string]interface{}), nil
+}
+func (s *EcsService) EcsCapacityReservationStateRefreshFunc(d *schema.ResourceData, failStates []string) resource.StateRefreshFunc {
+	return func() (interface{}, string, error) {
+		object, err := s.DescribeEcsCapacityReservation(d.Id())
+		if err != nil {
+			if NotFoundError(err) {
+				return nil, "", nil
+			}
+			return nil, "", WrapError(err)
+		}
+		for _, failState := range failStates {
+			if fmt.Sprint(object["Status"]) == failState {
+				return object, fmt.Sprint(object["Status"]), WrapError(Error(FailedToReachTargetStatus, fmt.Sprint(object["Status"])))
+			}
+		}
+		return object, fmt.Sprint(object["Status"]), nil
+	}
+}
+func (s *EcsService) DescribeEcsElasticityAssurance(id string) (object map[string]interface{}, err error) {
+	conn, err := s.client.NewEcsClient()
+	if err != nil {
+		return object, WrapError(err)
+	}
+
+	request := map[string]interface{}{
+		"PrivatePoolOptions.Ids": convertListToJsonString([]interface{}{id}),
+		"RegionId":               s.client.RegionId,
+	}
+
+	var response map[string]interface{}
+	action := "DescribeElasticityAssurances"
+	runtime := util.RuntimeOptions{}
+	runtime.SetAutoretry(true)
+	wait := incrementalWait(3*time.Second, 3*time.Second)
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		resp, err := conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2014-05-26"), StringPointer("AK"), nil, request, &runtime)
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		response = resp
+		addDebug(action, response, request)
+		return nil
+	})
+	if err != nil {
+		if IsExpectedErrors(err, []string{"Invalid.PrivatePoolOptions.Id"}) {
+			return object, WrapErrorf(err, NotFoundMsg, AlibabaCloudSdkGoERROR)
+		}
+		return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
+	}
+	v, err := jsonpath.Get("$.ElasticityAssuranceSet.ElasticityAssuranceItem", response)
+	if err != nil {
+		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$.ElasticityAssuranceSet.ElasticityAssuranceItem", response)
+	}
+	if len(v.([]interface{})) < 1 {
+		return object, WrapErrorf(Error(GetNotFoundMessage("ElasticityAssurance", id)), NotFoundWithResponse, response)
+	}
+	return v.([]interface{})[0].(map[string]interface{}), nil
+}
+func (s *EcsService) EcsElasticityAssuranceStateRefreshFunc(d *schema.ResourceData, failStates []string) resource.StateRefreshFunc {
+	return func() (interface{}, string, error) {
+		object, err := s.DescribeEcsElasticityAssurance(d.Id())
+		if err != nil {
+			if NotFoundError(err) {
+				return nil, "", nil
+			}
+			return nil, "", WrapError(err)
+		}
+		for _, failState := range failStates {
+			if fmt.Sprint(object["Status"]) == failState {
+				return object, fmt.Sprint(object["Status"]), WrapError(Error(FailedToReachTargetStatus, fmt.Sprint(object["Status"])))
+			}
+		}
+		return object, fmt.Sprint(object["Status"]), nil
+	}
+}
+
+func (s *EcsService) isSupportedNetworkCardIndex(instanceType string) (bool, error) {
+	var response map[string]interface{}
+	action := "DescribeInstanceTypes"
+
+	conn, err := s.client.NewEcsClient()
+	if err != nil {
+		return false, WrapError(err)
+	}
+
+	request := map[string]interface{}{
+		"InstanceTypes": []string{instanceType},
+	}
+
+	runtime := util.RuntimeOptions{}
+	runtime.SetAutoretry(true)
+	wait := incrementalWait(3*time.Second, 3*time.Second)
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2014-05-26"), StringPointer("AK"), nil, request, &runtime)
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		return nil
+	})
+	addDebug(action, response, request)
+
+	if err != nil {
+		return false, WrapErrorf(err, DefaultErrorMsg, instanceType, action, AlibabaCloudSdkGoERROR)
+	}
+
+	resp, err := jsonpath.Get("$.InstanceTypes.InstanceType", response)
+	if err != nil {
+		return false, WrapErrorf(err, FailedGetAttributeMsg, instanceType, "$.InstanceTypes.InstanceType", response)
+	}
+
+	if v, ok := resp.([]interface{}); !ok || len(v) < 1 {
+		return false, nil
+	}
+
+	for _, v := range resp.([]interface{}) {
+		if fmt.Sprint(v.(map[string]interface{})["InstanceTypeId"]) == instanceType {
+			if _, ok := v.(map[string]interface{})["NetworkCards"]; ok {
+				return true, nil
+			}
+		}
+	}
+
+	return false, nil
 }

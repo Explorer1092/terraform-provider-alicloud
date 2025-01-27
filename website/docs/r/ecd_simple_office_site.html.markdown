@@ -1,5 +1,5 @@
 ---
-subcategory: "Elastic Desktop Service(EDS)"
+subcategory: "Elastic Desktop Service (ECD)"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_ecd_simple_office_site"
 sidebar_current: "docs-alicloud-resource-ecd-simple-office-site"
@@ -7,26 +7,36 @@ description: |-
   Provides a Alicloud ECD Simple Office Site resource.
 ---
 
-# alicloud\_ecd\_simple\_office\_site
+# alicloud_ecd_simple_office_site
 
 Provides a ECD Simple Office Site resource.
 
-For information about ECD Simple Office Site and how to use it, see [What is Simple Office Site](https://help.aliyun.com/document_detail/188382.html).
+For information about ECD Simple Office Site and how to use it, see [What is Simple Office Site](https://www.alibabacloud.com/help/en/wuying-workspace/developer-reference/api-ecd-2020-09-30-createsimpleofficesite).
 
--> **NOTE:** Available in v1.140.0+.
+-> **NOTE:** Available since v1.140.0.
 
 ## Example Usage
 
 Basic Usage
 
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_ecd_simple_office_site&exampleId=f9098552-0cf3-8069-6138-9c158d20ebb05c8668cf&activeTab=example&spm=docs.r.ecd_simple_office_site.0.f90985520c&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
 ```terraform
-resource "alicloud_ecd_simple_office_site" "default" {
-  cidr_block          = "172.16.0.0/12"
-  bandwidth           = 5
-  desktop_access_type = "Internet"
-  office_site_name    = "site_name"
+resource "random_integer" "default" {
+  min = 10000
+  max = 99999
 }
 
+resource "alicloud_ecd_simple_office_site" "default" {
+  cidr_block          = "172.16.0.0/12"
+  enable_admin_access = true
+  desktop_access_type = "Internet"
+  office_site_name    = "terraform-example-${random_integer.default.result}"
+}
 ```
 
 ## Argument Reference
@@ -56,6 +66,6 @@ The following attributes are exported:
 
 ECD Simple Office Site can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_ecd_simple_office_site.example <id>
 ```

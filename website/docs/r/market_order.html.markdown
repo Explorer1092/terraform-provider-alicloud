@@ -7,22 +7,28 @@ description: |-
     Provides a market order resource.
 ---
 
-# alicloud\_market\_order
+# alicloud_market_order
 
 Provides a market order resource.
 
 -> **NOTE:** Terraform will auto build a market order  while it uses `alicloud_market_order` to build a market order resource.
 
--> **NOTE:** Available in 1.69.0+
+-> **NOTE:** Available since v1.69.0.
 
 ## Example Usage
 
 Basic Usage
 
-```
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_market_order&exampleId=7cb0558a-5042-7c6a-a42e-d9cbfd8934677d52831b&activeTab=example&spm=docs.r.market_order.0.7cb0558a50&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
+```terraform
 resource "alicloud_market_order" "order" {
   product_code    = "cmapi033136"
-  pay_type        = "prepay"
+  pay_type        = "PrePaid"
   quantity        = 1
   duration        = 1
   pricing_cycle   = "Month"
@@ -54,7 +60,7 @@ The following attributes are exported:
 
 Market order can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_market_order.order your-order-id
 ```
  

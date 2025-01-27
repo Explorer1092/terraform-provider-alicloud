@@ -7,13 +7,15 @@ description: |-
     Provides a datasource to open the Brain Industrial service automatically.
 ---
 
-# alicloud\_brain\_industrial\_service
+# alicloud_brain_industrial_service
 
 Using this data source can open Brain Industrial service automatically. If the service has been opened, it will return opened.
 
--> **NOTE:** Available in v1.115.0+
+-> **NOTE:** Available since v1.115.0.
 
 -> **NOTE:** The Brain Industrial service is not support in the international site.
+
+-> **DEPRECATED:**  This data source has been deprecated from version `1.229.1`.
 
 ## Example Usage
 
@@ -21,6 +23,7 @@ Using this data source can open Brain Industrial service automatically. If the s
 data "alicloud_brain_industrial_service" "open" {
   enable = "On"
 }
+
 ```
 
 ## Argument Reference

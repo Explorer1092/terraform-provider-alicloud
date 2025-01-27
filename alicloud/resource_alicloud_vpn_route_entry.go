@@ -82,9 +82,6 @@ func resourceAliyunVpnRouteEntryCreate(d *schema.ResourceData, meta interface{})
 	if err != nil {
 		return WrapError(err)
 	}
-
-	request["RegionId"] = client.RegionId
-
 	request["RegionId"] = client.RegionId
 	request["VpnGatewayId"] = d.Get("vpn_gateway_id")
 	request["RouteDest"] = d.Get("route_dest")
@@ -99,7 +96,7 @@ func resourceAliyunVpnRouteEntryCreate(d *schema.ResourceData, meta interface{})
 		request["ClientToken"] = buildClientToken(action)
 		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2016-04-28"), StringPointer("AK"), nil, request, &runtime)
 		if err != nil {
-			if IsExpectedErrors(err, []string{"VpnGateway.Configuring"}) || NeedRetry(err) {
+			if IsExpectedErrors(err, []string{"VpnGateway.Configuring", "TaskConflict", "Appliance.Configuring", "VpnTask.CONFLICT", "VpnConnection.Configuring"}) || NeedRetry(err) {
 				wait()
 				return resource.RetryableError(err)
 			}
@@ -190,7 +187,7 @@ func resourceAliyunVpnRouteEntryUpdate(d *schema.ResourceData, meta interface{})
 		err = resource.Retry(d.Timeout(schema.TimeoutUpdate), func() *resource.RetryError {
 			response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2016-04-28"), StringPointer("AK"), nil, request, &runtime)
 			if err != nil {
-				if IsExpectedErrors(err, []string{"VpnGateway.Configuring"}) || NeedRetry(err) {
+				if IsExpectedErrors(err, []string{"VpnGateway.Configuring", "TaskConflict", "Appliance.Configuring", "VpnTask.CONFLICT", "VpnConnection.Configuring"}) || NeedRetry(err) {
 					wait()
 					return resource.RetryableError(err)
 				}
@@ -239,7 +236,7 @@ func resourceAliyunVpnRouteEntryUpdate(d *schema.ResourceData, meta interface{})
 		err = resource.Retry(d.Timeout(schema.TimeoutUpdate), func() *resource.RetryError {
 			response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2016-04-28"), StringPointer("AK"), nil, weightRequest, &runtime)
 			if err != nil {
-				if IsExpectedErrors(err, []string{"VpnGateway.Configuring"}) || NeedRetry(err) {
+				if IsExpectedErrors(err, []string{"VpnGateway.Configuring", "TaskConflict", "Appliance.Configuring", "VpnTask.CONFLICT", "VpnConnection.Configuring"}) || NeedRetry(err) {
 					wait()
 					return resource.RetryableError(err)
 				}
@@ -290,7 +287,7 @@ func resourceAliyunVpnRouteEntryDelete(d *schema.ResourceData, meta interface{})
 	err = resource.Retry(d.Timeout(schema.TimeoutDelete), func() *resource.RetryError {
 		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2016-04-28"), StringPointer("AK"), nil, request, &runtime)
 		if err != nil {
-			if IsExpectedErrors(err, []string{"VpnGateway.Configuring"}) || NeedRetry(err) {
+			if IsExpectedErrors(err, []string{"VpnGateway.Configuring", "TaskConflict", "Appliance.Configuring", "VpnTask.CONFLICT", "VpnConnection.Configuring", "VpnRouteEntry.Configuring"}) || NeedRetry(err) {
 				wait()
 				return resource.RetryableError(err)
 			}
@@ -300,6 +297,9 @@ func resourceAliyunVpnRouteEntryDelete(d *schema.ResourceData, meta interface{})
 		return nil
 	})
 	if err != nil {
+		if IsExpectedErrors(err, []string{"InvalidRouteEntry.NotFound"}) || NeedRetry(err) {
+			return nil
+		}
 		return WrapErrorf(err, DefaultErrorMsg, "alicloud_vpn_route_entry", action, AlibabaCloudSdkGoERROR)
 	}
 

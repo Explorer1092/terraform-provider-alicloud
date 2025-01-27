@@ -7,54 +7,55 @@ description: |-
   Provides a ADB backup policy resource.
 ---
 
-# alicloud\_adb\_backup\_policy
+# alicloud_adb_backup_policy
 
-Provides a [ADB](https://www.alibabacloud.com/help/product/92664.htm) cluster backup policy resource and used to configure cluster backup policy.
+Provides a [ADB](https://www.alibabacloud.com/help/en/analyticdb-for-mysql/latest/api-doc-adb-2019-03-15-api-doc-modifybackuppolicy) cluster backup policy resource and used to configure cluster backup policy.
 
--> **NOTE:** Available in v1.71.0+. 
+-> **NOTE:** Available since v1.71.0.
+
 -> Each DB cluster has a backup policy and it will be set default values when destroying the resource.
 
 ## Example Usage
 
-```
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_adb_backup_policy&exampleId=e58a089b-aed4-1b3f-762c-b6bcb8c19b6a19ecfb40&activeTab=example&spm=docs.r.adb_backup_policy.0.e58a089bae&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
+```terraform
 variable "name" {
-  default = "adbClusterconfig"
+  default = "terraform-example"
 }
 
-variable "creation" {
-  default = "ADB"
+data "alicloud_adb_zones" "default" {
 }
 
-data "alicloud_zones" "default" {
-  available_resource_creation = var.creation
+data "alicloud_vpcs" "default" {
+  name_regex = "^default-NODELETING$"
 }
 
-resource "alicloud_vpc" "default" {
-  name       = var.name
-  cidr_block = "172.16.0.0/16"
+data "alicloud_vswitches" "default" {
+  vpc_id  = data.alicloud_vpcs.default.ids.0
+  zone_id = data.alicloud_adb_zones.default.ids.0
 }
 
-resource "alicloud_vswitch" "default" {
-  vpc_id            = alicloud_vpc.default.id
-  cidr_block        = "172.16.0.0/24"
-  zone_id           = data.alicloud_zones.default.zones[0].id
-  vswitch_name      = var.name
+
+locals {
+  vswitch_id = data.alicloud_vswitches.default.ids.0
 }
 
-resource "alicloud_adb_cluster" "default" {
-  db_cluster_version  = "3.0"
-  db_cluster_category = "Cluster"
-  db_node_class       = "C8"
-  db_node_count       = 2
-  db_node_storage     = 200
-  pay_type            = "PostPaid"
+resource "alicloud_adb_db_cluster" "cluster" {
+  db_cluster_category = "MixedStorage"
+  mode                = "flexible"
+  compute_resource    = "8Core32GB"
+  vswitch_id          = local.vswitch_id
   description         = var.name
-  vswitch_id          = "vsw-t4nq4tr8wcuj7397rbws2"
 }
 
-resource "alicloud_adb_backup_policy" "policy" {
-  db_cluster_id           = alicloud_adb_cluster.default.id
-  preferred_backup_period = ["Tuesday", "Thursday", "Saturday"]
+resource "alicloud_adb_backup_policy" "default" {
+  db_cluster_id           = alicloud_adb_db_cluster.cluster.id
+  preferred_backup_period = ["Tuesday", "Wednesday"]
   preferred_backup_time   = "10:00Z-11:00Z"
 }
 ```
@@ -81,6 +82,6 @@ The following attributes are exported:
 
 ADB backup policy can be imported using the id or cluster id, e.g.
 
-```
+```shell
 $ terraform import alicloud_adb_backup_policy.example "am-12345678"
 ```

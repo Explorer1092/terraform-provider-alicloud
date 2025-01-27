@@ -232,7 +232,7 @@ func testSweepFCServices(region string) error {
 	return nil
 }
 
-func TestAccAlicloudFCServiceUpdate(t *testing.T) {
+func TestAccAliCloudFCServiceUpdate(t *testing.T) {
 	var v *fc.GetServiceOutput
 	rand := acctest.RandIntRange(10000, 999999)
 	name := fmt.Sprintf("tf-testacc%salicloudfcservice-%d", defaultRegionToTest, rand)
@@ -325,6 +325,27 @@ func TestAccAlicloudFCServiceUpdate(t *testing.T) {
 			},
 			{
 				Config: testAccConfig(map[string]interface{}{
+					"log_config": []map[string]string{
+						{
+							"project":                 "${alicloud_log_store.default.project}",
+							"logstore":                "${alicloud_log_store.default.name}",
+							"enable_request_metrics":  "true",
+							"enable_instance_metrics": "true",
+						},
+					},
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"log_config.0.project":                 name,
+						"log_config.0.logstore":                name,
+						"log_config.0.enable_request_metrics":  CHECKSET,
+						"log_config.0.enable_instance_metrics": CHECKSET,
+						"version":                              "6",
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
 					"log_config":      REMOVEKEY,
 					"role":            REMOVEKEY,
 					"internet_access": REMOVEKEY,
@@ -332,12 +353,29 @@ func TestAccAlicloudFCServiceUpdate(t *testing.T) {
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
-						"log_config.0.project":  REMOVEKEY,
-						"log_config.0.logstore": REMOVEKEY,
-						"role":                  REMOVEKEY,
-						"internet_access":       REMOVEKEY,
-						"description":           REMOVEKEY,
-						"version":               "6",
+						"log_config.0.project":                 REMOVEKEY,
+						"log_config.0.logstore":                REMOVEKEY,
+						"log_config.0.enable_request_metrics":  REMOVEKEY,
+						"log_config.0.enable_instance_metrics": REMOVEKEY,
+						"role":                                 REMOVEKEY,
+						"internet_access":                      REMOVEKEY,
+						"description":                          REMOVEKEY,
+						"version":                              "7",
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"tags": map[string]string{
+						"TestKey1": "test-value1",
+						"TestKey2": "test-value2",
+					},
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"tags.TestKey1": "test-value1",
+						"tags.TestKey2": "test-value2",
+						"version":       "8",
 					}),
 				),
 			},
@@ -345,7 +383,7 @@ func TestAccAlicloudFCServiceUpdate(t *testing.T) {
 	})
 }
 
-func TestAccAlicloudFCServiceVpcAndNasUpdate(t *testing.T) {
+func TestAccAliCloudFCServiceVpcAndNasUpdate(t *testing.T) {
 	var v *fc.GetServiceOutput
 	rand := acctest.RandIntRange(10000, 999999)
 	name := fmt.Sprintf("tf-testacc%salicloudfcservice-%d", defaultRegionToTest, rand)
@@ -377,7 +415,7 @@ func TestAccAlicloudFCServiceVpcAndNasUpdate(t *testing.T) {
 					"role": "${alicloud_ram_role.default.arn}",
 					"vpc_config": []map[string]interface{}{
 						{
-							"vswitch_ids":       []string{"${data.alicloud_vpcs.default.vpcs.0.vswitch_ids.0}"},
+							"vswitch_ids":       []string{"${alicloud_vswitch.default.id}"},
 							"security_group_id": "${alicloud_security_group.default.id}",
 						},
 					},
@@ -429,15 +467,19 @@ func TestAccAlicloudFCServiceVpcAndNasUpdate(t *testing.T) {
 				Config: testAccConfig(map[string]interface{}{
 					"log_config": []map[string]string{
 						{
-							"project":  "${alicloud_log_project.default.name}",
-							"logstore": "${alicloud_log_store.default.name}",
+							"project":                 "${alicloud_log_project.default.name}",
+							"logstore":                "${alicloud_log_store.default.name}",
+							"enable_request_metrics":  "true",
+							"enable_instance_metrics": "true",
 						},
 					},
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
-						"log_config.0.project":  name,
-						"log_config.0.logstore": name,
+						"log_config.0.project":                 name,
+						"log_config.0.logstore":                name,
+						"log_config.0.enable_request_metrics":  CHECKSET,
+						"log_config.0.enable_instance_metrics": CHECKSET,
 					}),
 				),
 			},
@@ -449,10 +491,12 @@ func TestAccAlicloudFCServiceVpcAndNasUpdate(t *testing.T) {
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
-						"log_config.0.project":  REMOVEKEY,
-						"log_config.0.logstore": REMOVEKEY,
-						"internet_access":       REMOVEKEY,
-						"description":           REMOVEKEY,
+						"log_config.0.project":                 REMOVEKEY,
+						"log_config.0.logstore":                REMOVEKEY,
+						"log_config.0.enable_request_metrics":  REMOVEKEY,
+						"log_config.0.enable_instance_metrics": REMOVEKEY,
+						"internet_access":                      REMOVEKEY,
+						"description":                          REMOVEKEY,
 					}),
 				),
 			},
@@ -514,7 +558,7 @@ func TestAccAlicloudFCServiceVpcAndNasUpdate(t *testing.T) {
 	})
 }
 
-func TestAccAlicloudFCServiceMulti(t *testing.T) {
+func TestAccAliCloudFCServiceMulti(t *testing.T) {
 	var v *fc.GetServiceOutput
 	rand := acctest.RandIntRange(10000, 999999)
 	name := fmt.Sprintf("tf-testacc%salicloudfcservice-%d", defaultRegionToTest, rand)
@@ -590,6 +634,8 @@ variable "name" {
     default = "%s"
 }
 
+data "alicloud_fc_zones" "default" {}
+
 resource "alicloud_log_project" "default" {
     name = "${var.name}"
 }
@@ -599,13 +645,21 @@ resource "alicloud_log_store" "default" {
     name = "${var.name}"
 }
 
-data "alicloud_vpcs" "default" {
-  name_regex = "default-NODELETING"
+resource "alicloud_vpc" "default" {
+  vpc_name   = "${var.name}"
+  cidr_block = "172.16.0.0/12"
+}
+
+resource "alicloud_vswitch" "default" {
+  vpc_id       = "${alicloud_vpc.default.id}"
+  cidr_block   = "172.16.0.0/21"
+  zone_id      = "${data.alicloud_fc_zones.default.zones.0.id}"
+  vswitch_name = "${var.name}"
 }
 
 resource "alicloud_security_group" "default" {
   name = "${var.name}"
-  vpc_id = "${data.alicloud_vpcs.default.ids.0}"
+  vpc_id = "${alicloud_vpc.default.id}"
 }
 
 resource "alicloud_nas_file_system" "this" {
@@ -622,7 +676,7 @@ resource "alicloud_nas_mount_target" "this" {
   count = 2
   access_group_name = alicloud_nas_access_group.this.access_group_name
   file_system_id = alicloud_nas_file_system.this.id
-  vswitch_id = data.alicloud_vpcs.default.vpcs.0.vswitch_ids.0
+  vswitch_id = alicloud_vswitch.default.id
 }
 
 locals {

@@ -76,15 +76,17 @@ func testSweepHaVip(region string) error {
 			name := fmt.Sprint(item["Name"])
 			id := fmt.Sprint(item["HaVipId"])
 			skip := true
-			for _, prefix := range prefixes {
-				if strings.HasPrefix(strings.ToLower(name), strings.ToLower(prefix)) {
-					skip = false
-					break
+			if !sweepAll() {
+				for _, prefix := range prefixes {
+					if strings.HasPrefix(strings.ToLower(name), strings.ToLower(prefix)) {
+						skip = false
+						break
+					}
 				}
-			}
-			if skip {
-				log.Printf("[INFO] Skipping HaVip: %s (%s)", name, id)
-				continue
+				if skip {
+					log.Printf("[INFO] Skipping HaVip: %s (%s)", name, id)
+					continue
+				}
 			}
 			haVipIds = append(haVipIds, id)
 		}
@@ -156,11 +158,6 @@ func TestAccAlicloudVPCHavip_basic(t *testing.T) {
 				),
 			},
 			{
-				ResourceName:      resourceId,
-				ImportState:       true,
-				ImportStateVerify: true,
-			},
-			{
 				Config: testAccConfig(map[string]interface{}{
 					"description": name + "1",
 				}),
@@ -191,6 +188,11 @@ func TestAccAlicloudVPCHavip_basic(t *testing.T) {
 						"havip_name":  name,
 					}),
 				),
+			},
+			{
+				ResourceName:      resourceId,
+				ImportState:       true,
+				ImportStateVerify: true,
 			},
 		},
 	})
@@ -268,7 +270,7 @@ resource "alicloud_vswitch" "default" {
 `, name)
 }
 
-func TestAccAlicloudHavip_unit(t *testing.T) {
+func TestUnitAlicloudHavip(t *testing.T) {
 	p := Provider().(*schema.Provider).ResourcesMap
 	d, _ := schema.InternalMap(p["alicloud_havip"].Schema).Data(nil, nil)
 	dCreate, _ := schema.InternalMap(p["alicloud_havip"].Schema).Data(nil, nil)

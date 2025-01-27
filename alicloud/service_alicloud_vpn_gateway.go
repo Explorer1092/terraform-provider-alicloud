@@ -114,7 +114,7 @@ func (s *VpnGatewayService) DescribeSslVpnClientCert(id string) (v vpc.DescribeS
 		return vpcClient.DescribeSslVpnClientCert(request)
 	})
 	if err != nil {
-		if IsExpectedErrors(err, []string{"Forbidden", "InvalidSslVpnClientCertId.NotFound"}) {
+		if IsExpectedErrors(err, []string{"Forbidden", "InvalidInstanceId.NotFound"}) {
 			return v, WrapErrorf(err, NotFoundMsg, AlibabaCloudSdkGoERROR)
 		}
 		return v, WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR)
@@ -141,7 +141,7 @@ func (s *VpnGatewayService) DescribeVpnRouteEntry(id string) (v vpc.VpnRouteEntr
 		return vpcClient.DescribeVpnRouteEntries(request)
 	})
 	if err != nil {
-		if IsExpectedErrors(err, []string{"Forbidden", "InvalidVpnGatewayInstanceId.NotFound"}) {
+		if IsExpectedErrors(err, []string{"Forbidden", "InvalidVpnGatewayInstanceId.NotFound", "InvalidVpnInstanceId.NotFound"}) {
 			return v, WrapErrorf(Error(GetNotFoundMessage("VpnRouterEntry", id)), NotFoundMsg, AlibabaCloudSdkGoERROR)
 		}
 		return v, WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR)
@@ -329,6 +329,35 @@ func (s *VpnGatewayService) ParseIpsecConfig(ipsec vpc.IpsecConfig) (ipsecConfig
 	}
 
 	ipsecConfigs = append(ipsecConfigs, item)
+	return
+}
+
+func (s *VpnGatewayService) VpnBgpConfig(bgp vpc.VpnBgpConfig) (bgpConfigs []map[string]interface{}) {
+	item := map[string]interface{}{
+		"peer_asn":     bgp.PeerAsn,
+		"local_asn":    bgp.LocalAsn,
+		"auth_key":     bgp.AuthKey,
+		"status":       bgp.Status,
+		"tunnel_cidr":  bgp.TunnelCidr,
+		"peer_bgp_ip":  bgp.PeerBgpIp,
+		"local_bgp_ip": bgp.LocalBgpIp,
+	}
+
+	bgpConfigs = append(bgpConfigs, item)
+	return
+}
+
+func (s *VpnGatewayService) VcoHealthCheck(vco vpc.VcoHealthCheck) (vcoHealthCheck []map[string]interface{}) {
+	item := map[string]interface{}{
+		"dip":      vco.Dip,
+		"sip":      vco.Sip,
+		"enable":   vco.Enable,
+		"interval": vco.Interval,
+		"status":   vco.Status,
+		"retry":    vco.Retry,
+	}
+
+	vcoHealthCheck = append(vcoHealthCheck, item)
 	return
 }
 

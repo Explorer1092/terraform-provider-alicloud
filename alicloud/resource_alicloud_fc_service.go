@@ -1,6 +1,8 @@
 package alicloud
 
 import (
+	"encoding/json"
+	"fmt"
 	"regexp"
 	"time"
 
@@ -45,6 +47,7 @@ func resourceAlicloudFCService() *schema.Resource {
 				Optional: true,
 			},
 
+			"tags": tagsSchemaWithIgnore(),
 			"internet_access": {
 				Type:     schema.TypeBool,
 				Optional: true,
@@ -67,6 +70,14 @@ func resourceAlicloudFCService() *schema.Resource {
 						"logstore": {
 							Type:     schema.TypeString,
 							Required: true,
+						},
+						"enable_request_metrics": {
+							Type:     schema.TypeBool,
+							Optional: true,
+						},
+						"enable_instance_metrics": {
+							Type:     schema.TypeBool,
+							Optional: true,
 						},
 					},
 				},
@@ -127,6 +138,23 @@ func resourceAlicloudFCService() *schema.Resource {
 					},
 				},
 			},
+			"tracing_config": {
+				Type:     schema.TypeList,
+				Optional: true,
+				MaxItems: 1,
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"type": {
+							Type:     schema.TypeString,
+							Required: true,
+						},
+						"params": {
+							Type:     schema.TypeMap,
+							Required: true,
+						},
+					},
+				},
+			},
 			"publish": {
 				Type:     schema.TypeBool,
 				Optional: true,
@@ -160,7 +188,7 @@ func resourceAlicloudFCServiceCreate(d *schema.ResourceData, meta interface{}) e
 		name = resource.UniqueId()
 	}
 
-	project, logstore, err := parseLogConfig(d, meta)
+	project, logstore, enable_request_metrics, enable_instance_metrics, err := parseLogConfig(d, meta)
 	if err != nil {
 		return WrapError(err)
 	}
@@ -170,8 +198,10 @@ func resourceAlicloudFCServiceCreate(d *schema.ResourceData, meta interface{}) e
 		InternetAccess: BoolPointer(d.Get("internet_access").(bool)),
 		Role:           StringPointer(d.Get("role").(string)),
 		LogConfig: &fc.LogConfig{
-			Project:  StringPointer(project),
-			Logstore: StringPointer(logstore),
+			Project:               StringPointer(project),
+			Logstore:              StringPointer(logstore),
+			EnableRequestMetrics:  BoolPointer(enable_request_metrics),
+			EnableInstanceMetrics: BoolPointer(enable_instance_metrics),
 		},
 	}
 	vpcConfig, err := parseVpcConfig(d, meta)
@@ -184,6 +214,11 @@ func resourceAlicloudFCServiceCreate(d *schema.ResourceData, meta interface{}) e
 		return WrapError(err)
 	}
 	request.NASConfig = nasConfig
+	tracingConfig, err := parseTracingConfig(d)
+	if err != nil {
+		return WrapError(err)
+	}
+	request.TracingConfig = tracingConfig
 	var requestInfo *fc.Client
 	var response *fc.CreateServiceOutput
 	if err := resource.Retry(2*time.Minute, func() *resource.RetryError {
@@ -238,6 +273,18 @@ func resourceAlicloudFCServiceCreate(d *schema.ResourceData, meta interface{}) e
 			return WrapErrorf(err, DefaultErrorMsg, "alicloud_fc_service", "PublishServiceVersion", FcGoSdk)
 		}
 	}
+	if _, ok := d.GetOk("tags"); ok {
+		resourceArn, err := parseResourceArn(d, meta)
+		if err != nil {
+			return WrapError(err)
+		}
+		fcService := FcService{client}
+
+		err = fcService.SetResourceTags(d, &resourceArn)
+		if err != nil {
+			return WrapError(err)
+		}
+	}
 	return resourceAlicloudFCServiceRead(d, meta)
 }
 
@@ -259,11 +306,16 @@ func resourceAlicloudFCServiceRead(d *schema.ResourceData, meta interface{}) err
 	d.Set("description", object.Description)
 	d.Set("internet_access", object.InternetAccess)
 	d.Set("role", object.Role)
+	if tags := object.Tags; tags != nil {
+		d.Set("tags", tagsToMap(tags))
+	}
 	var logConfigs []map[string]interface{}
 	if logconfig := object.LogConfig; logconfig != nil && *logconfig.Project != "" {
 		logConfigs = append(logConfigs, map[string]interface{}{
-			"project":  *logconfig.Project,
-			"logstore": *logconfig.Logstore,
+			"project":                 *logconfig.Project,
+			"logstore":                *logconfig.Logstore,
+			"enable_request_metrics":  *logconfig.EnableRequestMetrics,
+			"enable_instance_metrics": *logconfig.EnableInstanceMetrics,
 		})
 	}
 	if err := d.Set("log_config", logConfigs); err != nil {
@@ -297,6 +349,17 @@ func resourceAlicloudFCServiceRead(d *schema.ResourceData, meta interface{}) err
 		nasConfigs = append(nasConfigs, dstCfg)
 	}
 	if err := d.Set("nas_config", nasConfigs); err != nil {
+		return WrapError(err)
+	}
+
+	var tracingConfigs []map[string]interface{}
+	if tracingConfig := object.TracingConfig; tracingConfig != nil && tracingConfig.Type != nil {
+		tracingConfigs = append(tracingConfigs, map[string]interface{}{
+			"type":   tracingConfig.Type,
+			"params": tracingConfig.Params,
+		})
+	}
+	if err := d.Set("tracing_config", tracingConfigs); err != nil {
 		return WrapError(err)
 	}
 
@@ -335,8 +398,21 @@ func resourceAlicloudFCServiceRead(d *schema.ResourceData, meta interface{}) err
 
 func resourceAlicloudFCServiceUpdate(d *schema.ResourceData, meta interface{}) error {
 	client := meta.(*connectivity.AliyunClient)
-
 	d.Partial(true)
+
+	if d.HasChange("tags") {
+		fcService := FcService{client}
+		resourceArn, err := parseResourceArn(d, meta)
+		if err != nil {
+			return WrapError(err)
+		}
+
+		err = fcService.SetResourceTags(d, &resourceArn)
+		if err != nil {
+			return WrapError(err)
+		}
+	}
+
 	request := &fc.UpdateServiceInput{}
 
 	if d.HasChange("role") {
@@ -352,13 +428,15 @@ func resourceAlicloudFCServiceUpdate(d *schema.ResourceData, meta interface{}) e
 		d.SetPartial("description")
 	}
 	if d.HasChange("log_config") {
-		project, logstore, err := parseLogConfig(d, meta)
+		project, logstore, enable_request_metrics, enable_instance_metrics, err := parseLogConfig(d, meta)
 		if err != nil {
 			return WrapError(err)
 		}
 		request.LogConfig = &fc.LogConfig{
-			Project:  StringPointer(project),
-			Logstore: StringPointer(logstore),
+			Project:               StringPointer(project),
+			Logstore:              StringPointer(logstore),
+			EnableRequestMetrics:  BoolPointer(enable_request_metrics),
+			EnableInstanceMetrics: BoolPointer(enable_instance_metrics),
 		}
 		d.SetPartial("log_config")
 	}
@@ -379,6 +457,15 @@ func resourceAlicloudFCServiceUpdate(d *schema.ResourceData, meta interface{}) e
 		}
 		request.NASConfig = nasConfig
 		d.SetPartial("nas_config")
+	}
+
+	if d.HasChange("tracing_config") {
+		tracingConfig, err := parseTracingConfig(d)
+		if err != nil {
+			return WrapError(err)
+		}
+		request.TracingConfig = tracingConfig
+		d.SetPartial("tracing_config")
 	}
 
 	if request != nil {
@@ -528,7 +615,7 @@ func parseVpcConfig(d *schema.ResourceData, meta interface{}) (config *fc.VPCCon
 	return
 }
 
-func parseLogConfig(d *schema.ResourceData, meta interface{}) (project, logstore string, err error) {
+func parseLogConfig(d *schema.ResourceData, meta interface{}) (project, logstore string, enable_request_metrics, enable_instance_metrics bool, err error) {
 	client := meta.(*connectivity.AliyunClient)
 	if v, ok := d.GetOk("log_config"); ok {
 
@@ -542,6 +629,8 @@ func parseLogConfig(d *schema.ResourceData, meta interface{}) (project, logstore
 		if config != nil {
 			project = config["project"].(string)
 			logstore = config["logstore"].(string)
+			enable_request_metrics = config["enable_request_metrics"].(bool)
+			enable_instance_metrics = config["enable_instance_metrics"].(bool)
 		}
 	}
 	if project != "" {
@@ -607,4 +696,41 @@ func parseNasConfig(d *schema.ResourceData) (config *fc.NASConfig, err error) {
 		}
 	}
 	return
+}
+
+func parseTracingConfig(d *schema.ResourceData) (tracingConfig *fc.TracingConfig, err error) {
+	tracingConfig = fc.NewTracingConfig()
+	if v, ok := d.GetOk("tracing_config"); ok {
+		c, ok := v.([]interface{})[0].(map[string]interface{})
+		if !ok {
+			return nil, Error("Failed to parse tracing config.")
+		}
+		tracingConfig.Type = StringPointer(c["type"].(string))
+		if params := c["params"].(map[string]interface{}); len(params) > 0 {
+			byteVar, err := json.Marshal(params)
+			if err != nil {
+				return nil, WrapError(err)
+			}
+			err = json.Unmarshal(byteVar, &tracingConfig.Params)
+			if err != nil {
+				return nil, WrapError(err)
+			}
+		} else {
+			return nil, Error("Failed to parse tracing config, params must be set.")
+		}
+	}
+	return tracingConfig, nil
+}
+
+func parseResourceArn(d *schema.ResourceData, meta interface{}) (string, error) {
+	client := meta.(*connectivity.AliyunClient)
+
+	serviceName := d.Id()
+	region := client.RegionId
+	accountId, err := client.AccountId()
+	if err != nil {
+		return "", err
+	}
+
+	return fmt.Sprintf("acs:fc:%s:%s:services/%s", region, accountId, serviceName), nil
 }

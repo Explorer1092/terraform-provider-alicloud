@@ -117,7 +117,7 @@ func testSweepOosPatchBaseline(region string) error {
 	return nil
 }
 
-func TestAccAlicloudOOSPatchBaseline_basic0(t *testing.T) {
+func TestAccAliCloudOOSPatchBaseline_basic0(t *testing.T) {
 	var v map[string]interface{}
 	resourceId := "alicloud_oos_patch_baseline.default"
 	checkoutSupportedRegions(t, true, connectivity.OOSSupportRegions)
@@ -140,25 +140,80 @@ func TestAccAlicloudOOSPatchBaseline_basic0(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				Config: testAccConfig(map[string]interface{}{
+					"resource_group_id":   "${data.alicloud_resource_manager_resource_groups.default.ids.0}",
 					"operation_system":    "Windows",
 					"patch_baseline_name": "${var.name}",
-					"approval_rules":      `{\"PatchRules\":[{\"PatchFilterGroup\":[{\"Key\":\"PatchSet\",\"Values\":[\"OS\"]},{\"Key\":\"ProductFamily\",\"Values\":[\"Windows\"]},{\"Key\":\"Product\",\"Values\":[\"Windows 10\",\"Windows 7\"]},{\"Key\":\"Classification\",\"Values\":[\"Security Updates\",\"Updates\",\"Update Rollups\",\"Critical Updates\"]},{\"Key\":\"Severity\",\"Values\":[\"Critical\",\"Important\",\"Moderate\"]}],\"ApproveAfterDays\":7,\"ApproveUntilDate\":\"\",\"EnableNonSecurity\":true,\"ComplianceLevel\":\"Medium\"}]}`,
+					"approval_rules":      `{\"PatchRules\":[{\"PatchFilterGroup\":[{\"Key\":\"PatchSet\",\"Values\":[\"OS\"]},{\"Key\":\"ProductFamily\",\"Values\":[\"Windows\"]},{\"Key\":\"Product\",\"Values\":[\"Windows 10\",\"Windows 7\"]},{\"Key\":\"Classification\",\"Values\":[\"Security Updates\",\"Updates\",\"Update Rollups\",\"Critical Updates\"]},{\"Key\":\"Severity\",\"Values\":[\"Critical\",\"Important\",\"Moderate\"]}],\"ApproveAfterDays\":7,\"EnableNonSecurity\":true,\"ComplianceLevel\":\"Medium\"}]}`,
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
 						"operation_system":    "Windows",
 						"patch_baseline_name": name,
 						"approval_rules":      CHECKSET,
+						"resource_group_id":   CHECKSET,
 					}),
 				),
 			},
 			{
 				Config: testAccConfig(map[string]interface{}{
-					"description": "${var.name}",
+					"resource_group_id": "${data.alicloud_resource_manager_resource_groups.default.ids.1}",
+					"description":       "${var.name}",
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
 						"description": name,
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"approved_patches_enable_non_security": "true",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"approved_patches_enable_non_security": "true",
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"approved_patches_enable_non_security": "false",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"approved_patches_enable_non_security": "false",
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"approved_patches_enable_non_security": "true",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"approved_patches_enable_non_security": "true",
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"approved_patches": []string{
+						"KB1", "KB5", "KB6"},
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"approved_patches.#": "3",
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"sources": []string{
+						"[main]", "name=MyCustomRepository", "name=MyCustomRepository", "enabled=1"},
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"sources.#": "4",
 					}),
 				),
 			},
@@ -175,7 +230,7 @@ func TestAccAlicloudOOSPatchBaseline_basic0(t *testing.T) {
 			{
 				Config: testAccConfig(map[string]interface{}{
 					"description":    "${var.name}_update",
-					"approval_rules": `{\"PatchRules\":[{\"PatchFilterGroup\":[{\"Key\":\"PatchSet\",\"Values\":[\"OS\"]},{\"Key\":\"ProductFamily\",\"Values\":[\"Windows\"]},{\"Key\":\"Product\",\"Values\":[\"Windows 10\",\"Windows 7\"]},{\"Key\":\"Classification\",\"Values\":[\"Security Updates\",\"Updates\",\"Update Rollups\",\"Critical Updates\"]},{\"Key\":\"Severity\",\"Values\":[\"Critical\",\"Important\",\"Moderate\"]}],\"ApproveAfterDays\":7,\"ApproveUntilDate\":\"\",\"EnableNonSecurity\":true,\"ComplianceLevel\":\"Medium\"}]}`,
+					"approval_rules": `{\"PatchRules\":[{\"PatchFilterGroup\":[{\"Key\":\"PatchSet\",\"Values\":[\"OS\"]},{\"Key\":\"ProductFamily\",\"Values\":[\"Windows\"]},{\"Key\":\"Product\",\"Values\":[\"Windows 10\",\"Windows 7\"]},{\"Key\":\"Classification\",\"Values\":[\"Security Updates\",\"Updates\",\"Update Rollups\",\"Critical Updates\"]},{\"Key\":\"Severity\",\"Values\":[\"Critical\",\"Important\",\"Moderate\"]}],\"ApproveAfterDays\":7,\"EnableNonSecurity\":true,\"ComplianceLevel\":\"Medium\"}]}`,
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
@@ -185,15 +240,58 @@ func TestAccAlicloudOOSPatchBaseline_basic0(t *testing.T) {
 				),
 			},
 			{
-				ResourceName:      resourceId,
-				ImportState:       true,
-				ImportStateVerify: true,
+				Config: testAccConfig(map[string]interface{}{
+					"tags": map[string]string{
+						"Created": "TF",
+						"For":     "Test",
+					},
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"tags.%":       "2",
+						"tags.Created": "TF",
+						"tags.For":     "Test",
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"tags": map[string]string{
+						"Created": "TF-update",
+						"For":     "Test-update",
+					},
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"tags.%":       "2",
+						"tags.Created": "TF-update",
+						"tags.For":     "Test-update",
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"tags": REMOVEKEY,
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"tags.%":       "0",
+						"tags.Created": REMOVEKEY,
+						"tags.For":     REMOVEKEY,
+					}),
+				),
+			},
+			{
+				ResourceName:            resourceId,
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"approved_patches_enable_non_security"},
 			},
 		},
 	})
 }
 
-func TestAccAlicloudOOSPatchBaseline_basic1(t *testing.T) {
+func TestAccAliCloudOOSPatchBaseline_basic1(t *testing.T) {
 	var v map[string]interface{}
 	resourceId := "alicloud_oos_patch_baseline.default"
 	checkoutSupportedRegions(t, true, connectivity.OOSSupportRegions)
@@ -219,7 +317,7 @@ func TestAccAlicloudOOSPatchBaseline_basic1(t *testing.T) {
 					"operation_system":    "Windows",
 					"patch_baseline_name": "${var.name}",
 					"description":         "${var.name}",
-					"approval_rules":      `{\"PatchRules\":[{\"PatchFilterGroup\":[{\"Key\":\"PatchSet\",\"Values\":[\"OS\"]},{\"Key\":\"ProductFamily\",\"Values\":[\"Windows\"]},{\"Key\":\"Product\",\"Values\":[\"Windows 10\",\"Windows 7\"]},{\"Key\":\"Classification\",\"Values\":[\"Security Updates\",\"Updates\",\"Update Rollups\",\"Critical Updates\"]},{\"Key\":\"Severity\",\"Values\":[\"Critical\",\"Important\",\"Moderate\"]}],\"ApproveAfterDays\":7,\"ApproveUntilDate\":\"\",\"EnableNonSecurity\":true,\"ComplianceLevel\":\"Medium\"}]}`,
+					"approval_rules":      `{\"PatchRules\":[{\"PatchFilterGroup\":[{\"Key\":\"PatchSet\",\"Values\":[\"OS\"]},{\"Key\":\"ProductFamily\",\"Values\":[\"Windows\"]},{\"Key\":\"Product\",\"Values\":[\"Windows 10\",\"Windows 7\"]},{\"Key\":\"Classification\",\"Values\":[\"Security Updates\",\"Updates\",\"Update Rollups\",\"Critical Updates\"]},{\"Key\":\"Severity\",\"Values\":[\"Critical\",\"Important\",\"Moderate\"]}],\"ApproveAfterDays\":7,\"EnableNonSecurity\":true,\"ComplianceLevel\":\"Medium\"}]}`,
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
@@ -248,10 +346,12 @@ func AlicloudOOSPatchBaselineBasicDependence0(name string) string {
 variable "name" {
   default = "%s"
 }
+
+data "alicloud_resource_manager_resource_groups" "default" {}
 `, name)
 }
 
-func TestAccAlicloudOOSPatchBaseline_unit(t *testing.T) {
+func TestUnitAlicloudOOSPatchBaseline(t *testing.T) {
 	p := Provider().(*schema.Provider).ResourcesMap
 	d, _ := schema.InternalMap(p["alicloud_oos_patch_baseline"].Schema).Data(nil, nil)
 	dCreate, _ := schema.InternalMap(p["alicloud_oos_patch_baseline"].Schema).Data(nil, nil)
@@ -260,7 +360,7 @@ func TestAccAlicloudOOSPatchBaseline_unit(t *testing.T) {
 		"operation_system":    "Windows",
 		"patch_baseline_name": "MockName",
 		"description":         "description",
-		"approval_rules":      `{\"PatchRules\":[{\"PatchFilterGroup\":[{\"Key\":\"PatchSet\",\"Values\":[\"OS\"]},{\"Key\":\"ProductFamily\",\"Values\":[\"Windows\"]},{\"Key\":\"Product\",\"Values\":[\"Windows 10\",\"Windows 7\"]},{\"Key\":\"Classification\",\"Values\":[\"Security Updates\",\"Updates\",\"Update Rollups\",\"Critical Updates\"]},{\"Key\":\"Severity\",\"Values\":[\"Critical\",\"Important\",\"Moderate\"]}],\"ApproveAfterDays\":7,\"ApproveUntilDate\":\"\",\"EnableNonSecurity\":true,\"ComplianceLevel\":\"Medium\"}]}`,
+		"approval_rules":      `{\"PatchRules\":[{\"PatchFilterGroup\":[{\"Key\":\"PatchSet\",\"Values\":[\"OS\"]},{\"Key\":\"ProductFamily\",\"Values\":[\"Windows\"]},{\"Key\":\"Product\",\"Values\":[\"Windows 10\",\"Windows 7\"]},{\"Key\":\"Classification\",\"Values\":[\"Security Updates\",\"Updates\",\"Update Rollups\",\"Critical Updates\"]},{\"Key\":\"Severity\",\"Values\":[\"Critical\",\"Important\",\"Moderate\"]}],\"ApproveAfterDays\":7,\"EnableNonSecurity\":true,\"ComplianceLevel\":\"Medium\"}]}`,
 	} {
 		err := dCreate.Set(key, value)
 		assert.Nil(t, err)
@@ -336,7 +436,7 @@ func TestAccAlicloudOOSPatchBaseline_unit(t *testing.T) {
 				StatusCode: tea.Int(400),
 			}
 		})
-		err := resourceAlicloudOosPatchBaselineCreate(d, rawClient)
+		err := resourceAliCloudOosPatchBaselineCreate(d, rawClient)
 		patches.Reset()
 		assert.NotNil(t, err)
 	})
@@ -353,7 +453,7 @@ func TestAccAlicloudOOSPatchBaseline_unit(t *testing.T) {
 			}
 			return responseMock["CreateNormal"]("")
 		})
-		err := resourceAlicloudOosPatchBaselineCreate(d, rawClient)
+		err := resourceAliCloudOosPatchBaselineCreate(d, rawClient)
 		patches.Reset()
 		assert.NotNil(t, err)
 	})
@@ -370,7 +470,7 @@ func TestAccAlicloudOOSPatchBaseline_unit(t *testing.T) {
 			}
 			return responseMock["CreateNormal"]("")
 		})
-		err := resourceAlicloudOosPatchBaselineCreate(dCreate, rawClient)
+		err := resourceAliCloudOosPatchBaselineCreate(dCreate, rawClient)
 		patches.Reset()
 		assert.Nil(t, err)
 	})
@@ -389,7 +489,7 @@ func TestAccAlicloudOOSPatchBaseline_unit(t *testing.T) {
 			}
 		})
 
-		err := resourceAlicloudOosPatchBaselineUpdate(d, rawClient)
+		err := resourceAliCloudOosPatchBaselineUpdate(d, rawClient)
 		patches.Reset()
 		assert.NotNil(t, err)
 	})
@@ -424,7 +524,7 @@ func TestAccAlicloudOOSPatchBaseline_unit(t *testing.T) {
 			}
 			return responseMock["UpdateNormal"]("")
 		})
-		err := resourceAlicloudOosPatchBaselineUpdate(resourceData1, rawClient)
+		err := resourceAliCloudOosPatchBaselineUpdate(resourceData1, rawClient)
 		patches.Reset()
 		assert.NotNil(t, err)
 	})
@@ -459,7 +559,7 @@ func TestAccAlicloudOOSPatchBaseline_unit(t *testing.T) {
 			}
 			return responseMock["UpdateNormal"]("")
 		})
-		err := resourceAlicloudOosPatchBaselineUpdate(resourceData1, rawClient)
+		err := resourceAliCloudOosPatchBaselineUpdate(resourceData1, rawClient)
 		patches.Reset()
 		assert.Nil(t, err)
 	})
@@ -474,7 +574,7 @@ func TestAccAlicloudOOSPatchBaseline_unit(t *testing.T) {
 				StatusCode: tea.Int(400),
 			}
 		})
-		err := resourceAlicloudOosPatchBaselineDelete(d, rawClient)
+		err := resourceAliCloudOosPatchBaselineDelete(d, rawClient)
 		patches.Reset()
 		assert.NotNil(t, err)
 	})
@@ -491,7 +591,7 @@ func TestAccAlicloudOOSPatchBaseline_unit(t *testing.T) {
 			}
 			return responseMock["DeleteNormal"]("")
 		})
-		err := resourceAlicloudOosPatchBaselineDelete(d, rawClient)
+		err := resourceAliCloudOosPatchBaselineDelete(d, rawClient)
 		patches.Reset()
 		assert.NotNil(t, err)
 	})
@@ -508,7 +608,7 @@ func TestAccAlicloudOOSPatchBaseline_unit(t *testing.T) {
 			}
 			return responseMock["DeleteNormal"]("")
 		})
-		err := resourceAlicloudOosPatchBaselineDelete(d, rawClient)
+		err := resourceAliCloudOosPatchBaselineDelete(d, rawClient)
 		patches.Reset()
 		assert.Nil(t, err)
 	})
@@ -525,7 +625,7 @@ func TestAccAlicloudOOSPatchBaseline_unit(t *testing.T) {
 			}
 			return responseMock["ReadNormal"]("")
 		})
-		err := resourceAlicloudOosPatchBaselineRead(d, rawClient)
+		err := resourceAliCloudOosPatchBaselineRead(d, rawClient)
 		patcheDorequest.Reset()
 		assert.Nil(t, err)
 	})
@@ -541,8 +641,181 @@ func TestAccAlicloudOOSPatchBaseline_unit(t *testing.T) {
 			}
 			return responseMock["ReadNormal"]("")
 		})
-		err := resourceAlicloudOosPatchBaselineRead(d, rawClient)
+		err := resourceAliCloudOosPatchBaselineRead(d, rawClient)
 		patcheDorequest.Reset()
 		assert.NotNil(t, err)
 	})
 }
+
+// Test Oos PatchBaseline. >>> Resource test cases, automatically generated.
+// Case 1763
+func TestAccAliCloudOosPatchBaseline_basic1763(t *testing.T) {
+	var v map[string]interface{}
+	resourceId := "alicloud_oos_patch_baseline.default"
+	ra := resourceAttrInit(resourceId, AlicloudOosPatchBaselineMap1763)
+	rc := resourceCheckInitWithDescribeMethod(resourceId, &v, func() interface{} {
+		return &OosServiceV2{testAccProvider.Meta().(*connectivity.AliyunClient)}
+	}, "DescribeOosPatchBaseline")
+	rac := resourceAttrCheckInit(rc, ra)
+	testAccCheck := rac.resourceAttrMapUpdateSet()
+	rand := acctest.RandIntRange(10000, 99999)
+	name := fmt.Sprintf("tf-testacc%soospatchbaseline%d", defaultRegionToTest, rand)
+	testAccConfig := resourceTestAccConfigFunc(resourceId, name, AlicloudOosPatchBaselineBasicDependence1763)
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		IDRefreshName: resourceId,
+		Providers:     testAccProviders,
+		CheckDestroy:  rac.checkResourceDestroy(),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"patch_baseline_name": name,
+					"operation_system":    "Windows",
+					"approval_rules":      "{\\\"PatchRules\\\":[{\\\"EnableNonSecurity\\\":true,\\\"PatchFilterGroup\\\":[{\\\"Values\\\":[\\\"*\\\"],\\\"Key\\\":\\\"Product\\\"},{\\\"Values\\\":[\\\"Security\\\",\\\"Bugfix\\\"],\\\"Key\\\":\\\"Classification\\\"},{\\\"Values\\\":[\\\"Critical\\\",\\\"Important\\\"],\\\"Key\\\":\\\"Severity\\\"}],\\\"ApproveAfterDays\\\":7,\\\"ComplianceLevel\\\":\\\"Unspecified\\\"}]}",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"patch_baseline_name": name,
+						"operation_system":    "Windows",
+						"approval_rules":      CHECKSET,
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"approval_rules": "{\\\"PatchRules\\\":[{\\\"EnableNonSecurity\\\":true,\\\"PatchFilterGroup\\\":[{\\\"Values\\\":[\\\"*\\\"],\\\"Key\\\":\\\"Product\\\"},{\\\"Values\\\":[\\\"Security\\\",\\\"Bugfix\\\"],\\\"Key\\\":\\\"Classification\\\"},{\\\"Values\\\":[\\\"Critical\\\",\\\"Important\\\"],\\\"Key\\\":\\\"Severity\\\"}],\\\"ApproveAfterDays\\\":7,\\\"ComplianceLevel\\\":\\\"Unspecified\\\"}]}",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"approval_rules": CHECKSET,
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"rejected_patches_action": "ALLOW_AS_DEPENDENCY",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"rejected_patches_action": "ALLOW_AS_DEPENDENCY",
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"rejected_patches_action": "BLOCK",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"rejected_patches_action": "BLOCK",
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"rejected_patches": []string{"KB1", "MS2"},
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"rejected_patches.#": "2",
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"rejected_patches": []string{"KB1", "KB5", "KB6"},
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"rejected_patches.#": "3",
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"patch_baseline_name": name + "_update",
+					"operation_system":    "Windows",
+					"approval_rules":      "{\\\"PatchRules\\\":[{\\\"EnableNonSecurity\\\":true,\\\"PatchFilterGroup\\\":[{\\\"Values\\\":[\\\"*\\\"],\\\"Key\\\":\\\"Product\\\"},{\\\"Values\\\":[\\\"Security\\\",\\\"Bugfix\\\"],\\\"Key\\\":\\\"Classification\\\"},{\\\"Values\\\":[\\\"Critical\\\",\\\"Important\\\"],\\\"Key\\\":\\\"Severity\\\"}],\\\"ApproveAfterDays\\\":7,\\\"ComplianceLevel\\\":\\\"Unspecified\\\"}]}",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"patch_baseline_name": name + "_update",
+						"operation_system":    "Windows",
+						"approval_rules":      CHECKSET,
+					}),
+				),
+			},
+			{
+				ResourceName:            resourceId,
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{},
+			},
+		},
+	})
+}
+
+var AlicloudOosPatchBaselineMap1763 = map[string]string{
+	"create_time": CHECKSET,
+}
+
+func AlicloudOosPatchBaselineBasicDependence1763(name string) string {
+	return fmt.Sprintf(`
+variable "name" {
+    default = "%s"
+}
+
+
+`, name)
+}
+
+// Case 1763  twin
+func TestAccAliCloudOosPatchBaseline_basic1763_twin(t *testing.T) {
+	var v map[string]interface{}
+	resourceId := "alicloud_oos_patch_baseline.default"
+	ra := resourceAttrInit(resourceId, AlicloudOosPatchBaselineMap1763)
+	rc := resourceCheckInitWithDescribeMethod(resourceId, &v, func() interface{} {
+		return &OosServiceV2{testAccProvider.Meta().(*connectivity.AliyunClient)}
+	}, "DescribeOosPatchBaseline")
+	rac := resourceAttrCheckInit(rc, ra)
+	testAccCheck := rac.resourceAttrMapUpdateSet()
+	rand := acctest.RandIntRange(10000, 99999)
+	name := fmt.Sprintf("tf-testacc%soospatchbaseline%d", defaultRegionToTest, rand)
+	testAccConfig := resourceTestAccConfigFunc(resourceId, name, AlicloudOosPatchBaselineBasicDependence1763)
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		IDRefreshName: resourceId,
+		Providers:     testAccProviders,
+		CheckDestroy:  rac.checkResourceDestroy(),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"patch_baseline_name": name,
+					"operation_system":    "Windows",
+					"approval_rules":      "{\\\"PatchRules\\\":[{\\\"EnableNonSecurity\\\":true,\\\"PatchFilterGroup\\\":[{\\\"Values\\\":[\\\"*\\\"],\\\"Key\\\":\\\"Product\\\"},{\\\"Values\\\":[\\\"Security\\\",\\\"Bugfix\\\"],\\\"Key\\\":\\\"Classification\\\"},{\\\"Values\\\":[\\\"Critical\\\",\\\"Important\\\"],\\\"Key\\\":\\\"Severity\\\"}],\\\"ApproveAfterDays\\\":7,\\\"ComplianceLevel\\\":\\\"Unspecified\\\"}]}",
+					"description":         "test-update",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"patch_baseline_name": name,
+						"operation_system":    "Windows",
+						"approval_rules":      CHECKSET,
+						"description":         "test-update",
+					}),
+				),
+			},
+			{
+				ResourceName:            resourceId,
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{},
+			},
+		},
+	})
+}
+
+// Test Oos PatchBaseline. <<< Resource test cases, automatically generated.

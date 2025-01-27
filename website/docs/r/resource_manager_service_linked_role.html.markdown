@@ -7,17 +7,23 @@ description: |-
   Provides a Alicloud Resource Manager Service Linked Role.
 ---
 
-# alicloud\_resource\_manager\_service\_linked\_role
+# alicloud_resource_manager_service_linked_role
 
 Provides a Resource Manager Service Linked Role.
 
 For information about Resource Manager Service Linked Role and how to use it, see [What is Service Linked Role.](https://www.alibabacloud.com/help/en/doc-detail/171226.htm).
 
--> **NOTE:** Available in v1.157.0+.
+-> **NOTE:** Available since v1.157.0.
 
 ## Example Usage
 
 Basic Usage
+
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_resource_manager_service_linked_role&exampleId=eefa8b76-377b-7d14-273c-76d16c3b8299b930dbae&activeTab=example&spm=docs.r.resource_manager_service_linked_role.0.eefa8b7637&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
 
 ```terraform
 resource "alicloud_resource_manager_service_linked_role" "default" {
@@ -46,6 +52,6 @@ The following attributes are exported:
 
 Resource Manager Service Linked Role can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_resource_manager_service_linked_role.default <service_name>:<role_name>
 ```

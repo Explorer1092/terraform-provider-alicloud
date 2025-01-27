@@ -7,21 +7,30 @@ description: |-
   Provides a Alicloud Security Center Group resource.
 ---
 
-# alicloud\_security\_center\_group
+# alicloud_security_center_group
 
 Provides a Security Center Group resource.
 
 For information about Security Center Group and how to use it, see [What is Group](https://www.alibabacloud.com/help/doc-detail/129195.htm).
 
--> **NOTE:** Available in v1.133.0+.
+-> **NOTE:** Available since v1.133.0.
 
 ## Example Usage
 
 Basic Usage
 
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_security_center_group&exampleId=16e39a32-3945-dbc5-1207-e45939b63e2d4609fb6b&activeTab=example&spm=docs.r.security_center_group.0.16e39a3239&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
 ```terraform
+variable "name" {
+  default = "tf_example"
+}
 resource "alicloud_security_center_group" "example" {
-  group_name = "example_value"
+  group_name = var.name
 }
 ```
 
@@ -29,7 +38,7 @@ resource "alicloud_security_center_group" "example" {
 
 The following arguments are supported:
 
-* `group_id` - (Computed, ForceNew) GroupId.
+* `group_id` - (Optional, ForceNew) GroupId.
 * `group_name` - (Optional) GroupName.
 
 ## Attributes Reference
@@ -38,9 +47,9 @@ The following attributes are exported:
 
 * `id` - The resource ID in terraform of Group. Its value is same as `group_id`.
 
-### Timeouts
+## Timeouts
 
--> **NOTE:** Available in 1.163.0+.
+-> **NOTE:** Available since v1.163.0.
 
 The `timeouts` block allows you to specify [timeouts](https://www.terraform.io/docs/configuration-0-11/resources.html#timeouts) for certain actions:
 
@@ -52,6 +61,6 @@ The `timeouts` block allows you to specify [timeouts](https://www.terraform.io/d
 
 Security Center Group can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_security_center_group.example <group_id>
 ```

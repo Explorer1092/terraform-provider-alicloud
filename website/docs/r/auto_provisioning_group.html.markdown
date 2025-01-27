@@ -16,6 +16,12 @@ Provides a ECS auto provisioning group resource which is a solution that uses pr
 
 ## Example Usage
 
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_auto_provisioning_group&exampleId=e055ce1b-2031-1721-49c0-10d93d461580164c92fc&activeTab=example&spm=docs.r.auto_provisioning_group.0.e055ce1b20&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
 ```terraform
 variable "name" {
   default = "auto_provisioning_group"
@@ -52,10 +58,10 @@ resource "alicloud_auto_provisioning_group" "default" {
 }
 
 resource "alicloud_ecs_launch_template" "template" {
-  name              = var.name
-  image_id          = data.alicloud_images.default.images[0].id
-  instance_type     = "ecs.n1.tiny"
-  security_group_id = alicloud_security_group.default.id
+  launch_template_name = var.name
+  image_id             = data.alicloud_images.default.images[0].id
+  instance_type        = "ecs.n1.tiny"
+  security_group_id    = alicloud_security_group.default.id
 }
 
 resource "alicloud_security_group" "default" {
@@ -81,7 +87,7 @@ The following arguments are supported:
 * `auto_provisioning_group_type` - (Optional, ForceNew) The type of the auto provisioning group. Valid values:`request` and `maintain`,Default value: `maintain`.
 * `spot_allocation_strategy` - (Optional, ForceNew) The scale-out policy for preemptible instances. Valid values:`lowest-price` and `diversified`,Default value: `lowest-price`.
 * `spot_target_capacity` - (Optional) The target capacity of preemptible instances in the auto provisioning group.
-* `spot_instance_interruption_behavior` - (Optional, ForceNew) The default behavior after preemptible instances are shut down. Value values: `stop` and `terminate`,Default value: `stop`.
+* `spot_instance_interruption_behavior` - (Optional, ForceNew) The default behavior after preemptible instances are shut down. Valid values: `stop` and `terminate`,Default value: `stop`.
 * `spot_instance_pools_to_use_count` - (Optional, ForceNew) This parameter takes effect when the `SpotAllocationStrategy` parameter is set to `lowest-price`. The auto provisioning group selects instance types of the lowest cost to create instances.
 * `pay_as_you_go_allocation_strategy` - (Optional, ForceNew) The scale-out policy for pay-as-you-go instances. Valid values: `lowest-price` and `prioritized`,Default value: `lowest-price`.
 * `pay_as_you_go_target_capacity` - (Optional) The target capacity of pay-as-you-go instances in the auto provisioning group.
@@ -94,9 +100,9 @@ The following arguments are supported:
 * `max_spot_price` - (Optional) The global maximum price for preemptible instances in the auto provisioning group. If both the `MaxSpotPrice` and `LaunchTemplateConfig.N.MaxPrice` parameters are specified, the maximum price is the lower value of the two.
 * `valid_from` - (Optional, ForceNew) The time when the auto provisioning group is started. The period of time between this point in time and the point in time specified by the `valid_until` parameter is the effective time period of the auto provisioning group.By default, an auto provisioning group is immediately started after creation.
 * `valid_until` - (Optional, ForceNew) The time when the auto provisioning group expires. The period of time between this point in time and the point in time specified by the `valid_from` parameter is the effective time period of the auto provisioning group.By default, an auto provisioning group never expires.
-* `launch_template_config` - (Required, ForceNew) DataDisk mappings to attach to ecs instance. See [Block config](#block-config) below for details.
+* `launch_template_config` - (Required, ForceNew) DataDisk mappings to attach to ecs instance. See [`block-config`](#block-config) below for details.
 
-## Block config
+### `block-config`
 
 The config mapping supports the following:
 * `instance_type` - (Optional) The instance type of the Nth extended configurations of the launch template.
@@ -114,6 +120,6 @@ The following attributes are exported:
 
 ECS auto provisioning group can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_auto_provisioning_group.example asg-abc123456
 ```

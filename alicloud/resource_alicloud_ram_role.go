@@ -3,16 +3,12 @@ package alicloud
 import (
 	"time"
 
-	util "github.com/alibabacloud-go/tea-utils/service"
-
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
-
-	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
-
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ram"
 	"github.com/aliyun/terraform-provider-alicloud/alicloud/connectivity"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
 )
 
 func resourceAlicloudRamRole() *schema.Resource {
@@ -51,7 +47,7 @@ func resourceAlicloudRamRole() *schema.Resource {
 				Type:         schema.TypeInt,
 				Optional:     true,
 				Default:      3600,
-				ValidateFunc: validation.IntBetween(3600, 43200),
+				ValidateFunc: IntBetween(3600, 43200),
 			},
 			"services": {
 				Type:     schema.TypeSet,
@@ -85,13 +81,12 @@ func resourceAlicloudRamRole() *schema.Resource {
 				Default:       "1",
 				ConflictsWith: []string{"document"},
 				// can only be '1' so far.
-				ValidateFunc: validation.StringInSlice([]string{"1"}, false),
+				ValidateFunc: StringInSlice([]string{"1"}, false),
 				Deprecated:   "Field 'version' has been deprecated from version 1.49.0, and use field 'document' to replace. ",
 			},
 			"force": {
 				Type:     schema.TypeBool,
 				Optional: true,
-				Default:  false,
 			},
 			"arn": {
 				Type:     schema.TypeString,
@@ -141,6 +136,7 @@ func resourceAlicloudRamRoleUpdate(d *schema.ResourceData, meta interface{}) err
 	client := meta.(*connectivity.AliyunClient)
 	ramService := RamService{client}
 	var response map[string]interface{}
+	var err error
 	update := false
 	request := map[string]interface{}{
 		"RoleName": d.Id(),
@@ -166,13 +162,9 @@ func resourceAlicloudRamRoleUpdate(d *schema.ResourceData, meta interface{}) err
 	}
 	if update {
 		action := "UpdateRole"
-		conn, err := client.NewRamClient()
-		if err != nil {
-			return WrapError(err)
-		}
 		wait := incrementalWait(3*time.Second, 3*time.Second)
 		err = resource.Retry(d.Timeout(schema.TimeoutUpdate), func() *resource.RetryError {
-			response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2015-05-01"), StringPointer("AK"), nil, request, &util.RuntimeOptions{})
+			response, err = client.RpcPost("Ram", "2015-05-01", action, nil, request, false)
 			if err != nil {
 				if NeedRetry(err) {
 					wait()
@@ -257,16 +249,30 @@ func resourceAlicloudRamRoleDelete(d *schema.ResourceData, meta interface{}) err
 			for _, v := range response.Policies.Policy {
 				request := ram.CreateDetachPolicyFromRoleRequest()
 				request.RegionId = client.RegionId
-				request.RoleName = v.PolicyName
-				request.PolicyType = v.PolicyType
 				request.RoleName = d.Id()
-				raw, err := client.WithRamClient(func(ramClient *ram.Client) (interface{}, error) {
-					return ramClient.DetachPolicyFromRole(request)
+				request.PolicyName = v.PolicyName
+				request.PolicyType = v.PolicyType
+
+				wait := incrementalWait(3*time.Second, 3*time.Second)
+				err = resource.Retry(client.GetRetryTimeout(d.Timeout(schema.TimeoutDelete)), func() *resource.RetryError {
+					raw, err := client.WithRamClient(func(ramClient *ram.Client) (interface{}, error) {
+						return ramClient.DetachPolicyFromRole(request)
+					})
+					if err != nil {
+						if NeedRetry(err) {
+							wait()
+							return resource.RetryableError(err)
+						}
+						return resource.NonRetryableError(err)
+					}
+					addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+					return nil
 				})
+
 				if err != nil && !IsExpectedErrors(err, []string{"EntityNotExist"}) {
 					return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
 				}
-				addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+
 			}
 		}
 	}

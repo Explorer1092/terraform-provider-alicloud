@@ -1,418 +1,669 @@
+// Package alicloud. This file is generated automatically. Please do not modify it manually, thank you!
 package alicloud
 
 import (
 	"encoding/json"
-	"strconv"
+	"fmt"
+	"log"
+	"regexp"
 	"time"
 
-	"github.com/aliyun/alibaba-cloud-sdk-go/services/cdn"
-	cdn2 "github.com/denverdino/aliyungo/cdn"
-	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
-
+	"github.com/PaesslerAG/jsonpath"
+	util "github.com/alibabacloud-go/tea-utils/service"
 	"github.com/aliyun/terraform-provider-alicloud/alicloud/connectivity"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 )
 
-func resourceAlicloudCdnDomainNew() *schema.Resource {
+func resourceAliCloudCdnDomain() *schema.Resource {
 	return &schema.Resource{
-		Create: resourceAlicloudCdnDomainCreateNew,
-		Read:   resourceAlicloudCdnDomainReadNew,
-		Update: resourceAlicloudCdnDomainUpdateNew,
-		Delete: resourceAlicloudCdnDomainDeleteNew,
-
+		Create: resourceAliCloudCdnDomainCreate,
+		Read:   resourceAliCloudCdnDomainRead,
+		Update: resourceAliCloudCdnDomainUpdate,
+		Delete: resourceAliCloudCdnDomainDelete,
 		Importer: &schema.ResourceImporter{
 			State: schema.ImportStatePassthrough,
 		},
+		Timeouts: &schema.ResourceTimeout{
+			Create: schema.DefaultTimeout(15 * time.Minute),
+			Update: schema.DefaultTimeout(15 * time.Minute),
+			Delete: schema.DefaultTimeout(15 * time.Minute),
+		},
 		Schema: map[string]*schema.Schema{
-			"domain_name": {
-				Type:         schema.TypeString,
-				Required:     true,
-				ValidateFunc: validation.StringLenBetween(5, 67),
-			},
-			"resource_group_id": {
-				Type:     schema.TypeString,
-				Optional: true,
-				Computed: true,
-			},
 			"cdn_type": {
-				Type:         schema.TypeString,
-				Required:     true,
-				ForceNew:     true,
-				ValidateFunc: validation.StringInSlice(cdn2.CdnTypes, false),
-			},
-			"sources": {
-				Type:     schema.TypeSet,
+				Type:     schema.TypeString,
 				Required: true,
-				Elem: &schema.Resource{
-					Schema: map[string]*schema.Schema{
-						"content": {
-							Type:     schema.TypeString,
-							Required: true,
-						},
-						"type": {
-							Type:         schema.TypeString,
-							Required:     true,
-							ValidateFunc: validation.StringInSlice(cdn2.SourceTypes, false),
-						},
-						"port": {
-							Type:         schema.TypeInt,
-							Optional:     true,
-							Default:      80,
-							ValidateFunc: validation.IntInSlice([]int{80, 443}),
-						},
-						"priority": {
-							Type:         schema.TypeInt,
-							Optional:     true,
-							Default:      20,
-							ValidateFunc: validation.IntBetween(0, 100),
-						},
-						"weight": {
-							Type:     schema.TypeInt,
-							Optional: true,
-							Default:  10,
-							DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
-								if v, ok := d.GetOk("sources"); ok && len(v.(*schema.Set).List()) > 0 {
-									sources := make([]map[string]interface{}, len(v.(*schema.Set).List()))
-									byteSources, _ := json.Marshal(v.(*schema.Set).List())
-									json.Unmarshal(byteSources, &sources)
-									for _, source := range sources {
-										if source["type"].(string) == "ipaddr" && formatInt(source["weight"]) != 10 {
-											return true
-										}
-									}
-								}
-								return false
-							},
-							ValidateFunc: validation.IntBetween(0, 100),
-						},
-					},
-				},
+				ForceNew: true,
 			},
 			"certificate_config": {
 				Type:     schema.TypeList,
 				Optional: true,
 				Computed: true,
+				MaxItems: 1,
 				Elem: &schema.Resource{
 					Schema: map[string]*schema.Schema{
 						"server_certificate": {
 							Type:      schema.TypeString,
 							Optional:  true,
+							Computed:  true,
 							Sensitive: true,
-						},
-						"server_certificate_status": {
-							Type:         schema.TypeString,
-							Default:      "on",
-							Optional:     true,
-							ValidateFunc: validation.StringInSlice([]string{"on", "off"}, false),
 						},
 						"private_key": {
 							Type:      schema.TypeString,
 							Optional:  true,
 							Sensitive: true,
 						},
-						"force_set": {
-							Type:         schema.TypeString,
-							Optional:     true,
-							ValidateFunc: validation.StringInSlice([]string{"1", "0"}, false),
+						"cert_id": {
+							Type:     schema.TypeString,
+							Optional: true,
+							Computed: true,
+						},
+						"cert_region": {
+							Type:     schema.TypeString,
+							Optional: true,
+							Computed: true,
+						},
+						"cert_type": {
+							Type:     schema.TypeString,
+							Optional: true,
+							Computed: true,
 						},
 						"cert_name": {
 							Type:     schema.TypeString,
 							Optional: true,
+							Computed: true,
 						},
-						"cert_type": {
+						"server_certificate_status": {
 							Type:         schema.TypeString,
 							Optional:     true,
-							ValidateFunc: validation.StringInSlice([]string{"upload", "cas", "free"}, false),
+							Default:      "on",
+							ValidateFunc: StringInSlice([]string{"on", "off"}, false),
 						},
 					},
 				},
-				MaxItems: 1,
+			},
+			"check_url": {
+				Type:     schema.TypeString,
+				Optional: true,
+			},
+			"cname": {
+				Type:     schema.TypeString,
+				Computed: true,
+			},
+			"domain_name": {
+				Type:     schema.TypeString,
+				Required: true,
+				ForceNew: true,
+			},
+			"env": {
+				Type:     schema.TypeString,
+				Optional: true,
+			},
+			"resource_group_id": {
+				Type:         schema.TypeString,
+				Optional:     true,
+				Computed:     true,
+				ValidateFunc: StringMatch(regexp.MustCompile("rg-\\w+"), "The ID of the resource group."),
 			},
 			"scope": {
 				Type:         schema.TypeString,
 				Optional:     true,
 				Computed:     true,
-				ForceNew:     true,
-				ValidateFunc: validation.StringInSlice(cdn2.Scopes, false),
+				ValidateFunc: StringInSlice([]string{"domestic", "overseas", "global"}, false),
 			},
-			"tags": tagsSchema(),
-			"cname": {
+			"sources": {
+				Type:     schema.TypeSet,
+				Required: true,
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"type": {
+							Type:         schema.TypeString,
+							Optional:     true,
+							ValidateFunc: StringInSlice([]string{"domain", "ipaddr", "oss", "common"}, false),
+						},
+						"content": {
+							Type:     schema.TypeString,
+							Optional: true,
+						},
+						"priority": {
+							Type:         schema.TypeInt,
+							Optional:     true,
+							Default:      20,
+							ValidateFunc: IntBetween(0, 100),
+						},
+						"port": {
+							Type:     schema.TypeInt,
+							Optional: true,
+							Default:  80,
+						},
+						"weight": {
+							Type:         schema.TypeInt,
+							Optional:     true,
+							Default:      10,
+							ValidateFunc: IntBetween(0, 100),
+						},
+					},
+				},
+			},
+			"status": {
 				Type:     schema.TypeString,
+				Optional: true,
 				Computed: true,
 			},
+			"tags": tagsSchema(),
 		},
 	}
 }
 
-func resourceAlicloudCdnDomainCreateNew(d *schema.ResourceData, meta interface{}) error {
+func resourceAliCloudCdnDomainCreate(d *schema.ResourceData, meta interface{}) error {
+
 	client := meta.(*connectivity.AliyunClient)
-	cdnService := &CdnService{client: client}
 
-	request := cdn.CreateAddCdnDomainRequest()
-	request.RegionId = client.RegionId
-	if v := d.Get("resource_group_id").(string); v != "" {
-		request.ResourceGroupId = v
-	}
-	request.DomainName = d.Get("domain_name").(string)
-	request.CdnType = d.Get("cdn_type").(string)
-	if v, ok := d.GetOk("scope"); ok {
-		request.Scope = v.(string)
-	}
-
-	sources, err := cdnService.convertCdnSourcesToString(d.Get("sources").(*schema.Set).List())
+	action := "AddCdnDomain"
+	var request map[string]interface{}
+	var response map[string]interface{}
+	query := make(map[string]interface{})
+	conn, err := client.NewCdnClient()
 	if err != nil {
 		return WrapError(err)
 	}
-	request.Sources = sources
-
-	raw, err := client.WithCdnClient_new(func(cdnClient *cdn.Client) (interface{}, error) {
-		return cdnClient.AddCdnDomain(request)
-	})
-	if err != nil {
-		return WrapErrorf(err, DefaultErrorMsg, "alicloud_cdn_domain", request.GetActionName(), AlibabaCloudSdkGoERROR)
-	}
-	addDebug(request.GetActionName(), raw, request.RpcRequest, request)
-
-	d.SetId(request.DomainName)
-
-	err = cdnService.WaitForCdnDomain(d.Id(), Online, DefaultLongTimeout)
-	if err != nil {
-		return WrapError(err)
+	request = make(map[string]interface{})
+	if v, ok := d.GetOk("domain_name"); ok {
+		request["DomainName"] = v
 	}
 
-	return resourceAlicloudCdnDomainUpdateNew(d, meta)
-}
-
-func resourceAlicloudCdnDomainUpdateNew(d *schema.ResourceData, meta interface{}) error {
-	client := meta.(*connectivity.AliyunClient)
-	cdnService := &CdnService{client}
-
-	d.Partial(true)
-
-	if !d.IsNewResource() {
-		request := cdn.CreateModifyCdnDomainRequest()
-		request.RegionId = client.RegionId
-		if v := d.Get("resource_group_id").(string); v != "" {
-			request.ResourceGroupId = v
+	request["CdnType"] = d.Get("cdn_type")
+	if v, ok := d.GetOk("resource_group_id"); ok {
+		request["ResourceGroupId"] = v
+	}
+	if v, ok := d.GetOk("sources"); ok {
+		sourcesMapsArray := make([]interface{}, 0)
+		for _, dataLoop := range v.(*schema.Set).List() {
+			dataLoopTmp := dataLoop.(map[string]interface{})
+			dataLoopMap := make(map[string]interface{})
+			dataLoopMap["Weight"] = dataLoopTmp["weight"]
+			dataLoopMap["type"] = dataLoopTmp["type"]
+			dataLoopMap["content"] = dataLoopTmp["content"]
+			dataLoopMap["priority"] = dataLoopTmp["priority"]
+			dataLoopMap["port"] = dataLoopTmp["port"]
+			sourcesMapsArray = append(sourcesMapsArray, dataLoopMap)
 		}
-		request.DomainName = d.Id()
-
-		if d.HasChange("sources") {
-			sources, err := cdnService.convertCdnSourcesToString(d.Get("sources").(*schema.Set).List())
-			if err != nil {
-				return WrapError(err)
-			}
-			request.Sources = sources
-
-			raw, err := client.WithCdnClient_new(func(cdnClient *cdn.Client) (interface{}, error) {
-				return cdnClient.ModifyCdnDomain(request)
-			})
-			if err != nil {
-				return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
-			}
-			addDebug(request.GetActionName(), raw, request.RpcRequest, request)
-
-			err = cdnService.WaitForCdnDomain(d.Id(), Online, DefaultTimeoutMedium)
-			if err != nil {
-				return WrapError(err)
-			}
-			d.SetPartial("sources")
-			d.SetPartial("resource_group_id")
-
-		}
-	}
-
-	if d.HasChange("certificate_config") {
-		if err := certificateConfigUpdateNew(client, d); err != nil {
+		sourcesMapsJson, err := json.Marshal(sourcesMapsArray)
+		if err != nil {
 			return WrapError(err)
 		}
+		request["Sources"] = string(sourcesMapsJson)
 	}
 
-	if err := setCdnTags(client, TagResourceCdn, d); err != nil {
-		return WrapError(err)
+	if v, ok := d.GetOk("scope"); ok {
+		request["Scope"] = v
+	}
+	if v, ok := d.GetOk("check_url"); ok {
+		request["CheckUrl"] = v
+	}
+	if v, ok := d.GetOk("tags"); ok {
+		tagsMap := ConvertTags(v.(map[string]interface{}))
+		request = expandTagsToMap(request, tagsMap)
 	}
 
-	d.Partial(false)
-	return resourceAlicloudCdnDomainReadNew(d, meta)
+	runtime := util.RuntimeOptions{}
+	runtime.SetAutoretry(true)
+	wait := incrementalWait(3*time.Second, 5*time.Second)
+	err = resource.Retry(d.Timeout(schema.TimeoutCreate), func() *resource.RetryError {
+		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2018-05-10"), StringPointer("AK"), query, request, &runtime)
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		return nil
+	})
+	addDebug(action, response, request)
+
+	if err != nil {
+		return WrapErrorf(err, DefaultErrorMsg, "alicloud_cdn_domain_new", action, AlibabaCloudSdkGoERROR)
+	}
+
+	d.SetId(fmt.Sprint(request["DomainName"]))
+
+	cdnServiceV2 := CdnServiceV2{client}
+	stateConf := BuildStateConf([]string{}, []string{"online"}, d.Timeout(schema.TimeoutCreate), 50*time.Second, cdnServiceV2.CdnDomainStateRefreshFunc(d.Id(), "DomainStatus", []string{}))
+	if _, err := stateConf.WaitForState(); err != nil {
+		return WrapErrorf(err, IdMsg, d.Id())
+	}
+
+	return resourceAliCloudCdnDomainUpdate(d, meta)
 }
 
-func resourceAlicloudCdnDomainReadNew(d *schema.ResourceData, meta interface{}) error {
+func resourceAliCloudCdnDomainRead(d *schema.ResourceData, meta interface{}) error {
 	client := meta.(*connectivity.AliyunClient)
+	cdnServiceV2 := CdnServiceV2{client}
 
-	cdnService := &CdnService{client: client}
-	object, err := cdnService.DescribeCdnDomainNew(d.Id())
+	objectRaw, err := cdnServiceV2.DescribeCdnDomain(d.Id())
 	if err != nil {
-		if NotFoundError(err) {
+		if !d.IsNewResource() && NotFoundError(err) {
+			log.Printf("[DEBUG] Resource alicloud_cdn_domain_new DescribeCdnDomain Failed!!! %s", err)
 			d.SetId("")
 			return nil
 		}
 		return WrapError(err)
 	}
-	if len(object.SourceModels.SourceModel) > 0 {
-		sources := make([]map[string]interface{}, 0)
-		for _, model := range object.SourceModels.SourceModel {
-			priority, _ := strconv.Atoi(model.Priority)
-			weight, _ := strconv.Atoi(model.Weight)
-			sources = append(sources, map[string]interface{}{
-				"content":  model.Content,
-				"port":     model.Port,
-				"priority": priority,
-				"type":     model.Type,
-				"weight":   weight,
-			})
+
+	if objectRaw["CdnType"] != nil {
+		d.Set("cdn_type", objectRaw["CdnType"])
+	}
+	if objectRaw["Cname"] != nil {
+		d.Set("cname", objectRaw["Cname"])
+	}
+	if objectRaw["ResourceGroupId"] != nil {
+		d.Set("resource_group_id", objectRaw["ResourceGroupId"])
+	}
+	if objectRaw["Scope"] != nil {
+		d.Set("scope", objectRaw["Scope"])
+	}
+	if objectRaw["DomainStatus"] != nil {
+		d.Set("status", objectRaw["DomainStatus"])
+	}
+	if objectRaw["DomainName"] != nil {
+		d.Set("domain_name", objectRaw["DomainName"])
+	}
+
+	sourceModel1Raw, _ := jsonpath.Get("$.SourceModels.SourceModel", objectRaw)
+	sourcesMaps := make([]map[string]interface{}, 0)
+	if sourceModel1Raw != nil {
+		for _, sourceModelChild1Raw := range sourceModel1Raw.([]interface{}) {
+			sourcesMap := make(map[string]interface{})
+			sourceModelChild1Raw := sourceModelChild1Raw.(map[string]interface{})
+			sourcesMap["content"] = sourceModelChild1Raw["Content"]
+			sourcesMap["port"] = sourceModelChild1Raw["Port"]
+			sourcesMap["priority"] = formatInt(sourceModelChild1Raw["Priority"])
+			sourcesMap["type"] = sourceModelChild1Raw["Type"]
+			sourcesMap["weight"] = formatInt(sourceModelChild1Raw["Weight"])
+
+			sourcesMaps = append(sourcesMaps, sourcesMap)
 		}
-
-		err := d.Set("sources", sources)
-		if err != nil {
-			return WrapError(err)
+	}
+	if sourceModel1Raw != nil {
+		if err := d.Set("sources", sourcesMaps); err != nil {
+			return err
 		}
 	}
 
-	d.Set("domain_name", object.DomainName)
-	d.Set("cdn_type", object.CdnType)
-	d.Set("scope", object.Scope)
-	d.Set("resource_group_id", object.ResourceGroupId)
-	d.Set("cname", object.Cname)
-
-	certInfo, err := cdnService.DescribeDomainCertificateInfo(d.Id())
-	if err != nil {
-		if NotFoundError(err) {
-			return nil
-		}
-		return WrapError(err)
-	}
-
-	oldConfig := d.Get("certificate_config").([]interface{})
-	config := make([]map[string]interface{}, 1)
-	serverCertificateStatus := object.ServerCertificateStatus
-	if serverCertificateStatus == "" {
-		serverCertificateStatus = "off"
-	}
-	config[0] = map[string]interface{}{
-		"server_certificate":        certInfo.ServerCertificate,
-		"server_certificate_status": serverCertificateStatus,
-		"cert_name":                 certInfo.CertName,
-		"cert_type":                 certInfo.CertType,
-	}
-	if oldConfig != nil && len(oldConfig) > 0 {
-		val := oldConfig[0].(map[string]interface{})
-		config[0]["private_key"] = val["private_key"]
-		config[0]["force_set"] = val["force_set"]
-		config[0]["region"] = val["region"]
-	}
-
-	d.Set("certificate_config", config)
-
-	tags, err := cdnService.DescribeTags(d.Id(), TagResourceCdn)
+	objectRaw, err = cdnServiceV2.DescribeDomainDescribeDomainCertificateInfo(d.Id())
 	if err != nil {
 		return WrapError(err)
 	}
-	d.Set("tags", cdnTagsToMap(tags))
+
+	if objectRaw["DomainName"] != nil {
+		d.Set("domain_name", objectRaw["DomainName"])
+	}
+
+	certificateConfigMaps := make([]map[string]interface{}, 0)
+	certificateConfigMap := make(map[string]interface{})
+
+	certificateConfigMap["cert_id"] = objectRaw["CertId"]
+	certificateConfigMap["cert_name"] = objectRaw["CertName"]
+	certificateConfigMap["cert_region"] = objectRaw["CertRegion"]
+	certificateConfigMap["cert_type"] = objectRaw["CertType"]
+	certificateConfigMap["server_certificate"] = objectRaw["ServerCertificate"]
+	certificateConfigMap["server_certificate_status"] = objectRaw["ServerCertificateStatus"]
+
+	if v, ok := d.GetOk("certificate_config"); ok {
+		oldConfig := v.([]interface{})
+		if len(oldConfig) > 0 {
+			val := oldConfig[0].(map[string]interface{})
+			certificateConfigMap["private_key"] = val["private_key"]
+		}
+	}
+
+	certificateConfigMaps = append(certificateConfigMaps, certificateConfigMap)
+	if err := d.Set("certificate_config", certificateConfigMaps); err != nil {
+		return err
+	}
+
+	objectRaw, err = cdnServiceV2.DescribeDomainListTagResources(d.Id())
+	if err != nil {
+		return WrapError(err)
+	}
+
+	tagsMaps, _ := jsonpath.Get("$.TagResources.TagResource", objectRaw)
+	d.Set("tags", tagsToMap(tagsMaps))
+
+	d.Set("domain_name", d.Id())
 
 	return nil
 }
 
-func resourceAlicloudCdnDomainDeleteNew(d *schema.ResourceData, meta interface{}) error {
+func resourceAliCloudCdnDomainUpdate(d *schema.ResourceData, meta interface{}) error {
 	client := meta.(*connectivity.AliyunClient)
-	cdnService := CdnService{client}
-	request := cdn.CreateDeleteCdnDomainRequest()
-	request.RegionId = client.RegionId
-	request.DomainName = d.Id()
-	err := resource.Retry(5*time.Minute, func() *resource.RetryError {
-		raw, err := client.WithCdnClient_new(func(cdnClient *cdn.Client) (interface{}, error) {
-			return cdnClient.DeleteCdnDomain(request)
-		})
-		if err != nil {
-			if IsExpectedErrors(err, []string{"ServiceBusy"}) {
-				return resource.RetryableError(err)
-			}
-			return resource.NonRetryableError(err)
-		}
-		addDebug(request.GetActionName(), raw, request.RpcRequest, request)
-		return nil
-	})
+	var request map[string]interface{}
+	var response map[string]interface{}
+	var query map[string]interface{}
+	update := false
+	d.Partial(true)
 
-	if err != nil {
-		if IsExpectedErrors(err, []string{"InvalidDomain.NotFound"}) {
-			return nil
+	if d.HasChange("status") {
+		cdnServiceV2 := CdnServiceV2{client}
+		object, err := cdnServiceV2.DescribeCdnDomain(d.Id())
+		if err != nil {
+			return WrapError(err)
 		}
-		return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
+
+		target := d.Get("status").(string)
+		if object["DomainStatus"].(string) != target {
+			if target == "offline" {
+				action := "StopCdnDomain"
+				conn, err := client.NewCdnClient()
+				if err != nil {
+					return WrapError(err)
+				}
+				request = make(map[string]interface{})
+				query = make(map[string]interface{})
+				request["DomainName"] = d.Id()
+
+				runtime := util.RuntimeOptions{}
+				runtime.SetAutoretry(true)
+				wait := incrementalWait(3*time.Second, 5*time.Second)
+				err = resource.Retry(d.Timeout(schema.TimeoutUpdate), func() *resource.RetryError {
+					response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2018-05-10"), StringPointer("AK"), query, request, &runtime)
+					if err != nil {
+						if NeedRetry(err) {
+							wait()
+							return resource.RetryableError(err)
+						}
+						return resource.NonRetryableError(err)
+					}
+					return nil
+				})
+				addDebug(action, response, request)
+				if err != nil {
+					return WrapErrorf(err, DefaultErrorMsg, d.Id(), action, AlibabaCloudSdkGoERROR)
+				}
+				cdnServiceV2 := CdnServiceV2{client}
+				stateConf := BuildStateConf([]string{}, []string{"offline"}, d.Timeout(schema.TimeoutUpdate), 60*time.Second, cdnServiceV2.CdnDomainStateRefreshFunc(d.Id(), "DomainStatus", []string{}))
+				if _, err := stateConf.WaitForState(); err != nil {
+					return WrapErrorf(err, IdMsg, d.Id())
+				}
+
+			}
+			if target == "online" {
+				action := "StartCdnDomain"
+				conn, err := client.NewCdnClient()
+				if err != nil {
+					return WrapError(err)
+				}
+				request = make(map[string]interface{})
+				query = make(map[string]interface{})
+				request["DomainName"] = d.Id()
+
+				runtime := util.RuntimeOptions{}
+				runtime.SetAutoretry(true)
+				wait := incrementalWait(3*time.Second, 5*time.Second)
+				err = resource.Retry(d.Timeout(schema.TimeoutUpdate), func() *resource.RetryError {
+					response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2018-05-10"), StringPointer("AK"), query, request, &runtime)
+					if err != nil {
+						if NeedRetry(err) {
+							wait()
+							return resource.RetryableError(err)
+						}
+						return resource.NonRetryableError(err)
+					}
+					return nil
+				})
+				addDebug(action, response, request)
+				if err != nil {
+					return WrapErrorf(err, DefaultErrorMsg, d.Id(), action, AlibabaCloudSdkGoERROR)
+				}
+				cdnServiceV2 := CdnServiceV2{client}
+				stateConf := BuildStateConf([]string{}, []string{"online"}, d.Timeout(schema.TimeoutUpdate), 2*time.Minute, cdnServiceV2.CdnDomainStateRefreshFunc(d.Id(), "DomainStatus", []string{}))
+				if _, err := stateConf.WaitForState(); err != nil {
+					return WrapErrorf(err, IdMsg, d.Id())
+				}
+
+			}
+		}
 	}
 
-	return WrapError(cdnService.WaitForCdnDomain(d.Id(), Deleted, DefaultTimeout))
-}
+	action := "ModifyCdnDomain"
+	conn, err := client.NewCdnClient()
+	if err != nil {
+		return WrapError(err)
+	}
+	request = make(map[string]interface{})
+	query = make(map[string]interface{})
+	request["DomainName"] = d.Id()
 
-func certificateConfigUpdateNew(client *connectivity.AliyunClient, d *schema.ResourceData) error {
-	cdnService := &CdnService{client}
-	request := cdn.CreateSetDomainServerCertificateRequest()
-	request.RegionId = client.RegionId
-	request.DomainName = d.Id()
-	v, ok := d.GetOk("certificate_config")
-	if !ok {
-		request.ServerCertificateStatus = "off"
-		err := resource.Retry(5*time.Minute, func() *resource.RetryError {
-			raw, err := client.WithCdnClient_new(func(cdnClient *cdn.Client) (interface{}, error) {
-				return cdnClient.SetDomainServerCertificate(request)
-			})
+	if _, ok := d.GetOk("resource_group_id"); ok && !d.IsNewResource() && d.HasChange("resource_group_id") {
+		update = true
+		request["ResourceGroupId"] = d.Get("resource_group_id")
+	}
+
+	if !d.IsNewResource() && d.HasChange("sources") {
+		update = true
+	}
+	if v, ok := d.GetOk("sources"); ok || d.HasChange("sources") {
+		sourcesMapsArray := make([]interface{}, 0)
+		for _, dataLoop := range v.(*schema.Set).List() {
+			dataLoopTmp := dataLoop.(map[string]interface{})
+			dataLoopMap := make(map[string]interface{})
+			dataLoopMap["Type"] = dataLoopTmp["type"]
+			dataLoopMap["Content"] = dataLoopTmp["content"]
+			dataLoopMap["Priority"] = dataLoopTmp["priority"]
+			dataLoopMap["Port"] = dataLoopTmp["port"]
+			dataLoopMap["Weight"] = dataLoopTmp["weight"]
+			sourcesMapsArray = append(sourcesMapsArray, dataLoopMap)
+		}
+		sourcesMapsJson, err := json.Marshal(sourcesMapsArray)
+		if err != nil {
+			return WrapError(err)
+		}
+		request["Sources"] = string(sourcesMapsJson)
+	}
+
+	if update {
+		runtime := util.RuntimeOptions{}
+		runtime.SetAutoretry(true)
+		wait := incrementalWait(3*time.Second, 5*time.Second)
+		err = resource.Retry(d.Timeout(schema.TimeoutUpdate), func() *resource.RetryError {
+			response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2018-05-10"), StringPointer("AK"), query, request, &runtime)
 			if err != nil {
-				if IsExpectedErrors(err, []string{"ServiceBusy"}) {
+				if NeedRetry(err) {
+					wait()
 					return resource.RetryableError(err)
 				}
 				return resource.NonRetryableError(err)
 			}
-			addDebug(request.GetActionName(), raw, request.RpcRequest, request)
 			return nil
 		})
+		addDebug(action, response, request)
 		if err != nil {
-			return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
+			return WrapErrorf(err, DefaultErrorMsg, d.Id(), action, AlibabaCloudSdkGoERROR)
 		}
-		d.SetPartial("certificate_config")
-		return nil
+		cdnServiceV2 := CdnServiceV2{client}
+		stateConf := BuildStateConf([]string{}, []string{"online"}, d.Timeout(schema.TimeoutUpdate), 60*time.Second, cdnServiceV2.CdnDomainStateRefreshFunc(d.Id(), "DomainStatus", []string{}))
+		if _, err := stateConf.WaitForState(); err != nil {
+			return WrapErrorf(err, IdMsg, d.Id())
+		}
 	}
-	config := v.([]interface{})
-	val := config[0].(map[string]interface{})
-	request.ServerCertificateStatus = val["server_certificate_status"].(string)
+	update = false
+	action = "SetCdnDomainSSLCertificate"
+	conn, err = client.NewCdnClient()
+	if err != nil {
+		return WrapError(err)
+	}
+	request = make(map[string]interface{})
+	query = make(map[string]interface{})
+	request["DomainName"] = d.Id()
 
-	serverCertificate, okServerCertificate := val["server_certificate"]
-	if okServerCertificate {
-		request.ServerCertificate = serverCertificate.(string)
+	if d.HasChange("certificate_config.0.server_certificate_status") {
+		update = true
 	}
-	if v, ok := val["private_key"]; ok {
-		request.PrivateKey = v.(string)
-	}
-	if v, ok := val["force_set"]; ok && v.(string) != "" {
-		request.ForceSet = v.(string)
-	}
-	if v, ok := val["cert_name"]; ok && v.(string) != "" {
-		request.CertName = v.(string)
-	}
-	if v, ok := val["cert_type"]; ok && v.(string) != "" {
-		request.CertType = v.(string)
+	jsonPathResult, err := jsonpath.Get("$[0].server_certificate_status", d.Get("certificate_config"))
+	if err == nil {
+		request["SSLProtocol"] = jsonPathResult
 	}
 
-	err := resource.Retry(5*time.Minute, func() *resource.RetryError {
-		raw, err := client.WithCdnClient_new(func(cdnClient *cdn.Client) (interface{}, error) {
-			return cdnClient.SetDomainServerCertificate(request)
+	if d.HasChange("certificate_config.0.cert_name") {
+		update = true
+		jsonPathResult1, err := jsonpath.Get("$[0].cert_name", d.Get("certificate_config"))
+		if err == nil {
+			request["CertName"] = jsonPathResult1
+		}
+	}
+
+	if d.HasChange("certificate_config.0.cert_id") {
+		update = true
+		jsonPathResult2, err := jsonpath.Get("$[0].cert_id", d.Get("certificate_config"))
+		if err == nil {
+			request["CertId"] = jsonPathResult2
+		}
+	}
+
+	if d.HasChange("certificate_config.0.cert_type") {
+		update = true
+		jsonPathResult3, err := jsonpath.Get("$[0].cert_type", d.Get("certificate_config"))
+		if err == nil {
+			request["CertType"] = jsonPathResult3
+		}
+	}
+
+	if d.HasChange("certificate_config.0.server_certificate") {
+		update = true
+		jsonPathResult4, err := jsonpath.Get("$[0].server_certificate", d.Get("certificate_config"))
+		if err == nil {
+			request["SSLPub"] = jsonPathResult4
+		}
+	}
+
+	if d.HasChange("certificate_config.0.private_key") {
+		update = true
+		jsonPathResult5, err := jsonpath.Get("$[0].private_key", d.Get("certificate_config"))
+		if err == nil {
+			request["SSLPri"] = jsonPathResult5
+		}
+	}
+
+	if d.HasChange("certificate_config.0.cert_region") {
+		update = true
+		jsonPathResult6, err := jsonpath.Get("$[0].cert_region", d.Get("certificate_config"))
+		if err == nil {
+			request["CertRegion"] = jsonPathResult6
+		}
+	}
+
+	if v, ok := d.GetOk("env"); ok {
+		request["Env"] = v
+	}
+	if update {
+		runtime := util.RuntimeOptions{}
+		runtime.SetAutoretry(true)
+		wait := incrementalWait(3*time.Second, 5*time.Second)
+		err = resource.Retry(d.Timeout(schema.TimeoutUpdate), func() *resource.RetryError {
+			response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2018-05-10"), StringPointer("AK"), query, request, &runtime)
+			if err != nil {
+				if NeedRetry(err) {
+					wait()
+					return resource.RetryableError(err)
+				}
+				return resource.NonRetryableError(err)
+			}
+			return nil
 		})
+		addDebug(action, response, request)
 		if err != nil {
-			if IsExpectedErrors(err, []string{"ServiceBusy"}) {
+			return WrapErrorf(err, DefaultErrorMsg, d.Id(), action, AlibabaCloudSdkGoERROR)
+		}
+	}
+	update = false
+	action = "ModifyCdnDomainSchdmByProperty"
+	conn, err = client.NewCdnClient()
+	if err != nil {
+		return WrapError(err)
+	}
+	request = make(map[string]interface{})
+	query = make(map[string]interface{})
+	request["DomainName"] = d.Id()
+
+	if !d.IsNewResource() && d.HasChange("scope") {
+		update = true
+	}
+	request["Property"] = d.Get("scope")
+	if update {
+		runtime := util.RuntimeOptions{}
+		runtime.SetAutoretry(true)
+		wait := incrementalWait(3*time.Second, 5*time.Second)
+		err = resource.Retry(d.Timeout(schema.TimeoutUpdate), func() *resource.RetryError {
+			response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2018-05-10"), StringPointer("AK"), query, request, &runtime)
+			if err != nil {
+				if NeedRetry(err) {
+					wait()
+					return resource.RetryableError(err)
+				}
+				return resource.NonRetryableError(err)
+			}
+			return nil
+		})
+		addDebug(action, response, request)
+		if err != nil {
+			return WrapErrorf(err, DefaultErrorMsg, d.Id(), action, AlibabaCloudSdkGoERROR)
+		}
+	}
+
+	if d.HasChange("tags") {
+		cdnServiceV2 := CdnServiceV2{client}
+		if err := cdnServiceV2.SetResourceTags(d, "DOMAIN"); err != nil {
+			return WrapError(err)
+		}
+	}
+	d.Partial(false)
+	return resourceAliCloudCdnDomainRead(d, meta)
+}
+
+func resourceAliCloudCdnDomainDelete(d *schema.ResourceData, meta interface{}) error {
+
+	client := meta.(*connectivity.AliyunClient)
+	action := "DeleteCdnDomain"
+	var request map[string]interface{}
+	var response map[string]interface{}
+	query := make(map[string]interface{})
+	conn, err := client.NewCdnClient()
+	if err != nil {
+		return WrapError(err)
+	}
+	request = make(map[string]interface{})
+	request["DomainName"] = d.Id()
+
+	runtime := util.RuntimeOptions{}
+	runtime.SetAutoretry(true)
+	wait := incrementalWait(3*time.Second, 5*time.Second)
+	err = resource.Retry(d.Timeout(schema.TimeoutDelete), func() *resource.RetryError {
+		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2018-05-10"), StringPointer("AK"), query, request, &runtime)
+
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
 		}
-		addDebug(request.GetActionName(), raw, request.RpcRequest, request)
 		return nil
 	})
+	addDebug(action, response, request)
+
 	if err != nil {
-		return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
-	}
-	d.SetPartial("certificate_config")
-	if serverCertificate != "" && request.ServerCertificateStatus != "off" {
-		err := cdnService.WaitForServerCertificateNew(d.Id(), request.ServerCertificate, DefaultTimeout)
-		if err != nil {
-			return WrapError(err)
+		if NotFoundError(err) {
+			return nil
 		}
+		return WrapErrorf(err, DefaultErrorMsg, d.Id(), action, AlibabaCloudSdkGoERROR)
 	}
+
+	cdnServiceV2 := CdnServiceV2{client}
+	stateConf := BuildStateConf([]string{}, []string{}, d.Timeout(schema.TimeoutDelete), 4*time.Minute, cdnServiceV2.CdnDomainStateRefreshFunc(d.Id(), "DomainStatus", []string{}))
+	if _, err := stateConf.WaitForState(); err != nil {
+		return WrapErrorf(err, IdMsg, d.Id())
+	}
+
 	return nil
 }

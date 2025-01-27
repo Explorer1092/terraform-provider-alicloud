@@ -19,6 +19,12 @@ For information about ROS Stack and how to use it, see [What is Stack](https://w
 
 Basic Usage
 
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_ros_stack&exampleId=aa17e5cf-fef0-e575-c30a-d8ae978bcb35be89d3e1&activeTab=example&spm=docs.r.ros_stack.0.aa17e5cffe&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
 ```terraform
 resource "alicloud_ros_stack" "example" {
   stack_name        = "tf-testaccstack"
@@ -93,6 +99,6 @@ The `timeouts` block allows you to specify [timeouts](https://www.terraform.io/d
 
 ROS Stack can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_ros_stack.example <stack_id>
 ```

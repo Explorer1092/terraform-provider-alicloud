@@ -93,7 +93,7 @@ locals {
 }
 
 data "alicloud_vpcs" "default" {
-  name_regex = "default-NODELETING"
+    name_regex = "^default-NODELETING$"
 }
 
 data "alicloud_vswitches" "default" {
@@ -106,14 +106,13 @@ resource "alicloud_nas_file_system" "default" {
   storage_type     = "advance_200"
   file_system_type = "cpfs"
   capacity         = 3600
-  description      = "tf-testacc"
   zone_id          = local.zone_id
   vpc_id           = data.alicloud_vpcs.default.ids.0
   vswitch_id       = data.alicloud_vswitches.default.ids.0
 }
 `, name)
 }
-func TestAccAlicloudNASFileset_unit(t *testing.T) {
+func TestUnitAlicloudNASFileset(t *testing.T) {
 	p := Provider().(*schema.Provider).ResourcesMap
 	d, _ := schema.InternalMap(p["alicloud_nas_fileset"].Schema).Data(nil, nil)
 	dCreate, _ := schema.InternalMap(p["alicloud_nas_fileset"].Schema).Data(nil, nil)

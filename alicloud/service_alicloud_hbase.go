@@ -23,6 +23,7 @@ const (
 	Hb_DELETING             = "DELETING"
 	Hb_CREATE_FAILED        = "CREATE_FAILED"
 	Hb_NODE_RESIZING        = "HBASE_SCALE_OUT"
+	HBASE_SCALE_IN          = "HBASE_SCALE_IN"
 	Hb_NODE_RESIZING_FAILED = "NODE_RESIZE_FAILED"
 	Hb_DISK_RESIZING        = "HBASE_EXPANDING"
 	Hb_DISK_RESIZE_FAILED   = "DISK_RESIZING_FAILED"
@@ -174,7 +175,7 @@ func (s *HBaseService) DescribeHBaseInstance(id string) (object map[string]inter
 	return object, nil
 }
 
-//pop has limit, support next.
+// pop has limit, support next.
 func (s *HBaseService) DescribeIpWhitelist(id string) (instance hbase.DescribeIpWhitelistResponse, err error) {
 	request := hbase.CreateDescribeIpWhitelistRequest()
 	request.RegionId = s.client.RegionId

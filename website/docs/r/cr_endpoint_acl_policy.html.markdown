@@ -7,44 +7,55 @@ description: |-
   Provides a Alicloud CR Endpoint Acl Policy resource.
 ---
 
-# alicloud\_cr\_endpoint\_acl\_policy
+# alicloud_cr_endpoint_acl_policy
 
 Provides a CR Endpoint Acl Policy resource.
 
 For information about CR Endpoint Acl Policy and how to use it, see [What is Endpoint Acl Policy](https://www.alibabacloud.com/help/doc-detail/145275.htm).
 
--> **NOTE:** Available in v1.139.0+.
+-> **NOTE:** Available since v1.139.0.
 
 ## Example Usage
 
 Basic Usage
 
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_cr_endpoint_acl_policy&exampleId=94de1ced-0cee-db8d-ae0d-6a2c39086e0ec0b0a975&activeTab=example&spm=docs.r.cr_endpoint_acl_policy.0.94de1ced0c&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
 ```terraform
 variable "name" {
-  default = "example_name"
+  default = "tf-example"
 }
-data "alicloud_cr_ee_instances" "default" {}
+
+resource "random_integer" "default" {
+  min = 10000000
+  max = 99999999
+}
+
 resource "alicloud_cr_ee_instance" "default" {
-  count          = length(data.alicloud_cr_ee_instances.default.ids) > 0 ? 0 : 1
   payment_type   = "Subscription"
   period         = 1
   renewal_status = "ManualRenewal"
   instance_type  = "Advanced"
-  instance_name  = var.name
+  instance_name  = "${var.name}-${random_integer.default.result}"
 }
+
 data "alicloud_cr_endpoint_acl_service" "default" {
   endpoint_type = "internet"
   enable        = true
-  instance_id   = length(data.alicloud_cr_ee_instances.default.ids) > 0 ? data.alicloud_cr_ee_instances.default.ids[0] : concat(alicloud_cr_ee_instance.default.*.id, [""])[0]
+  instance_id   = alicloud_cr_ee_instance.default.id
   module_name   = "Registry"
 }
+
 resource "alicloud_cr_endpoint_acl_policy" "default" {
-  instance_id   = length(data.alicloud_cr_ee_instances.default.ids) > 0 ? data.alicloud_cr_ee_instances.default.ids[0] : concat(alicloud_cr_ee_instance.default.*.id, [""])[0]
+  instance_id   = data.alicloud_cr_endpoint_acl_service.default.instance_id
   entry         = "192.168.1.0/24"
   description   = var.name
   module_name   = "Registry"
   endpoint_type = "internet"
-  depends_on    = [data.alicloud_cr_endpoint_acl_service.default]
 }
 ```
 
@@ -64,7 +75,7 @@ The following attributes are exported:
 
 * `id` - The resource ID of Endpoint Acl Policy. The value formats as `<instance_id>:<endpoint_type>:<entry>`.
 
-### Timeouts
+## Timeouts
 
 The `timeouts` block allows you to specify [timeouts](https://www.terraform.io/docs/configuration-0-11/resources.html#timeouts) for certain actions:
 
@@ -75,6 +86,6 @@ The `timeouts` block allows you to specify [timeouts](https://www.terraform.io/d
 
 CR Endpoint Acl Policy can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_cr_endpoint_acl_policy.example <instance_id>:<endpoint_type>:<entry>
 ```

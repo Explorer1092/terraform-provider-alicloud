@@ -19,38 +19,49 @@ For information about ECS Network Interface Permission and how to use it, see [W
 
 Basic Usage
 
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_ecs_network_interface_permission&exampleId=2a7df141-e78e-51e0-5330-16a0934f7158ca1040f0&activeTab=example&spm=docs.r.ecs_network_interface_permission.0.2a7df141e7&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
 ```terraform
 data "alicloud_zones" "default" {
   available_resource_creation = "VSwitch"
 }
+data "alicloud_account" "default" {}
+data "alicloud_resource_manager_resource_groups" "default" {}
 
-data "alicloud_vpcs" "default" {
-  name_regex = "default-NODELETING"
+resource "alicloud_vpc" "default" {
+  vpc_name   = "terraform-example"
+  cidr_block = "172.17.3.0/24"
 }
-data "alicloud_vswitches" "default" {
-  vpc_id  = data.alicloud_vpcs.default.ids.0
-  zone_id = data.alicloud_zones.default.zones.0.id
+
+resource "alicloud_vswitch" "default" {
+  vswitch_name = "terraform-example"
+  cidr_block   = "172.17.3.0/24"
+  vpc_id       = alicloud_vpc.default.id
+  zone_id      = data.alicloud_zones.default.zones.0.id
 }
 
 resource "alicloud_security_group" "default" {
-  name   = var.name
-  vpc_id = data.alicloud_vpcs.default.ids.0
+  name   = "terraform-example"
+  vpc_id = alicloud_vpc.default.id
 }
-data "alicloud_resource_manager_resource_groups" "default" {}
 
 resource "alicloud_ecs_network_interface" "default" {
-  network_interface_name = var.name
-  vswitch_id             = data.alicloud_vswitches.default.ids.0
+  network_interface_name = "terraform-example"
+  vswitch_id             = alicloud_vswitch.default.id
   security_group_ids     = [alicloud_security_group.default.id]
-  description            = "Basic test"
-  primary_ip_address     = cidrhost(data.alicloud_vswitches.default.vswitches.0.cidr_block, 100)
+  description            = "terraform-example"
+  primary_ip_address     = cidrhost(alicloud_vswitch.default.cidr_block, 100)
   tags = {
     Created = "TF",
-    For     = "Test",
+    For     = "example",
   }
   resource_group_id = data.alicloud_resource_manager_resource_groups.default.ids.0
 }
-data "alicloud_account" "default" {}
+
 resource "alicloud_ecs_network_interface_permission" "example" {
   account_id           = data.alicloud_account.default.id
   network_interface_id = alicloud_ecs_network_interface.default.id
@@ -86,6 +97,6 @@ The `timeouts` block allows you to specify [timeouts](https://www.terraform.io/d
 
 ECS Network Interface Permission can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_ecs_network_interface_permission.example <id>
 ```

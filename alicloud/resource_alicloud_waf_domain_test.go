@@ -7,11 +7,7 @@ import (
 	"testing"
 
 	"github.com/PaesslerAG/jsonpath"
-	util "github.com/alibabacloud-go/tea-utils/service"
-
 	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
-
-	"sync"
 
 	"github.com/aliyun/terraform-provider-alicloud/alicloud/connectivity"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/acctest"
@@ -39,13 +35,9 @@ func testSweepWafDomains(region string) error {
 	wafInstanceIds := make([]string, 0)
 	domainIds := make([]string, 0)
 	request := make(map[string]interface{})
-	conn, err := client.NewWafClient()
-	if err != nil {
-		return WrapError(err)
-	}
 	action := "DescribeInstanceInfos"
 
-	response, err := conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2019-09-10"), StringPointer("AK"), nil, request, &util.RuntimeOptions{})
+	response, err := client.RpcPost("waf-openapi", "2019-09-10", action, nil, request, false)
 	if err != nil {
 		log.Printf("[ERROR] Failed to retrieve waf instance in service list: %s", err)
 	}
@@ -66,7 +58,7 @@ func testSweepWafDomains(region string) error {
 		action = "DescribeDomainNames"
 		request = make(map[string]interface{})
 		request["InstanceId"] = instanceId
-		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2019-09-10"), StringPointer("AK"), nil, request, &util.RuntimeOptions{})
+		response, err = client.RpcPost("waf-openapi", "2019-09-10", action, nil, request, false)
 		if err != nil {
 			log.Printf("[ERROR] Failed to retrieve waf domain in service list: %s", err)
 		}
@@ -97,7 +89,7 @@ func testSweepWafDomains(region string) error {
 		action = "DeleteDomain"
 		request["InstanceId"] = part[0]
 		request["Domain"] = name
-		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2019-09-10"), StringPointer("AK"), nil, request, &util.RuntimeOptions{})
+		response, err = client.RpcPost("waf-openapi", "2019-09-10", action, nil, request, false)
 		if err != nil {
 			log.Printf("[ERROR] Failed to delete WAF domain (%s): %s", id, err)
 		}
@@ -105,19 +97,20 @@ func testSweepWafDomains(region string) error {
 	return nil
 }
 
-func TestAccAlicloudWAFDomain(t *testing.T) {
+func TestAccAliCloudWafDomain(t *testing.T) {
 	var v map[string]interface{}
+	checkoutSupportedRegions(t, true, connectivity.WAFSupportRegions)
 
 	resourceId := "alicloud_waf_domain.domain"
 	ra := resourceAttrInit(resourceId, wafDomainBasicMap)
 
 	rc := resourceCheckInitWithDescribeMethod(resourceId, &v, func() interface{} {
-		return &Waf_openapiService{testAccProvider.Meta().(*connectivity.AliyunClient)}
+		return &WafOpenapiService{testAccProvider.Meta().(*connectivity.AliyunClient)}
 	}, "DescribeWafDomain")
 	rac := resourceAttrCheckInit(rc, ra)
 	testAccCheck := rac.resourceAttrMapUpdateSet()
 	rand := acctest.RandIntRange(1000000, 9999999)
-	name := fmt.Sprintf("tf-testacc%s%d.wafqa3.com", defaultRegionToTest, rand)
+	name := fmt.Sprintf("tf-testacc%s%d.alicloud-provider.cn", defaultRegionToTest, rand)
 	testAccConfig := resourceTestAccConfigFunc(resourceId, name, resourceWafDomainDependence)
 
 	resource.Test(t, resource.TestCase{
@@ -372,5 +365,3 @@ data "alicloud_resource_manager_resource_groups" "default" {
 data "alicloud_waf_instances" "default" {}
 `
 }
-
-var wg sync.WaitGroup

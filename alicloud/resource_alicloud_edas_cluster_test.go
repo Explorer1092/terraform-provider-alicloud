@@ -59,16 +59,18 @@ func testSweepEdasCluster(region string) error {
 	for _, v := range listClusterResponse.ClusterList.Cluster {
 		name := v.ClusterName
 		skip := true
-		for _, prefix := range prefixes {
-			if strings.HasPrefix(strings.ToLower(name), strings.ToLower(prefix)) {
-				skip = false
-				break
+		if !sweepAll() {
+			for _, prefix := range prefixes {
+				if strings.HasPrefix(strings.ToLower(name), strings.ToLower(prefix)) {
+					skip = false
+					break
+				}
 			}
-		}
 
-		if skip {
-			log.Printf("[INFO] Skipping edas cluster: %s", name)
-			continue
+			if skip {
+				log.Printf("[INFO] Skipping edas cluster: %s", name)
+				continue
+			}
 		}
 		log.Printf("[INFO] delete edas cluster: %s", name)
 
@@ -132,7 +134,8 @@ func TestAccAlicloudEdasCluster_basic(t *testing.T) {
 				Config: testAccConfig(map[string]interface{}{
 					"cluster_name": "${var.name}",
 					"cluster_type": "2",
-					"network_mode": "1",
+					"network_mode": "2",
+					"vpc_id":       "${data.alicloud_vpcs.default.ids.0}",
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
@@ -200,7 +203,8 @@ func TestAccAlicloudEdasCluster_multi(t *testing.T) {
 					"count":        "2",
 					"cluster_name": "${var.name}-${count.index}",
 					"cluster_type": "2",
-					"network_mode": "1",
+					"network_mode": "2",
+					"vpc_id":       "${data.alicloud_vpcs.default.ids.0}",
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(nil),
@@ -257,6 +261,10 @@ func resourceEdasClusterConfigDependence(name string) string {
 	return fmt.Sprintf(`
 		variable "name" {
 		  default = "%v"
+		}
+
+		data "alicloud_vpcs" "default" {
+			name_regex = "^default-NODELETING$"
 		}
 		`, name)
 }

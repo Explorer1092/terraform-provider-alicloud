@@ -5,7 +5,6 @@ import (
 	"regexp"
 
 	"github.com/PaesslerAG/jsonpath"
-	util "github.com/alibabacloud-go/tea-utils/service"
 	"github.com/aliyun/terraform-provider-alicloud/alicloud/connectivity"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
@@ -61,6 +60,7 @@ func dataSourceAlicloudPrivatelinkVpcEndpointServices() *schema.Resource {
 				Type:     schema.TypeString,
 				Optional: true,
 			},
+			"tags": tagsSchema(),
 			"services": {
 				Type:     schema.TypeList,
 				Computed: true,
@@ -102,6 +102,10 @@ func dataSourceAlicloudPrivatelinkVpcEndpointServices() *schema.Resource {
 							Type:     schema.TypeString,
 							Computed: true,
 						},
+						"tags": {
+							Type:     schema.TypeMap,
+							Computed: true,
+						},
 					},
 				},
 			},
@@ -127,6 +131,16 @@ func dataSourceAlicloudPrivatelinkVpcEndpointServicesRead(d *schema.ResourceData
 	if v, ok := d.GetOk("vpc_endpoint_service_name"); ok {
 		request["ServiceName"] = v
 	}
+	if v, ok := d.GetOk("tags"); ok {
+		tags := make([]map[string]interface{}, 0)
+		for key, value := range v.(map[string]interface{}) {
+			tags = append(tags, map[string]interface{}{
+				"Key":   key,
+				"Value": value.(string),
+			})
+		}
+		request["Tag"] = tags
+	}
 	request["MaxResults"] = PageSizeLarge
 	var objects []map[string]interface{}
 	var vpcEndpointServiceNameRegex *regexp.Regexp
@@ -148,14 +162,9 @@ func dataSourceAlicloudPrivatelinkVpcEndpointServicesRead(d *schema.ResourceData
 		}
 	}
 	var response map[string]interface{}
-	conn, err := client.NewPrivatelinkClient()
-	if err != nil {
-		return WrapError(err)
-	}
+	var err error
 	for {
-		runtime := util.RuntimeOptions{}
-		runtime.SetAutoretry(true)
-		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2020-04-15"), StringPointer("AK"), nil, request, &runtime)
+		response, err = client.RpcPost("Privatelink", "2020-04-15", action, nil, request, true)
 		if err != nil {
 			return WrapErrorf(err, DataDefaultErrorMsg, "alicloud_privatelink_vpc_endpoint_services", action, AlibabaCloudSdkGoERROR)
 		}
@@ -201,6 +210,20 @@ func dataSourceAlicloudPrivatelinkVpcEndpointServicesRead(d *schema.ResourceData
 			"status":                    object["ServiceStatus"],
 			"vpc_endpoint_service_name": object["ServiceName"],
 		}
+
+		tags := make(map[string]interface{})
+		t, _ := jsonpath.Get("$.Tags.Tag", object)
+		if t != nil {
+			for _, t := range t.([]interface{}) {
+				key := t.(map[string]interface{})["Key"].(string)
+				value := t.(map[string]interface{})["Value"].(string)
+				if !ignoredTags(key, value) {
+					tags[key] = value
+				}
+			}
+		}
+		mapping["tags"] = tags
+
 		ids = append(ids, fmt.Sprint(object["ServiceId"]))
 		names = append(names, object["ServiceName"])
 		s = append(s, mapping)

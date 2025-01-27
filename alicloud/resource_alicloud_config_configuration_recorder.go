@@ -5,7 +5,8 @@ import (
 	"log"
 	"time"
 
-	util "github.com/alibabacloud-go/tea-utils/service"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
+
 	"github.com/aliyun/terraform-provider-alicloud/alicloud/connectivity"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 )
@@ -56,17 +57,26 @@ func resourceAlicloudConfigConfigurationRecorder() *schema.Resource {
 func resourceAlicloudConfigConfigurationRecorderCreate(d *schema.ResourceData, meta interface{}) error {
 	client := meta.(*connectivity.AliyunClient)
 	var response map[string]interface{}
+	var err error
 	action := "StartConfigurationRecorder"
 	request := make(map[string]interface{})
-	conn, err := client.NewConfigClient()
-	if err != nil {
-		return WrapError(err)
-	}
+
 	if v, ok := d.GetOkExists("enterprise_edition"); ok {
 		request["EnterpriseEdition"] = v
 	}
-
-	response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2019-01-08"), StringPointer("AK"), nil, request, &util.RuntimeOptions{})
+	wait := incrementalWait(3*time.Second, 3*time.Second)
+	err = resource.Retry(d.Timeout(schema.TimeoutCreate), func() *resource.RetryError {
+		response, err = client.RpcPost("Config", "2019-01-08", action, nil, request, false)
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		addDebug(action, response, request)
+		return nil
+	})
 	if err != nil {
 		return WrapErrorf(err, DefaultErrorMsg, "alicloud_config_configuration_recorder", action, AlibabaCloudSdkGoERROR)
 	}
@@ -98,6 +108,7 @@ func resourceAlicloudConfigConfigurationRecorderUpdate(d *schema.ResourceData, m
 	client := meta.(*connectivity.AliyunClient)
 	configService := ConfigService{client}
 	var response map[string]interface{}
+	var err error
 	update := false
 	request := make(map[string]interface{})
 	if !d.IsNewResource() && d.HasChange("resource_types") {
@@ -106,12 +117,19 @@ func resourceAlicloudConfigConfigurationRecorderUpdate(d *schema.ResourceData, m
 	request["ResourceTypes"] = convertListToCommaSeparate(d.Get("resource_types").(*schema.Set).List())
 	if update {
 		action := "PutConfigurationRecorder"
-		conn, err := client.NewConfigClient()
-		if err != nil {
-			return WrapError(err)
-		}
-		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2019-01-08"), StringPointer("AK"), nil, request, &util.RuntimeOptions{})
-		addDebug(action, response, request)
+		wait := incrementalWait(3*time.Second, 3*time.Second)
+		err = resource.Retry(d.Timeout(schema.TimeoutUpdate), func() *resource.RetryError {
+			response, err = client.RpcPost("Config", "2019-01-08", action, nil, request, false)
+			if err != nil {
+				if NeedRetry(err) {
+					wait()
+					return resource.RetryableError(err)
+				}
+				return resource.NonRetryableError(err)
+			}
+			addDebug(action, response, request)
+			return nil
+		})
 		if err != nil {
 			return WrapErrorf(err, DefaultErrorMsg, d.Id(), action, AlibabaCloudSdkGoERROR)
 		}

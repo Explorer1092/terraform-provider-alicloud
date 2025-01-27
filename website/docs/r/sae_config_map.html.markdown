@@ -7,33 +7,51 @@ description: |-
   Provides a Alicloud Serverless App Engine (SAE) Config Map resource.
 ---
 
-# alicloud\_sae\_config\_map
+# alicloud_sae_config_map
 
 Provides a Serverless App Engine (SAE) Config Map resource.
 
-For information about Serverless App Engine (SAE) Config Map and how to use it, see [What is Config Map](https://help.aliyun.com/document_detail/97792.html).
+For information about Serverless App Engine (SAE) Config Map and how to use it, see [What is Config Map](https://www.alibabacloud.com/help/en/sae/latest/create-configmap).
 
--> **NOTE:** Available in v1.130.0+.
+-> **NOTE:** Available since v1.130.0.
 
 ## Example Usage
 
 Basic Usage
 
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_sae_config_map&exampleId=ed81114a-59d0-8efb-2187-c4f5adac6c2f36bbabd8&activeTab=example&spm=docs.r.sae_config_map.0.ed81114a59&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
 ```terraform
-variable "ConfigMapName" {
-  default = "examplename"
-}
-resource "alicloud_sae_config_map" "example" {
-  data         = jsonencode({ "env.home" : "/root", "env.shell" : "/bin/sh" })
-  name         = var.ConfigMapName
-  namespace_id = alicloud_sae_namespace.example.namespace_id
-}
-resource "alicloud_sae_namespace" "example" {
-  namespace_id          = "cn-hangzhou:yourname"
-  namespace_name        = "example_value"
-  namespace_description = "your_description"
+provider "alicloud" {
+  region = "cn-hangzhou"
 }
 
+variable "name" {
+  default = "tf-example"
+}
+data "alicloud_regions" "default" {
+  current = true
+}
+resource "random_integer" "default" {
+  max = 99999
+  min = 10000
+}
+resource "alicloud_sae_namespace" "default" {
+  namespace_id              = "${data.alicloud_regions.default.regions.0.id}:example${random_integer.default.result}"
+  namespace_name            = var.name
+  namespace_description     = var.name
+  enable_micro_registration = false
+}
+
+resource "alicloud_sae_config_map" "default" {
+  data         = jsonencode({ "env.home" : "/root", "env.shell" : "/bin/sh" })
+  name         = var.name
+  namespace_id = alicloud_sae_namespace.default.namespace_id
+}
 ```
 
 ## Argument Reference
@@ -55,6 +73,6 @@ The following attributes are exported:
 
 Serverless App Engine (SAE) Config Map can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_sae_config_map.example <id>
 ```

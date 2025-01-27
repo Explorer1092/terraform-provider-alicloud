@@ -21,8 +21,8 @@ func resourceAlicloudEcsDiskAttachment() *schema.Resource {
 			State: schema.ImportStatePassthrough,
 		},
 		Timeouts: &schema.ResourceTimeout{
-			Create: schema.DefaultTimeout(2 * time.Minute),
-			Delete: schema.DefaultTimeout(2 * time.Minute),
+			Create: schema.DefaultTimeout(10 * time.Minute),
+			Delete: schema.DefaultTimeout(10 * time.Minute),
 		},
 		Schema: map[string]*schema.Schema{
 			"bootable": {
@@ -100,7 +100,7 @@ func resourceAlicloudEcsDiskAttachmentCreate(d *schema.ResourceData, meta interf
 	err = resource.Retry(d.Timeout(schema.TimeoutCreate), func() *resource.RetryError {
 		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2014-05-26"), StringPointer("AK"), nil, request, &util.RuntimeOptions{})
 		if err != nil {
-			if NeedRetry(err) || IsExpectedErrors(err, DiskInvalidOperation) {
+			if NeedRetry(err) || IsExpectedErrors(err, []string{"IncorrectDiskStatus", "IncorrectInstanceStatus", "OperationConflict", "InternalError", "InvalidOperation.Conflict", "IncorrectDiskStatus.Initializing"}) {
 				wait()
 				return resource.RetryableError(err)
 			}
@@ -115,7 +115,7 @@ func resourceAlicloudEcsDiskAttachmentCreate(d *schema.ResourceData, meta interf
 
 	d.SetId(fmt.Sprint(request["DiskId"], ":", request["InstanceId"]))
 	parts, err := ParseResourceId(d.Id(), 2)
-	stateConf := BuildStateConf([]string{}, []string{"In_use"}, d.Timeout(schema.TimeoutCreate), 10*time.Second, ecsService.EcsDiskStateRefreshFunc(parts[0], []string{}))
+	stateConf := BuildStateConf([]string{}, []string{"In_use"}, d.Timeout(schema.TimeoutCreate), 0, ecsService.EcsDiskStateRefreshFunc(parts[0], []string{}))
 	if _, err := stateConf.WaitForState(); err != nil {
 		return WrapErrorf(err, IdMsg, d.Id())
 	}
@@ -203,7 +203,7 @@ func resourceAlicloudEcsDiskAttachmentDelete(d *schema.ResourceData, meta interf
 	err = resource.Retry(d.Timeout(schema.TimeoutDelete), func() *resource.RetryError {
 		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2014-05-26"), StringPointer("AK"), nil, request, &util.RuntimeOptions{})
 		if err != nil {
-			if NeedRetry(err) || IsExpectedErrors(err, DiskInvalidOperation) {
+			if NeedRetry(err) || IsExpectedErrors(err, []string{"DisksDetachingOnEcsExceeded", "IncorrectDiskStatus", "IncorrectInstanceStatus", "OperationConflict", "InternalError", "InvalidOperation.Conflict", "IncorrectDiskStatus.Initializing"}) {
 				wait()
 				return resource.RetryableError(err)
 			}
@@ -219,7 +219,7 @@ func resourceAlicloudEcsDiskAttachmentDelete(d *schema.ResourceData, meta interf
 		return WrapErrorf(err, DefaultErrorMsg, d.Id(), action, AlibabaCloudSdkGoERROR)
 	}
 	ecsService := EcsService{client}
-	stateConf := BuildStateConf([]string{}, []string{"Available"}, d.Timeout(schema.TimeoutDelete), 10*time.Second, ecsService.EcsDiskStateRefreshFunc(parts[0], []string{}))
+	stateConf := BuildStateConf([]string{}, []string{"Available"}, d.Timeout(schema.TimeoutDelete), 0, ecsService.EcsDiskStateRefreshFunc(parts[0], []string{}))
 	if _, err := stateConf.WaitForState(); err != nil {
 		return WrapErrorf(err, IdMsg, d.Id())
 	}

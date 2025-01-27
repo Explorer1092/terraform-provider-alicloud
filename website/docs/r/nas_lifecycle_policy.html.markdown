@@ -1,23 +1,29 @@
 ---
-subcategory: "Network Attached Storage (NAS)"
+subcategory: "File Storage (NAS)"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_nas_lifecycle_policy"
 sidebar_current: "docs-alicloud-resource-nas-lifecycle-policy"
 description: |-
-  Provides a Alicloud Network Attached Storage (NAS) Lifecycle Policy resource.
+  Provides a Alicloud File Storage (NAS) Lifecycle Policy resource.
 ---
 
 # alicloud\_nas\_lifecycle\_policy
 
-Provides a Network Attached Storage (NAS) Lifecycle Policy resource.
+Provides a File Storage (NAS) Lifecycle Policy resource.
 
-For information about Network Attached Storage (NAS) Lifecycle Policy and how to use it, see [What is Lifecycle Policy](https://www.alibabacloud.com/help/en/doc-detail/169362.html).
+For information about File Storage (NAS) Lifecycle Policy and how to use it, see [What is Lifecycle Policy](https://www.alibabacloud.com/help/en/doc-detail/169362.html).
 
 -> **NOTE:** Available in v1.153.0+.
 
 ## Example Usage
 
 Basic Usage
+
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_nas_lifecycle_policy&exampleId=53f1763f-e56f-8458-40ec-937ff0fe4064c4c33cc1&activeTab=example&spm=docs.r.nas_lifecycle_policy.0.53f1763fe5&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
 
 ```terraform
 resource "alicloud_nas_file_system" "example" {
@@ -27,9 +33,10 @@ resource "alicloud_nas_file_system" "example" {
 
 resource "alicloud_nas_lifecycle_policy" "example" {
   file_system_id        = alicloud_nas_file_system.example.id
-  lifecycle_policy_name = "my-LifecyclePolicy"
+  lifecycle_policy_name = "terraform-example"
   lifecycle_rule_name   = "DEFAULT_ATIME_14"
   storage_type          = "InfrequentAccess"
+  paths                 = ["/"]
 }
 ```
 
@@ -51,8 +58,8 @@ The following attributes are exported:
 
 ## Import
 
-Network Attached Storage (NAS) Lifecycle Policy can be imported using the id, e.g.
+File Storage (NAS) Lifecycle Policy can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_nas_lifecycle_policy.example <file_system_id>:<lifecycle_policy_name>
 ```

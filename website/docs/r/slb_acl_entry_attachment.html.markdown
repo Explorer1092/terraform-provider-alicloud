@@ -1,5 +1,5 @@
 ---
-subcategory: "Classic Load Balancer (CLB)"
+subcategory: "Classic Load Balancer (SLB)"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_slb_acl_entry_attachment"
 sidebar_current: "docs-alicloud-resource-slb-acl-entry-attachment"
@@ -18,22 +18,20 @@ For information about acl entry attachment and how to use it, see [Configure an 
 
 ## Example Usage
 
-```
-variable "name" {
-  default = "terraformslbaclconfig"
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_slb_acl_entry_attachment&exampleId=7c6c4728-07cc-937d-e55e-9ac7e8f9feee94398cfc&activeTab=example&spm=docs.r.slb_acl_entry_attachment.0.7c6c472807&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
+```terraform
+resource "alicloud_slb_acl" "attachment" {
+  name       = "forSlbAclEntryAttachment"
+  ip_version = "ipv4"
 }
 
-variable "ip_version" {
-  default = "ipv4"
-}
-
-resource "alicloud_slb_acl" "default" {
-  name       = var.name
-  ip_version = var.ip_version
-}
-
-resource "alicloud_slb_acl_entry_attachment" "default" {
-  acl_id  = alicloud_slb_acl.default.id
+resource "alicloud_slb_acl_entry_attachment" "attachment" {
+  acl_id  = alicloud_slb_acl.attachment.id
   entry   = "168.10.10.0/24"
   comment = "second"
 }
@@ -65,6 +63,6 @@ The `timeouts` block allows you to specify [timeouts](https://www.terraform.io/d
 
 Acl entry attachment can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_slb_acl_entry_attachment.example <acl_id>:<entry>
 ```

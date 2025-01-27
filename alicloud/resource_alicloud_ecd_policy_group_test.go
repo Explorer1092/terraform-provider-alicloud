@@ -281,11 +281,11 @@ func TestAccAlicloudECDPolicyGroup_basic0(t *testing.T) {
 			},
 			{
 				Config: testAccConfig(map[string]interface{}{
-					"domain_list": "[white:],baidu.com,sina.com",
+					"domain_list": "[white:],alicloud-provider.cn,sina.com",
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
-						"domain_list": "[white:],baidu.com,sina.com",
+						"domain_list": "[white:],alicloud-provider.cn,sina.com",
 					}),
 				),
 			},
@@ -327,7 +327,7 @@ func TestAccAlicloudECDPolicyGroup_basic0(t *testing.T) {
 						},
 					},
 					"watermark_type":         "EndUserId",
-					"domain_list":            "[white:],baidu.com",
+					"domain_list":            "[white:],alicloud-provider.cn",
 					"watermark_transparency": "LIGHT",
 					"visual_quality":         "medium",
 				}),
@@ -341,7 +341,7 @@ func TestAccAlicloudECDPolicyGroup_basic0(t *testing.T) {
 						"authorize_security_policy_rules.#": "2",
 						"authorize_access_policy_rules.#":   "2",
 						"watermark_type":                    "EndUserId",
-						"domain_list":                       "[white:],baidu.com",
+						"domain_list":                       "[white:],alicloud-provider.cn",
 						"watermark_transparency":            "LIGHT",
 						"visual_quality":                    "medium",
 					}),
@@ -351,6 +351,188 @@ func TestAccAlicloudECDPolicyGroup_basic0(t *testing.T) {
 				ResourceName:      resourceId,
 				ImportState:       true,
 				ImportStateVerify: true,
+			},
+		},
+	})
+}
+
+func TestAccAlicloudECDPolicyGroup_basic1(t *testing.T) {
+	var v map[string]interface{}
+	resourceId := "alicloud_ecd_policy_group.default"
+	ra := resourceAttrInit(resourceId, AlicloudECDPolicyGroupMap0)
+	rc := resourceCheckInitWithDescribeMethod(resourceId, &v, func() interface{} {
+		return &EcdService{testAccProvider.Meta().(*connectivity.AliyunClient)}
+	}, "DescribeEcdPolicyGroup")
+	rac := resourceAttrCheckInit(rc, ra)
+	testAccCheck := rac.resourceAttrMapUpdateSet()
+	rand := acctest.RandIntRange(10000, 99999)
+	name := fmt.Sprintf("tf-testacc%secdpolicygroup%d", defaultRegionToTest, rand)
+	testAccConfig := resourceTestAccConfigFunc(resourceId, name, AlicloudECDPolicyGroupBasicDependence0)
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+			testAccPreCheckWithRegions(t, true, connectivity.EcdSupportRegions)
+		},
+		IDRefreshName: resourceId,
+		Providers:     testAccProviders,
+		CheckDestroy:  rac.checkResourceDestroy(),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"policy_group_name":    "tf-testaccPolicyGroupName",
+					"recording":            "period",
+					"recording_start_time": "08:00:00",
+					"recording_end_time":   "08:59:00",
+					"recording_fps":        "2",
+					"camera_redirect":      "on",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"policy_group_name":    "tf-testaccPolicyGroupName",
+						"recording":            "period",
+						"recording_start_time": "08:00:00",
+						"recording_end_time":   "08:59:00",
+						"recording_fps":        "2",
+						"camera_redirect":      "on",
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"recording": "alltime",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"recording": "alltime",
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"recording_fps": "5",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"recording_fps": "5",
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"camera_redirect": "off",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"camera_redirect": "off",
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"recording":            "period",
+					"recording_start_time": "10:00:00",
+					"recording_end_time":   "12:59:00",
+					"recording_fps":        "5",
+					"camera_redirect":      "on",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"recording":            "period",
+						"recording_start_time": "10:00:00",
+						"recording_end_time":   "12:59:00",
+						"recording_fps":        "5",
+						"camera_redirect":      "on",
+					}),
+				),
+			},
+			{
+				ResourceName:            resourceId,
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"recording_start_time", "recording_end_time"},
+			},
+		},
+	})
+}
+
+func TestAccAlicloudECDPolicyGroup_basic2(t *testing.T) {
+	var v map[string]interface{}
+	resourceId := "alicloud_ecd_policy_group.default"
+	ra := resourceAttrInit(resourceId, AlicloudECDPolicyGroupMap0)
+	rc := resourceCheckInitWithDescribeMethod(resourceId, &v, func() interface{} {
+		return &EcdService{testAccProvider.Meta().(*connectivity.AliyunClient)}
+	}, "DescribeEcdPolicyGroup")
+	rac := resourceAttrCheckInit(rc, ra)
+	testAccCheck := rac.resourceAttrMapUpdateSet()
+	rand := acctest.RandIntRange(10000, 99999)
+	name := fmt.Sprintf("tf-testacc%secdpolicygroup%d", defaultRegionToTest, rand)
+	testAccConfig := resourceTestAccConfigFunc(resourceId, name, AlicloudECDPolicyGroupBasicDependence0)
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+			testAccPreCheckWithRegions(t, true, connectivity.EcdSupportRegions)
+		},
+		IDRefreshName: resourceId,
+		Providers:     testAccProviders,
+		CheckDestroy:  rac.checkResourceDestroy(),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"policy_group_name":    "tf-testaccPolicyGroupName",
+					"recording":            "period",
+					"recording_start_time": "08:00:00",
+					"recording_end_time":   "08:59:00",
+					"recording_fps":        "2",
+					"camera_redirect":      "on",
+					"recording_expires":    "15",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"policy_group_name":    "tf-testaccPolicyGroupName",
+						"recording":            "period",
+						"recording_start_time": "08:00:00",
+						"recording_end_time":   "08:59:00",
+						"recording_fps":        "2",
+						"camera_redirect":      "on",
+						"recording_expires":    "15",
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"recording_expires": "30",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"recording_expires": "30",
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"recording":            "period",
+					"recording_start_time": "10:00:00",
+					"recording_end_time":   "12:59:00",
+					"recording_fps":        "5",
+					"camera_redirect":      "on",
+					"recording_expires":    "180",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"recording":            "period",
+						"recording_start_time": "10:00:00",
+						"recording_end_time":   "12:59:00",
+						"recording_fps":        "5",
+						"camera_redirect":      "on",
+						"recording_expires":    "180",
+					}),
+				),
+			},
+			{
+				ResourceName:            resourceId,
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"recording_start_time", "recording_end_time", "status"},
 			},
 		},
 	})

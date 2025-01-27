@@ -11,49 +11,50 @@ description: |-
 
 Provides a PolarDB account resource and used to manage databases.
 
--> **NOTE:** Available in v1.67.0+. 
+-> **NOTE:** Available since v1.67.0. 
 
 ## Example Usage
 
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_polardb_account&exampleId=d304ccab-d255-da40-7c04-6026efedb0938bbe617a&activeTab=example&spm=docs.r.polardb_account.0.d304ccabd2&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
 ```terraform
-variable "creation" {
-  default = "PolarDB"
-}
-
-variable "name" {
-  default = "polardbaccountmysql"
-}
-
-data "alicloud_zones" "default" {
-  available_resource_creation = var.creation
+data "alicloud_polardb_node_classes" "default" {
+  db_type    = "MySQL"
+  db_version = "8.0"
+  pay_type   = "PostPaid"
+  category   = "Normal"
 }
 
 resource "alicloud_vpc" "default" {
-  vpc_name   = var.name
+  vpc_name   = "terraform-example"
   cidr_block = "172.16.0.0/16"
 }
 
 resource "alicloud_vswitch" "default" {
   vpc_id       = alicloud_vpc.default.id
   cidr_block   = "172.16.0.0/24"
-  zone_id      = data.alicloud_zones.default.zones.0.id
-  vswitch_name = var.name
+  zone_id      = data.alicloud_polardb_node_classes.default.classes[0].zone_id
+  vswitch_name = "terraform-example"
 }
 
-resource "alicloud_polardb_cluster" "cluster" {
+resource "alicloud_polardb_cluster" "default" {
   db_type       = "MySQL"
   db_version    = "8.0"
-  db_node_class = "polar.mysql.x4.large"
+  db_node_class = data.alicloud_polardb_node_classes.default.classes.0.supported_engines.0.available_resources.0.db_node_class
   pay_type      = "PostPaid"
   vswitch_id    = alicloud_vswitch.default.id
-  description   = var.name
+  description   = "terraform-example"
 }
 
-resource "alicloud_polardb_account" "account" {
-  db_cluster_id       = alicloud_polardb_cluster.cluster.id
-  account_name        = "tftestnormal"
-  account_password    = "Test12345"
-  account_description = var.name
+resource "alicloud_polardb_account" "default" {
+  db_cluster_id       = alicloud_polardb_cluster.default.id
+  account_name        = "terraform_example"
+  account_password    = "Example1234"
+  account_description = "terraform-example"
 }
 ```
 
@@ -79,6 +80,6 @@ The following attributes are exported:
 
 PolarDB account can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_polardb_account.example "pc-12345:tf_account"
 ```

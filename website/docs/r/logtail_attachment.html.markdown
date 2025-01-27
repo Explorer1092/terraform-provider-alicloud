@@ -21,15 +21,26 @@ This resource amis to attach one logtail configure to a machine group.
 
 Basic Usage
 
-```
-resource "alicloud_log_project" "test" {
-  name        = "test-tf2"
-  description = "create by terraform"
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_logtail_attachment&exampleId=efc3eb85-d6ae-b13c-578a-d54b0589f151a4c74fa3&activeTab=example&spm=docs.r.logtail_attachment.0.efc3eb85d6&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
+```terraform
+resource "random_integer" "default" {
+  max = 99999
+  min = 10000
 }
 
-resource "alicloud_log_store" "test" {
-  project               = alicloud_log_project.test.name
-  name                  = "tf-test-logstore"
+resource "alicloud_log_project" "example" {
+  project_name = "terraform-example-${random_integer.default.result}"
+  description  = "terraform-example"
+}
+
+resource "alicloud_log_store" "example" {
+  project_name          = alicloud_log_project.example.project_name
+  logstore_name         = "example-store"
   retention_period      = 3650
   shard_count           = 3
   auto_split            = true
@@ -37,19 +48,11 @@ resource "alicloud_log_store" "test" {
   append_meta           = true
 }
 
-resource "alicloud_log_machine_group" "test" {
-  project       = alicloud_log_project.test.name
-  name          = "tf-log-machine-group"
-  topic         = "terraform"
-  identify_list = ["10.0.0.1", "10.0.0.3", "10.0.0.2"]
-}
-
-resource "alicloud_logtail_config" "test" {
-  project      = alicloud_log_project.test.name
-  logstore     = alicloud_log_store.test.name
+resource "alicloud_logtail_config" "example" {
+  project      = alicloud_log_project.example.project_name
+  logstore     = alicloud_log_store.example.logstore_name
   input_type   = "file"
-  log_sample   = "test"
-  name         = "tf-log-config"
+  name         = "terraform-example"
   output_type  = "LogService"
   input_detail = <<DEFINITION
   	{
@@ -62,15 +65,21 @@ resource "alicloud_logtail_config" "test" {
 		"fileEncoding": "gbk",
 		"maxDepth": 10
 	}
-	
-DEFINITION
-
+  DEFINITION
 }
 
-resource "alicloud_logtail_attachment" "test" {
-  project             = alicloud_log_project.test.name
-  logtail_config_name = alicloud_logtail_config.test.name
-  machine_group_name  = alicloud_log_machine_group.test.name
+resource "alicloud_log_machine_group" "example" {
+  project       = alicloud_log_project.example.project_name
+  name          = "terraform-example"
+  identify_type = "ip"
+  topic         = "terraform"
+  identify_list = ["10.0.0.1", "10.0.0.2"]
+}
+
+resource "alicloud_logtail_attachment" "example" {
+  project             = alicloud_log_project.example.project_name
+  logtail_config_name = alicloud_logtail_config.example.name
+  machine_group_name  = alicloud_log_machine_group.example.name
 }
 ```
 
@@ -93,6 +102,6 @@ The following attributes are exported:
 
 Logtial to machine group can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_logtail_to_machine_group.example tf-log:tf-log-config:tf-log-machine-group
 ```

@@ -7,21 +7,46 @@ description: |-
   Provides a Alicloud Cloud Storage Gateway Gateway Logging resource.
 ---
 
-# alicloud\_cloud\_storage\_gateway\_gateway\_logging
+# alicloud_cloud_storage_gateway_gateway_logging
 
 Provides a Cloud Storage Gateway Gateway Logging resource.
 
-For information about Cloud Storage Gateway Gateway Logging and how to use it, see [What is Gateway Logging](https://www.alibabacloud.com/help/en/doc-detail/108299.htm).
+For information about Cloud Storage Gateway Gateway Logging and how to use it, see [What is Gateway Logging](https://www.alibabacloud.com/help/en/cloud-storage-gateway/latest/creategatewaylogging).
 
--> **NOTE:** Available in v1.144.0+.
+-> **NOTE:** Available since v1.144.0.
 
 ## Example Usage
 
 Basic Usage
 
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_cloud_storage_gateway_gateway_logging&exampleId=40fe5e0a-1a92-1909-6369-756c7fdc7690b7cc8fe7&activeTab=example&spm=docs.r.cloud_storage_gateway_gateway_logging.0.40fe5e0a1a&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
 ```terraform
 variable "name" {
-  default = "example"
+  default = "tf-example"
+}
+
+resource "random_uuid" "default" {
+}
+resource "alicloud_cloud_storage_gateway_storage_bundle" "default" {
+  storage_bundle_name = substr("tf-example-${replace(random_uuid.default.result, "-", "")}", 0, 16)
+}
+
+resource "alicloud_log_project" "default" {
+  project_name = substr("tf-example-${replace(random_uuid.default.result, "-", "")}", 0, 16)
+  description  = "terraform-example"
+}
+resource "alicloud_log_store" "default" {
+  project_name          = alicloud_log_project.default.project_name
+  logstore_name         = var.name
+  shard_count           = 3
+  auto_split            = true
+  max_split_shard_count = 60
+  append_meta           = true
 }
 
 resource "alicloud_vpc" "default" {
@@ -38,41 +63,23 @@ resource "alicloud_vswitch" "default" {
   vswitch_name = var.name
 }
 
-resource "alicloud_cloud_storage_gateway_storage_bundle" "default" {
-  storage_bundle_name = var.name
-}
-
 resource "alicloud_cloud_storage_gateway_gateway" "default" {
-  description              = "tf-acctestDesalone"
-  gateway_class            = "Basic"
+  gateway_name             = var.name
+  description              = var.name
+  gateway_class            = "Standard"
   type                     = "File"
   payment_type             = "PayAsYouGo"
   vswitch_id               = alicloud_vswitch.default.id
-  release_after_expiration = true
-  public_network_bandwidth = 10
+  release_after_expiration = false
+  public_network_bandwidth = 40
   storage_bundle_id        = alicloud_cloud_storage_gateway_storage_bundle.default.id
   location                 = "Cloud"
-  gateway_name             = var.name
-}
-
-resource "alicloud_log_project" "default" {
-  name        = var.name
-  description = "created by terraform"
-}
-
-resource "alicloud_log_store" "default" {
-  project               = alicloud_log_project.default.name
-  name                  = var.name
-  shard_count           = 3
-  auto_split            = true
-  max_split_shard_count = 60
-  append_meta           = true
 }
 
 resource "alicloud_cloud_storage_gateway_gateway_logging" "default" {
   gateway_id   = alicloud_cloud_storage_gateway_gateway.default.id
-  sls_logstore = alicloud_log_store.default.name
-  sls_project  = alicloud_log_project.default.name
+  sls_logstore = alicloud_log_store.default.logstore_name
+  sls_project  = alicloud_log_project.default.project_name
 }
 ```
 
@@ -83,7 +90,7 @@ The following arguments are supported:
 * `gateway_id` - (Required, ForceNew) The ID of the Gateway.
 * `sls_logstore` - (Required, ForceNew) The name of the Log Store.
 * `sls_project` - (Required, ForceNew) The name of the Project.
-* `status` - (Optional, Computed) The status of the resource. Valid values: `Enabled`, `Disable`.
+* `status` - (Optional) The status of the resource. Valid values: `Enabled`, `Disable`.
 
 ## Attributes Reference
 
@@ -95,6 +102,6 @@ The following attributes are exported:
 
 Cloud Storage Gateway Gateway Logging can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_cloud_storage_gateway_gateway_logging.example <gateway_id>
 ```

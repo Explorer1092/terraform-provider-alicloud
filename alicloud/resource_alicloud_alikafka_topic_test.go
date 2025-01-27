@@ -105,7 +105,7 @@ func testSweepAlikafkaTopic(region string) error {
 	return nil
 }
 
-func TestAccAlicloudAlikafkaTopic_basic(t *testing.T) {
+func TestAccAliCloudAlikafkaTopic_basic(t *testing.T) {
 
 	var v *alikafka.TopicVO
 	resourceId := "alicloud_alikafka_topic.default"
@@ -123,7 +123,6 @@ func TestAccAlicloudAlikafkaTopic_basic(t *testing.T) {
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
-			testAccPreCheckWithRegions(t, true, connectivity.AlikafkaSupportedRegions)
 			testAccPreCheck(t)
 		},
 		// module name
@@ -267,7 +266,7 @@ func TestAccAlicloudAlikafkaTopic_basic(t *testing.T) {
 
 }
 
-func TestAccAlicloudAlikafkaTopic_multi(t *testing.T) {
+func TestAccAliCloudAlikafkaTopic_multi(t *testing.T) {
 
 	var v *alikafka.TopicVO
 	resourceId := "alicloud_alikafka_topic.default.4"
@@ -285,7 +284,6 @@ func TestAccAlicloudAlikafkaTopic_multi(t *testing.T) {
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
-			testAccPreCheckWithRegions(t, true, connectivity.AlikafkaSupportedRegions)
 			testAccPreCheck(t)
 		},
 		// module name
@@ -325,7 +323,7 @@ variable "name" {
 }
 
 data "alicloud_vpcs" "default" {
- name_regex = "^default-NODELETING"
+    name_regex = "^default-NODELETING$"
 }
 data "alicloud_vswitches" "default" {
   vpc_id = data.alicloud_vpcs.default.ids.0
@@ -338,12 +336,12 @@ resource "alicloud_security_group" "default" {
 
 resource "alicloud_alikafka_instance" "default" {
   name = "${var.name}"
-  topic_quota = "50"
-  disk_type = "1"
-  disk_size = "500"
-  deploy_type = "5"
-  io_max = "20"
-  vswitch_id = "${data.alicloud_vswitches.default.ids.0}"
+  partition_num = 50
+  disk_type = 1
+  disk_size = 500
+  deploy_type = 5
+  io_max = 20
+  vswitch_id = data.alicloud_vswitches.default.ids.0
   security_group = alicloud_security_group.default.id
 }
 `, name)

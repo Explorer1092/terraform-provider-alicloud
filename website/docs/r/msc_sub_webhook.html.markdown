@@ -1,5 +1,5 @@
 ---
-subcategory: "Message Center"
+subcategory: "Message Center (MscSub)"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_msc_sub_webhook"
 sidebar_current: "docs-alicloud-resource-msc-sub-webhook"
@@ -7,22 +7,33 @@ description: |-
   Provides a Alicloud Msc Sub Webhook resource.
 ---
 
-# alicloud\_msc\_sub\_webhook
+# alicloud_msc_sub_webhook
 
 Provides a Msc Sub Webhook resource.
 
--> **NOTE:** Available in v1.141.0+.
+-> **NOTE:** Available since v1.141.0.
 
 ## Example Usage
 
 Basic Usage
 
-```terraform
-resource "alicloud_msc_sub_webhook" "example" {
-  server_url   = "example_value"
-  webhook_name = "example_value"
-}
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_msc_sub_webhook&exampleId=50c682fd-ad2a-60b7-b141-135c461765a4628f6c0e&activeTab=example&spm=docs.r.msc_sub_webhook.0.50c682fdad&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
 
+```terraform
+variable "name" {
+  default = "tfexample"
+}
+variable "token" {
+  default = "abcd****"
+}
+resource "alicloud_msc_sub_webhook" "example" {
+  server_url   = format("https://oapi.dingtalk.com/robot/send?access_token=%s", var.token)
+  webhook_name = var.name
+}
 ```
 
 ## Argument Reference
@@ -42,6 +53,6 @@ The following attributes are exported:
 
 Msc Sub Webhook can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_msc_sub_webhook.example <id>
 ```

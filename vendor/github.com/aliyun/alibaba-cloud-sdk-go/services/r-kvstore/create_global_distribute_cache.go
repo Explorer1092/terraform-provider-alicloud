@@ -73,6 +73,7 @@ type CreateGlobalDistributeCacheRequest struct {
 	*requests.RpcRequest
 	ResourceOwnerId      requests.Integer `position:"Query" name:"ResourceOwnerId"`
 	ClientToken          string           `position:"Query" name:"ClientToken"`
+	ResourceGroupId      string           `position:"Query" name:"ResourceGroupId"`
 	SecurityToken        string           `position:"Query" name:"SecurityToken"`
 	ResourceOwnerAccount string           `position:"Query" name:"ResourceOwnerAccount"`
 	OwnerAccount         string           `position:"Query" name:"OwnerAccount"`
@@ -83,8 +84,7 @@ type CreateGlobalDistributeCacheRequest struct {
 // CreateGlobalDistributeCacheResponse is the response struct for api CreateGlobalDistributeCache
 type CreateGlobalDistributeCacheResponse struct {
 	*responses.BaseResponse
-	GlobalInstanceId string `json:"GlobalInstanceId" xml:"GlobalInstanceId"`
-	RequestId        string `json:"RequestId" xml:"RequestId"`
+	RequestId string `json:"RequestId" xml:"RequestId"`
 }
 
 // CreateCreateGlobalDistributeCacheRequest creates a request to invoke CreateGlobalDistributeCache API

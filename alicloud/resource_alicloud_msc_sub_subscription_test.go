@@ -21,7 +21,6 @@ import (
 )
 
 func TestAccAlicloudMscSubSubscription_basic0(t *testing.T) {
-	checkoutSupportedRegions(t, true, connectivity.MSCSupportRegions)
 	var v map[string]interface{}
 	resourceId := "alicloud_msc_sub_subscription.default"
 	ra := resourceAttrInit(resourceId, AlicloudMscSubSubscriptionMap0)
@@ -142,7 +141,7 @@ resource "alicloud_msc_sub_contact" "default2" {
 `, name)
 }
 
-func TestAccAlicloudMscSubSubscription_unit(t *testing.T) {
+func TestUnitAlicloudMscSubSubscription(t *testing.T) {
 	p := Provider().(*schema.Provider).ResourcesMap
 	dInit, _ := schema.InternalMap(p["alicloud_msc_sub_subscription"].Schema).Data(nil, nil)
 	dExisted, _ := schema.InternalMap(p["alicloud_msc_sub_subscription"].Schema).Data(nil, nil)

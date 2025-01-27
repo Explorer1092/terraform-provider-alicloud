@@ -17,15 +17,18 @@ package cloudapi
 
 // AppApiRelationInfo is a nested struct in cloudapi response
 type AppApiRelationInfo struct {
-	RegionId            string `json:"RegionId" xml:"RegionId"`
-	GroupId             string `json:"GroupId" xml:"GroupId"`
-	GroupName           string `json:"GroupName" xml:"GroupName"`
-	StageName           string `json:"StageName" xml:"StageName"`
-	Operator            string `json:"Operator" xml:"Operator"`
-	ApiId               string `json:"ApiId" xml:"ApiId"`
-	ApiName             string `json:"ApiName" xml:"ApiName"`
-	AuthorizationSource string `json:"AuthorizationSource" xml:"AuthorizationSource"`
-	Description         string `json:"Description" xml:"Description"`
-	CreatedTime         string `json:"CreatedTime" xml:"CreatedTime"`
-	AuthVaildTime       string `json:"AuthVaildTime" xml:"AuthVaildTime"`
+	StageNameAndAuth    map[string]interface{} `json:"StageNameAndAuth" xml:"StageNameAndAuth"`
+	Path                string                 `json:"Path" xml:"Path"`
+	GroupName           string                 `json:"GroupName" xml:"GroupName"`
+	Operator            string                 `json:"Operator" xml:"Operator"`
+	ApiId               string                 `json:"ApiId" xml:"ApiId"`
+	CreatedTime         string                 `json:"CreatedTime" xml:"CreatedTime"`
+	RegionId            string                 `json:"RegionId" xml:"RegionId"`
+	AuthVaildTime       string                 `json:"AuthVaildTime" xml:"AuthVaildTime"`
+	AuthorizationSource string                 `json:"AuthorizationSource" xml:"AuthorizationSource"`
+	Method              string                 `json:"Method" xml:"Method"`
+	GroupId             string                 `json:"GroupId" xml:"GroupId"`
+	ApiName             string                 `json:"ApiName" xml:"ApiName"`
+	StageName           string                 `json:"StageName" xml:"StageName"`
+	Description         string                 `json:"Description" xml:"Description"`
 }

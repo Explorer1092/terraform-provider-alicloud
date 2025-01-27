@@ -87,7 +87,7 @@ func resourceAliyunSlbRule() *schema.Resource {
 			},
 			"cookie_timeout": {
 				Type:             schema.TypeInt,
-				ValidateFunc:     validation.IntBetween(1, 86400),
+				ValidateFunc:     validation.IntBetween(0, 86400),
 				Optional:         true,
 				DiffSuppressFunc: slbRuleCookieTimeoutDiffSuppressFunc,
 			},
@@ -218,7 +218,7 @@ func resourceAliyunSlbRuleCreate(d *schema.ResourceData, meta interface{}) error
 	err = resource.Retry(d.Timeout(schema.TimeoutCreate), func() *resource.RetryError {
 		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2014-05-15"), StringPointer("AK"), nil, request, &util.RuntimeOptions{})
 		if err != nil {
-			if IsExpectedErrors(err, []string{"BackendServer.configuring", "OperationFailed.ListenerStatusNotSupport"}) || NeedRetry(err) {
+			if IsExpectedErrors(err, []string{"ServiceIsConfiguring", "BackendServer.configuring", "OperationFailed.ListenerStatusNotSupport"}) || NeedRetry(err) {
 				wait()
 				return resource.RetryableError(err)
 			}

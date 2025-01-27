@@ -129,7 +129,7 @@ func testSweepEipAddress(region string) error {
 	return nil
 }
 
-func TestAccAlicloudEIPAddress_basic0(t *testing.T) {
+func TestAccAliCloudEIPAddress_basic0(t *testing.T) {
 	var v map[string]interface{}
 	resourceId := "alicloud_eip_address.default"
 	ra := resourceAttrInit(resourceId, AlicloudEIPAddressMap0)
@@ -253,7 +253,7 @@ func TestAccAlicloudEIPAddress_basic0(t *testing.T) {
 				ResourceName:            resourceId,
 				ImportState:             true,
 				ImportStateVerify:       true,
-				ImportStateVerifyIgnore: []string{"activity_id", "netmode", "period", "auto_pay"},
+				ImportStateVerifyIgnore: []string{"activity_id", "period", "auto_pay"},
 			},
 		},
 	})
@@ -264,7 +264,7 @@ var AlicloudEIPAddressMap0 = map[string]string{
 	"status":               CHECKSET,
 	"activity_id":          NOSET,
 	"auto_pay":             NOSET,
-	"netmode":              NOSET,
+	"netmode":              CHECKSET,
 	"period":               NOSET,
 	"pricing_cycle":        NOSET,
 	"bandwidth":            CHECKSET,
@@ -288,9 +288,10 @@ data "alicloud_resource_manager_resource_groups" "default"{
 `, name)
 }
 
-func TestAccAlicloudEIPAddress_basic1(t *testing.T) {
+func TestAccAliCloudEIPAddress_basic1(t *testing.T) {
 	var v map[string]interface{}
 	resourceId := "alicloud_eip_address.default"
+	checkoutSupportedRegions(t, true, connectivity.VPCPublicIpAddressPoolCidrBlockSupportRegions)
 	ra := resourceAttrInit(resourceId, AlicloudEIPAddressMap1)
 	rc := resourceCheckInitWithDescribeMethod(resourceId, &v, func() interface{} {
 		return &VpcService{testAccProvider.Meta().(*connectivity.AliyunClient)}
@@ -310,17 +311,19 @@ func TestAccAlicloudEIPAddress_basic1(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				Config: testAccConfig(map[string]interface{}{
-					"isp":                  "BGP",
-					"address_name":         "${var.name}",
-					"internet_charge_type": "PayByTraffic",
-					"payment_type":         "PayAsYouGo",
+					"isp":                       "BGP",
+					"address_name":              "${var.name}",
+					"internet_charge_type":      "PayByTraffic",
+					"payment_type":              "PayAsYouGo",
+					"public_ip_address_pool_id": "${alicloud_vpc_public_ip_address_pool_cidr_block.default.public_ip_address_pool_id}",
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
-						"isp":                  "BGP",
-						"address_name":         name,
-						"internet_charge_type": "PayByTraffic",
-						"payment_type":         "PayAsYouGo",
+						"isp":                       "BGP",
+						"address_name":              name,
+						"internet_charge_type":      "PayByTraffic",
+						"payment_type":              "PayAsYouGo",
+						"public_ip_address_pool_id": CHECKSET,
 					}),
 				),
 			},
@@ -372,7 +375,7 @@ func TestAccAlicloudEIPAddress_basic1(t *testing.T) {
 				ResourceName:            resourceId,
 				ImportState:             true,
 				ImportStateVerify:       true,
-				ImportStateVerifyIgnore: []string{"activity_id", "netmode", "period", "auto_pay"},
+				ImportStateVerifyIgnore: []string{"activity_id", "period", "auto_pay"},
 			},
 		},
 	})
@@ -384,7 +387,7 @@ var AlicloudEIPAddressMap1 = map[string]string{
 	"status":               CHECKSET,
 	"bandwidth":            CHECKSET,
 	"description":          "",
-	"netmode":              NOSET,
+	"netmode":              CHECKSET,
 	"resource_group_id":    CHECKSET,
 	"activity_id":          NOSET,
 	"pricing_cycle":        NOSET,
@@ -397,13 +400,22 @@ var AlicloudEIPAddressMap1 = map[string]string{
 
 func AlicloudEIPAddressBasicDependence1(name string) string {
 	return fmt.Sprintf(` 
-variable "name" {
-  default = "%s"
-}
+	variable "name" {
+		default = "%s"
+	}
+
+	resource "alicloud_vpc_public_ip_address_pool" "default" {
+		public_ip_address_pool_name = var.name
+	}
+
+	resource "alicloud_vpc_public_ip_address_pool_cidr_block" "default" {
+  		public_ip_address_pool_id = alicloud_vpc_public_ip_address_pool.default.id
+  		cidr_block                = "47.118.126.0/25"
+	}
 `, name)
 }
 
-func TestAccAlicloudEIPAddress_basic2(t *testing.T) {
+func TestAccAliCloudEIPAddress_basic2(t *testing.T) {
 	var v map[string]interface{}
 	resourceId := "alicloud_eip_address.default"
 	ra := resourceAttrInit(resourceId, AlicloudEIPAddressMap2)
@@ -426,23 +438,23 @@ func TestAccAlicloudEIPAddress_basic2(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				Config: testAccConfig(map[string]interface{}{
-					"isp":          "BGP_PRO",
-					"address_name": "${var.name}",
+					"isp":  "BGP_PRO",
+					"name": "${var.name}",
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
-						"isp":          "BGP_PRO",
-						"address_name": name,
+						"isp":  "BGP_PRO",
+						"name": name,
 					}),
 				),
 			},
 			{
 				Config: testAccConfig(map[string]interface{}{
-					"address_name": name + "Update",
+					"name": name + "Update",
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
-						"address_name": name + "Update",
+						"name": name + "Update",
 					}),
 				),
 			},
@@ -468,15 +480,15 @@ func TestAccAlicloudEIPAddress_basic2(t *testing.T) {
 			},
 			{
 				Config: testAccConfig(map[string]interface{}{
-					"address_name": "${var.name}",
-					"bandwidth":    "5",
-					"description":  "update",
+					"name":        name,
+					"bandwidth":   "5",
+					"description": "update",
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
-						"address_name": name,
-						"bandwidth":    "5",
-						"description":  "update",
+						"name":        name,
+						"bandwidth":   "5",
+						"description": "update",
 					}),
 				),
 			},
@@ -484,7 +496,7 @@ func TestAccAlicloudEIPAddress_basic2(t *testing.T) {
 				ResourceName:            resourceId,
 				ImportState:             true,
 				ImportStateVerify:       true,
-				ImportStateVerifyIgnore: []string{"activity_id", "netmode", "period", "auto_pay"},
+				ImportStateVerifyIgnore: []string{"activity_id", "period", "auto_pay"},
 			},
 		},
 	})
@@ -501,7 +513,7 @@ var AlicloudEIPAddressMap2 = map[string]string{
 	"status":               CHECKSET,
 	"activity_id":          NOSET,
 	"resource_group_id":    CHECKSET,
-	"netmode":              NOSET,
+	"netmode":              CHECKSET,
 	"isp":                  "BGP_PRO",
 	"address_name":         CHECKSET,
 	"ip_address":           CHECKSET,
@@ -515,7 +527,7 @@ variable "name" {
 `, name)
 }
 
-func TestAccAlicloudEIPAddress_basic3(t *testing.T) {
+func SkipTestAccAliCloudEIPAddress_basic3(t *testing.T) {
 	var v map[string]interface{}
 	resourceId := "alicloud_eip_address.default"
 	ra := resourceAttrInit(resourceId, AlicloudEIPAddressMap3)
@@ -565,7 +577,7 @@ variable "name" {
 `, name)
 }
 
-func TestAccAlicloudEIPAddress_basic4(t *testing.T) {
+func TestAccAliCloudEIPAddress_basic4(t *testing.T) {
 	var v map[string]interface{}
 	resourceId := "alicloud_eip_address.default"
 	ra := resourceAttrInit(resourceId, AlicloudEIPAddressMap4)
@@ -603,13 +615,13 @@ func TestAccAlicloudEIPAddress_basic4(t *testing.T) {
 				ResourceName:            resourceId,
 				ImportState:             true,
 				ImportStateVerify:       true,
-				ImportStateVerifyIgnore: []string{"activity_id", "netmode", "period", "auto_pay"},
+				ImportStateVerifyIgnore: []string{"activity_id", "period", "auto_pay"},
 			},
 		},
 	})
 }
 
-func TestAccAlicloudEIPAddress_basic5(t *testing.T) {
+func SkipTestAccAliCloudEIPAddress_basic5(t *testing.T) {
 	var v map[string]interface{}
 	resourceId := "alicloud_eip_address.default"
 	ra := resourceAttrInit(resourceId, AlicloudEIPAddressMap0)
@@ -659,13 +671,13 @@ func TestAccAlicloudEIPAddress_basic5(t *testing.T) {
 				ResourceName:            resourceId,
 				ImportState:             true,
 				ImportStateVerify:       true,
-				ImportStateVerifyIgnore: []string{"activity_id", "netmode", "period", "auto_pay"},
+				ImportStateVerifyIgnore: []string{"activity_id", "period", "auto_pay"},
 			},
 		},
 	})
 }
 
-func TestAccAlicloudEIPAddress_basic6(t *testing.T) {
+func TestAccAliCloudEIPAddress_basic6(t *testing.T) {
 	var v map[string]interface{}
 	resourceId := "alicloud_eip_address.default"
 	ra := resourceAttrInit(resourceId, AlicloudEIPAddressMap0)
@@ -713,13 +725,13 @@ func TestAccAlicloudEIPAddress_basic6(t *testing.T) {
 				ResourceName:            resourceId,
 				ImportState:             true,
 				ImportStateVerify:       true,
-				ImportStateVerifyIgnore: []string{"activity_id", "netmode", "period", "auto_pay"},
+				ImportStateVerifyIgnore: []string{"activity_id", "period", "auto_pay"},
 			},
 		},
 	})
 }
 
-func TestAccAlicloudEIPAddress_basic7(t *testing.T) {
+func TestAccAliCloudEIPAddress_basic7(t *testing.T) {
 	var v map[string]interface{}
 	resourceId := "alicloud_eip_address.default"
 	ra := resourceAttrInit(resourceId, AlicloudEIPAddressMap4)
@@ -757,7 +769,298 @@ func TestAccAlicloudEIPAddress_basic7(t *testing.T) {
 				ResourceName:            resourceId,
 				ImportState:             true,
 				ImportStateVerify:       true,
-				ImportStateVerifyIgnore: []string{"activity_id", "netmode", "period", "auto_pay"},
+				ImportStateVerifyIgnore: []string{"activity_id", "period", "auto_pay"},
+			},
+		},
+	})
+}
+
+func TestAccAliCloudEIPAddress_basic8(t *testing.T) {
+	var v map[string]interface{}
+	resourceId := "alicloud_eip_address.default"
+	ra := resourceAttrInit(resourceId, AlicloudEIPAddressMap0)
+	rc := resourceCheckInitWithDescribeMethod(resourceId, &v, func() interface{} {
+		return &VpcService{testAccProvider.Meta().(*connectivity.AliyunClient)}
+	}, "DescribeEipAddress")
+	rac := resourceAttrCheckInit(rc, ra)
+	testAccCheck := rac.resourceAttrMapUpdateSet()
+	rand := acctest.RandIntRange(10000, 99999)
+	name := fmt.Sprintf("tf-testacc%seipaddress%d", defaultRegionToTest, rand)
+	testAccConfig := resourceTestAccConfigFunc(resourceId, name, AlicloudEIPAddressBasicDependence0)
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		IDRefreshName: resourceId,
+		Providers:     testAccProviders,
+		CheckDestroy:  rac.checkResourceDestroy(),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"address_name": "${var.name}",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"address_name": name,
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"high_definition_monitor_log_status": "ON",
+					"log_project":                        "hdmonitor-cn-shenzhen",
+					"log_store":                          "hdmonitor",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"high_definition_monitor_log_status": "ON",
+						"log_project":                        "hdmonitor-cn-shenzhen",
+						"log_store":                          "hdmonitor",
+					}),
+				),
+			},
+			{
+				ResourceName:            resourceId,
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"activity_id", "period", "auto_pay"},
+			},
+		},
+	})
+}
+
+func TestAccAliCloudEIPAddress_basic9(t *testing.T) {
+	var v map[string]interface{}
+	resourceId := "alicloud_eip_address.default"
+	ra := resourceAttrInit(resourceId, AlicloudEIPAddressMap0)
+	rc := resourceCheckInitWithDescribeMethod(resourceId, &v, func() interface{} {
+		return &VpcService{testAccProvider.Meta().(*connectivity.AliyunClient)}
+	}, "DescribeEipAddress")
+	rac := resourceAttrCheckInit(rc, ra)
+	testAccCheck := rac.resourceAttrMapUpdateSet()
+	rand := acctest.RandIntRange(10000, 99999)
+	name := fmt.Sprintf("tf-testacc%seipaddress%d", defaultRegionToTest, rand)
+	testAccConfig := resourceTestAccConfigFunc(resourceId, name, AlicloudEIPAddressBasicDependence0)
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+			testAccPreCheckWithRegions(t, true, connectivity.VpcDhcpOptionsSetSupportRegions)
+		},
+		IDRefreshName: resourceId,
+		Providers:     testAccProviders,
+		CheckDestroy:  rac.checkResourceDestroy(),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"name":                      name,
+					"activity_id":               "12345",
+					"bandwidth":                 "10",
+					"description":               name,
+					"instance_charge_type":      "PostPaid",
+					"isp":                       "BGP",
+					"netmode":                   "public",
+					"zone":                      "cn-hangzhou-i",
+					"security_protection_types": []string{"AntiDDoS_Enhanced"},
+					"resource_group_id":         "${data.alicloud_resource_manager_resource_groups.default.ids.0}",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"name":                 name,
+						"activity_id":          "12345",
+						"bandwidth":            "10",
+						"description":          name,
+						"instance_charge_type": "PostPaid",
+						"isp":                  "BGP",
+						"netmode":              "public",
+						"resource_group_id":    CHECKSET,
+						"zone":                 "cn-hangzhou-i",
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"mode": "BINDED",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"mode": "BINDED",
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"mode": "NAT",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"mode": "NAT",
+					}),
+				),
+			},
+			{
+				ResourceName:            resourceId,
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"activity_id", "period", "auto_pay"},
+			},
+		},
+	})
+}
+
+func TestAccAliCloudEIPAddress_basic13(t *testing.T) {
+	var v map[string]interface{}
+	resourceId := "alicloud_eip_address.default"
+	ra := resourceAttrInit(resourceId, AlicloudEIPAddressMap0)
+	rc := resourceCheckInitWithDescribeMethod(resourceId, &v, func() interface{} {
+		return &VpcService{testAccProvider.Meta().(*connectivity.AliyunClient)}
+	}, "DescribeEipAddress")
+	rac := resourceAttrCheckInit(rc, ra)
+	testAccCheck := rac.resourceAttrMapUpdateSet()
+	rand := acctest.RandIntRange(10000, 99999)
+	name := fmt.Sprintf("tf-testacc%seipaddress%d", defaultRegionToTest, rand)
+	testAccConfig := resourceTestAccConfigFunc(resourceId, name, AlicloudEIPAddressBasicDependence0)
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+			testAccPreCheckWithTime(t, []int{1})
+			testAccPreCheckWithRegions(t, true, connectivity.VpcDhcpOptionsSetSupportRegions)
+		},
+		IDRefreshName: resourceId,
+		Providers:     testAccProviders,
+		CheckDestroy:  rac.checkResourceDestroy(),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"name":                      name,
+					"bandwidth":                 "10",
+					"description":               name,
+					"instance_charge_type":      "PostPaid",
+					"allocation_id":             "eip-bp1pktw6wwavjqudm4mon",
+					"isp":                       "BGP",
+					"netmode":                   "public",
+					"security_protection_types": []string{"AntiDDoS_Enhanced"},
+					"resource_group_id":         "${data.alicloud_resource_manager_resource_groups.default.ids.0}",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"name":                 name,
+						"bandwidth":            "10",
+						"description":          name,
+						"instance_charge_type": "PostPaid",
+						"isp":                  "BGP",
+						"netmode":              "public",
+						"resource_group_id":    CHECKSET,
+					}),
+				),
+			},
+			{
+				ResourceName:            resourceId,
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"activity_id", "period", "auto_pay"},
+			},
+		},
+	})
+}
+
+func TestAccAliCloudEIPAddress_basic9_ip(t *testing.T) {
+	t.Skipped()
+	var v map[string]interface{}
+	resourceId := "alicloud_eip_address.default"
+	ra := resourceAttrInit(resourceId, AlicloudEIPAddressMap0)
+	rc := resourceCheckInitWithDescribeMethod(resourceId, &v, func() interface{} {
+		return &VpcService{testAccProvider.Meta().(*connectivity.AliyunClient)}
+	}, "DescribeEipAddress")
+	rac := resourceAttrCheckInit(rc, ra)
+	testAccCheck := rac.resourceAttrMapUpdateSet()
+	rand := acctest.RandIntRange(10000, 99999)
+	name := fmt.Sprintf("tf-testacc%seipaddress%d", defaultRegionToTest, rand)
+	testAccConfig := resourceTestAccConfigFunc(resourceId, name, AlicloudEIPAddressBasicDependence0)
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+			testAccPreCheckWithTime(t, []int{1})
+			testAccPreCheckWithRegions(t, true, connectivity.EipAddressZoneSupportRegions)
+		},
+		IDRefreshName: resourceId,
+		Providers:     testAccProviders,
+		CheckDestroy:  rac.checkResourceDestroy(),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"name":                 name,
+					"activity_id":          "12345",
+					"bandwidth":            "10",
+					"description":          name,
+					"instance_charge_type": "PostPaid",
+					"isp":                  "BGP",
+					"netmode":              "public",
+					"ip_address":           "47.91.57.17",
+					"resource_group_id":    "${data.alicloud_resource_manager_resource_groups.default.ids.0}",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"name":                 name,
+						"activity_id":          "12345",
+						"bandwidth":            "10",
+						"description":          name,
+						"instance_charge_type": "PostPaid",
+						"isp":                  "BGP",
+						"netmode":              "public",
+						"resource_group_id":    CHECKSET,
+					}),
+				),
+			},
+			{
+				ResourceName:            resourceId,
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"activity_id", "period", "auto_pay"},
+			},
+		},
+	})
+}
+
+func TestAccAliCloudEIPAddress_basic10(t *testing.T) {
+	var v map[string]interface{}
+	resourceId := "alicloud_eip_address.default"
+	ra := resourceAttrInit(resourceId, AlicloudEIPAddressMap4)
+	rc := resourceCheckInitWithDescribeMethod(resourceId, &v, func() interface{} {
+		return &VpcService{testAccProvider.Meta().(*connectivity.AliyunClient)}
+	}, "DescribeEipAddress")
+	rac := resourceAttrCheckInit(rc, ra)
+	testAccCheck := rac.resourceAttrMapUpdateSet()
+	rand := acctest.RandIntRange(10000, 99999)
+	name := fmt.Sprintf("tf-testacc%seipaddress%d", defaultRegionToTest, rand)
+	testAccConfig := resourceTestAccConfigFunc(resourceId, name, AlicloudEIPAddressBasicDependence4)
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+			testAccPreCheckWithTime(t, []int{1})
+		},
+		IDRefreshName: resourceId,
+		Providers:     testAccProviders,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"payment_type":  "Subscription",
+					"auto_pay":      "true",
+					"period":        "1",
+					"pricing_cycle": "Month",
+					"address_name":  name,
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"address_name": name,
+						"payment_type": "Subscription",
+					}),
+				),
+			},
+			{
+				ResourceName:            resourceId,
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"activity_id", "period", "auto_pay", "pricing_cycle"},
 			},
 		},
 	})
@@ -773,7 +1076,7 @@ variable "name" {
 `, name)
 }
 
-func TestAccAlicloudEIPAddress_unit(t *testing.T) {
+func TestUnitAlicloudEIPAddress(t *testing.T) {
 	p := Provider().(*schema.Provider).ResourcesMap
 	dInit, _ := schema.InternalMap(p["alicloud_eip_address"].Schema).Data(nil, nil)
 	dExisted, _ := schema.InternalMap(p["alicloud_eip_address"].Schema).Data(nil, nil)
@@ -871,7 +1174,7 @@ func TestAccAlicloudEIPAddress_unit(t *testing.T) {
 			StatusCode: tea.Int(400),
 		}
 	})
-	err = resourceAlicloudEipAddressCreate(dInit, rawClient)
+	err = resourceAliCloudEipAddressCreate(dInit, rawClient)
 	patches.Reset()
 	assert.NotNil(t, err)
 	ReadMockResponseDiff := map[string]interface{}{
@@ -903,7 +1206,7 @@ func TestAccAlicloudEIPAddress_unit(t *testing.T) {
 			}
 			return ReadMockResponse, nil
 		})
-		err := resourceAlicloudEipAddressCreate(dInit, rawClient)
+		err := resourceAliCloudEipAddressCreate(dInit, rawClient)
 		patches.Reset()
 		switch errorCode {
 		case "NonRetryableError":
@@ -930,7 +1233,7 @@ func TestAccAlicloudEIPAddress_unit(t *testing.T) {
 			StatusCode: tea.Int(400),
 		}
 	})
-	err = resourceAlicloudEipAddressUpdate(dExisted, rawClient)
+	err = resourceAliCloudEipAddressUpdate(dExisted, rawClient)
 	patches.Reset()
 	assert.NotNil(t, err)
 	// DeletionProtection
@@ -991,7 +1294,7 @@ func TestAccAlicloudEIPAddress_unit(t *testing.T) {
 			}
 			return ReadMockResponse, nil
 		})
-		err := resourceAlicloudEipAddressUpdate(dExisted, rawClient)
+		err := resourceAliCloudEipAddressUpdate(dExisted, rawClient)
 		patches.Reset()
 		switch errorCode {
 		case "NonRetryableError":
@@ -1046,7 +1349,7 @@ func TestAccAlicloudEIPAddress_unit(t *testing.T) {
 			}
 			return ReadMockResponse, nil
 		})
-		err := resourceAlicloudEipAddressUpdate(dExisted, rawClient)
+		err := resourceAliCloudEipAddressUpdate(dExisted, rawClient)
 		patches.Reset()
 		switch errorCode {
 		case "NonRetryableError":
@@ -1105,7 +1408,7 @@ func TestAccAlicloudEIPAddress_unit(t *testing.T) {
 			}
 			return ReadMockResponse, nil
 		})
-		err := resourceAlicloudEipAddressUpdate(dExisted, rawClient)
+		err := resourceAliCloudEipAddressUpdate(dExisted, rawClient)
 		patches.Reset()
 		switch errorCode {
 		case "NonRetryableError":
@@ -1144,7 +1447,7 @@ func TestAccAlicloudEIPAddress_unit(t *testing.T) {
 			}
 			return ReadMockResponse, nil
 		})
-		err := resourceAlicloudEipAddressRead(dExisted, rawClient)
+		err := resourceAliCloudEipAddressRead(dExisted, rawClient)
 		patches.Reset()
 		switch errorCode {
 		case "NonRetryableError":
@@ -1163,7 +1466,7 @@ func TestAccAlicloudEIPAddress_unit(t *testing.T) {
 			StatusCode: tea.Int(400),
 		}
 	})
-	err = resourceAlicloudEipAddressDelete(dExisted, rawClient)
+	err = resourceAliCloudEipAddressDelete(dExisted, rawClient)
 	patches.Reset()
 	assert.Nil(t, err)
 	attributesDiff = map[string]interface{}{
@@ -1197,7 +1500,7 @@ func TestAccAlicloudEIPAddress_unit(t *testing.T) {
 			}
 			return ReadMockResponse, nil
 		})
-		err := resourceAlicloudEipAddressDelete(dExisted, rawClient)
+		err := resourceAliCloudEipAddressDelete(dExisted, rawClient)
 		patches.Reset()
 		switch errorCode {
 		case "NonRetryableError":

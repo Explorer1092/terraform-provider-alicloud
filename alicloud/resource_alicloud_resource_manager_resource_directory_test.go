@@ -17,7 +17,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 )
 
-func TestAccAlicloudResourceManagerResourceDirectory_basic(t *testing.T) {
+// Skip this test because each account can only create one resource directory
+func SkipTestAccAliCloudResourceManagerResourceDirectory_basic(t *testing.T) {
 	var v map[string]interface{}
 	resourceId := "alicloud_resource_manager_resource_directory.default"
 	ra := resourceAttrInit(resourceId, ResourceManagerResourceDirectoryMap)
@@ -29,10 +30,8 @@ func TestAccAlicloudResourceManagerResourceDirectory_basic(t *testing.T) {
 	testAccConfig := resourceTestAccConfigFunc(resourceId, "", ResourceManagerResourceDirectoryBasicdependence)
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
-			testAccPreCheckEnterpriseAccountEnabled(t)
 			testAccPreCheck(t)
 		},
-
 		IDRefreshName: resourceId,
 		Providers:     testAccProviders,
 		CheckDestroy:  rac.checkResourceDestroy(),
@@ -42,11 +41,6 @@ func TestAccAlicloudResourceManagerResourceDirectory_basic(t *testing.T) {
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{}),
 				),
-			},
-			{
-				ResourceName:      resourceId,
-				ImportState:       true,
-				ImportStateVerify: true,
 			},
 			{
 				Config: testAccConfig(map[string]interface{}{
@@ -68,6 +62,31 @@ func TestAccAlicloudResourceManagerResourceDirectory_basic(t *testing.T) {
 					}),
 				),
 			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"member_deletion_status": "Enabled",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"member_deletion_status": "Enabled",
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"member_deletion_status": "Disabled",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"member_deletion_status": "Disabled",
+					}),
+				),
+			},
+			{
+				ResourceName:      resourceId,
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
 		},
 	})
 }
@@ -82,7 +101,7 @@ func ResourceManagerResourceDirectoryBasicdependence(name string) string {
 	return ""
 }
 
-func TestUnitAlicloudResourceManagerResourceDirectory(t *testing.T) {
+func TestUnitAliCloudResourceManagerResourceDirectory(t *testing.T) {
 	p := Provider().(*schema.Provider).ResourcesMap
 	dInit, _ := schema.InternalMap(p["alicloud_resource_manager_resource_directory"].Schema).Data(nil, nil)
 	dExisted, _ := schema.InternalMap(p["alicloud_resource_manager_resource_directory"].Schema).Data(nil, nil)
@@ -146,7 +165,7 @@ func TestUnitAlicloudResourceManagerResourceDirectory(t *testing.T) {
 			StatusCode: tea.Int(400),
 		}
 	})
-	err = resourceAlicloudResourceManagerResourceDirectoryCreate(dInit, rawClient)
+	err = resourceAliCloudResourceManagerResourceDirectoryCreate(dInit, rawClient)
 	patches.Reset()
 	assert.NotNil(t, err)
 	ReadMockResponseDiff := map[string]interface{}{
@@ -174,7 +193,7 @@ func TestUnitAlicloudResourceManagerResourceDirectory(t *testing.T) {
 			}
 			return ReadMockResponse, nil
 		})
-		err := resourceAlicloudResourceManagerResourceDirectoryCreate(dInit, rawClient)
+		err := resourceAliCloudResourceManagerResourceDirectoryCreate(dInit, rawClient)
 		patches.Reset()
 		switch errorCode {
 		case "NonRetryableError":
@@ -201,7 +220,7 @@ func TestUnitAlicloudResourceManagerResourceDirectory(t *testing.T) {
 			StatusCode: tea.Int(400),
 		}
 	})
-	err = resourceAlicloudResourceManagerResourceDirectoryUpdate(dExisted, rawClient)
+	err = resourceAliCloudResourceManagerResourceDirectoryUpdate(dExisted, rawClient)
 	patches.Reset()
 	assert.NotNil(t, err)
 	// DisableControlPolicy
@@ -237,7 +256,7 @@ func TestUnitAlicloudResourceManagerResourceDirectory(t *testing.T) {
 			}
 			return ReadMockResponse, nil
 		})
-		err := resourceAlicloudResourceManagerResourceDirectoryUpdate(dExisted, rawClient)
+		err := resourceAliCloudResourceManagerResourceDirectoryUpdate(dExisted, rawClient)
 		patches.Reset()
 		switch errorCode {
 		case "NonRetryableError":
@@ -288,7 +307,7 @@ func TestUnitAlicloudResourceManagerResourceDirectory(t *testing.T) {
 			}
 			return ReadMockResponse, nil
 		})
-		err := resourceAlicloudResourceManagerResourceDirectoryUpdate(dExisted, rawClient)
+		err := resourceAliCloudResourceManagerResourceDirectoryUpdate(dExisted, rawClient)
 		patches.Reset()
 		switch errorCode {
 		case "NonRetryableError":
@@ -327,7 +346,7 @@ func TestUnitAlicloudResourceManagerResourceDirectory(t *testing.T) {
 			}
 			return ReadMockResponse, nil
 		})
-		err := resourceAlicloudResourceManagerResourceDirectoryRead(dExisted, rawClient)
+		err := resourceAliCloudResourceManagerResourceDirectoryRead(dExisted, rawClient)
 		patches.Reset()
 		switch errorCode {
 		case "NonRetryableError":
@@ -346,7 +365,7 @@ func TestUnitAlicloudResourceManagerResourceDirectory(t *testing.T) {
 			StatusCode: tea.Int(400),
 		}
 	})
-	err = resourceAlicloudResourceManagerResourceDirectoryDelete(dExisted, rawClient)
+	err = resourceAliCloudResourceManagerResourceDirectoryDelete(dExisted, rawClient)
 	patches.Reset()
 	assert.NotNil(t, err)
 	errorCodes = []string{"NonRetryableError", "Throttling", "nil"}
@@ -368,7 +387,7 @@ func TestUnitAlicloudResourceManagerResourceDirectory(t *testing.T) {
 			}
 			return ReadMockResponse, nil
 		})
-		err := resourceAlicloudResourceManagerResourceDirectoryDelete(dExisted, rawClient)
+		err := resourceAliCloudResourceManagerResourceDirectoryDelete(dExisted, rawClient)
 		patches.Reset()
 		switch errorCode {
 		case "NonRetryableError":

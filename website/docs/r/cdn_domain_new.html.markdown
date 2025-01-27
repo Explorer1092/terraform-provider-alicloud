@@ -2,82 +2,112 @@
 subcategory: "CDN"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_cdn_domain_new"
-sidebar_current: "docs-alicloud-resource-cdn-domain-new"
 description: |-
-  Provides a Alicloud Cdn Domain New Resource.
+  Provides a Alicloud CDN Domain resource.
 ---
 
 # alicloud_cdn_domain_new
 
-Provides a CDN Accelerated Domain resource. This resource is based on CDN's new version OpenAPI.
+Provides a CDN Domain resource.
 
-For information about Cdn Domain New and how to use it, see [Add a domain](https://www.alibabacloud.com/help/doc-detail/91176.html).
+CDN domain name.
 
--> **NOTE:** Available in v1.34.0+.
+For information about CDN Domain and how to use it, see [What is Domain](https://www.alibabacloud.com/help/en/alibaba-cloud-cdn/latest/api-doc-cdn-2018-05-10-api-doc-addcdndomain).
+
+-> **NOTE:** Available since v1.34.0.
 
 ## Example Usage
 
 Basic Usage
 
-```
-# Create a new Domain.
-resource "alicloud_cdn_domain_new" "domain" {
-  domain_name = "terraform.test.com"
-  cdn_type    = "web"
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_cdn_domain_new&exampleId=79d927d9-05a3-f704-17a1-82b30ad6d691fcb6716b&activeTab=example&spm=docs.r.cdn_domain_new.0.79d927d905&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
+```terraform
+resource "random_integer" "default" {
+  min = 10000
+  max = 99999
+}
+
+resource "alicloud_cdn_domain_new" "default" {
   scope       = "overseas"
+  domain_name = "mycdndomain-${random_integer.default.result}.alicloud-provider.cn"
+  cdn_type    = "web"
   sources {
-    content  = "1.1.1.1"
     type     = "ipaddr"
+    content  = "1.1.1.1"
     priority = 20
     port     = 80
-    weight   = 10
+    weight   = 15
   }
 }
 ```
+
 ## Argument Reference
 
 The following arguments are supported:
-
-* `domain_name` - (Required) Name of the accelerated domain. This name without suffix can have a string of 1 to 63 characters, must contain only alphanumeric characters or "-", and must not begin or end with "-", and "-" must not in the 3th and 4th character positions at the same time. Suffix `.sh` and `.tel` are not supported.
 * `cdn_type` - (Required, ForceNew) Cdn type of the accelerated domain. Valid values are `web`, `download`, `video`.
-* `scope` - (Optional, ForceNew) Scope of the accelerated domain. Valid values are `domestic`, `overseas`, `global`. Default value is `domestic`. This parameter's setting is valid Only for the international users and domestic L3 and above users .
-* `sources` - (Optional, Type: list) The source address list of the accelerated domain. Defaults to null. See Block Sources.
-* `certificate_config` - (Optional, Type: list, Available in 1.52.0+)  Certificate config of the accelerated domain. It's a list and consist of at most 1 item.
-* `resource_group_id` - (Optional, Available in v1.67.0+) Resource group ID.
+* `certificate_config` - (Optional, Computed, List) Certificate configuration See [`certificate_config`](#certificate_config) below.
+* `check_url` - (Optional, Available since v1.206.0) Health test URL.
+* `domain_name` - (Required, ForceNew) Name of the accelerated domain. This name without suffix can have a string of 1 to 63 characters, must contain only alphanumeric characters or "-", and must not begin or end with "-", and "-" must not in the 3th and 4th character positions at the same time. Suffix `.sh` and `.tel` are not supported.
+* `env` - (Optional, Available since v1.236.0) Whether to issue a certificate in grayscale. Value: staging: issued certificate in grayscale. Not passing or passing any other value is a formal certificate.
+* `resource_group_id` - (Optional, Computed, Available since v1.67.0) The ID of the resource group.
+* `scope` - (Optional, Computed) Scope of the accelerated domain. Valid values are `domestic`, `overseas`, `global`. Default value is `domestic`. This parameter's setting is valid Only for the international users and domestic L3 and above users. Value:
+  - `domestic`: Mainland China only.
+  - `overseas`: Global (excluding Mainland China).
+  - `global`: global.
 
-### Block sources
+  The default value is `domestic`.
+* `sources` - (Required, Set) The source address list of the accelerated domain. Defaults to null. See [`sources`](#sources) below.
+* `status` - (Optional, Computed) The status of the resource, valid values: `online`, `offline`.
+* `tags` - (Optional, Map, Available since v1.55.2) The tag of the resource
 
-The `sources` block supports the following:
+### `certificate_config`
 
-* `content` - (Required) The address of source. Valid values can be ip or doaminName. Each item's `content` can not be repeated.
-* `type` - (Required) The type of the source. Valid values are `ipaddr`, `domain` and `oss`.
-* `port` - (Optional, Type: int) The port of source. Valid values are `443` and `80`. Default value is `80`.
-* `priority` - (Optional, Type: int) Priority of the source. Valid values are `0` and `100`. Default value is `20`.
-* `weight` - (Optional, Type: int) Weight of the source. Valid values are from `0` to `100`. Default value is `10`, but if type is `ipaddr`, the value can only be `10`. 
+The certificate_config supports the following:
+* `cert_id` - (Optional, Available since v1.206.0) The ID of the certificate. It takes effect only when CertType = cas.
+* `cert_name` - (Optional) Certificate name, only flyer names are supported.
+* `cert_region` - (Optional, Available since v1.206.0) The certificate region, which takes effect only when CertType = cas, supports cn-hangzhou (domestic) and ap-southeast-1 (International), and is cn-hangzhou by default.
+* `cert_type` - (Optional) Certificate type. Value:
+  - **upload**: upload certificate. 
+  - **cas**: Cloud Shield certificate. 
+  - **free**: free certificate.
+  > If the certificate type is **cas**, **PrivateKey** does not need to pass parameters.
+* `private_key` - (Optional) The content of the private key. If the certificate is not enabled, you do not need to enter the content of the private key. To configure the certificate, enter the content of the private key.
+* `server_certificate` - (Optional) The content of the security certificate. If the certificate is not enabled, you do not need to enter the content of the security certificate. Please enter the content of the certificate to configure the certificate.
+* `server_certificate_status` - (Optional) Whether the HTTPS certificate is enabled. Value:
+  - **on**(default): enabled. 
+  - **off** : not enabled.
 
-### Block certificate_config
+### `sources`
 
-The `certificate_config` block supports the following:
-
-* `server_certificate_status` - (Optional) This parameter indicates whether or not enable https. Valid values are `on` and `off`. Default value is `on`.
-* `server_certificate` - (Optional) The SSL server certificate string. This is required if `server_certificate_status` is `on`
-* `private_key` - (Optional) The SSL private key. This is required if `server_certificate_status` is `on`
-* `force_set` - (Optional) Set `1` to ignore the repeated verification for certificate name, and cover the information of the origin certificate (with the same name). Set `0` to work the verification.
-* `cert_name` - (Optional) The SSL certificate name.
-* `cert_type` - (Optional) The SSL certificate type, can be "upload", "cas" and "free".
-* `tags` - (Optional, Available in v1.55.2+) A mapping of tags to assign to the resource.
+The sources supports the following:
+* `content` - (Optional) The address of source. Valid values can be ip or doaminName. Each item's `content` can not be repeated.
+* `port` - (Optional, Computed, Int) The port of source. Valid values are `443` and `80`. Default value is `80`.
+* `priority` - (Optional, Computed, Int) Priority of the source. Valid values are `0` and `100`. Default value is `20`.
+* `type` - (Optional) The type of the source. Valid values are `ipaddr`, `domain` and `oss`.
+* `weight` - (Optional, Computed, Int) Weight of the source. Valid values are from `0` to `100`. Default value is `10`, but if type is `ipaddr`, the value can only be `10`. 
 
 ## Attributes Reference
 
 The following attributes are exported:
+* `id` - The ID of the resource supplied above. It is the same as the `domain_name`.
+* `cname` - The CNAME domain name corresponding to the accelerated domain name.
 
-* `id` - The cdn domain id. The value is same as the domain name.
-* `cname` - (Available in v1.90.0+) The CNAME of the CDN domain.
+## Timeouts
+
+The `timeouts` block allows you to specify [timeouts](https://www.terraform.io/docs/configuration-0-11/resources.html#timeouts) for certain actions:
+* `create` - (Defaults to 15 mins) Used when create the Domain.
+* `delete` - (Defaults to 15 mins) Used when delete the Domain.
+* `update` - (Defaults to 15 mins) Used when update the Domain.
 
 ## Import
 
-CDN domain can be imported using the id, e.g.
+CDN Domain can be imported using the id, e.g.
 
-```
-terraform import alicloud_cdn_domain_new.example xxxx.com
+```shell
+$ terraform import alicloud_cdn_domain_new.example <id>
 ```

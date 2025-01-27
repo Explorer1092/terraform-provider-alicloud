@@ -19,16 +19,59 @@ For information about Hybrid Backup Recovery (HBR) Ecs Backup Client and how to 
 
 Basic Usage
 
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_hbr_ecs_backup_client&exampleId=c40439fa-ab48-48c5-df88-bfcf39dc0a95bc01aab6&activeTab=example&spm=docs.r.hbr_ecs_backup_client.0.c40439faab&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
 ```terraform
-data "alicloud_instances" "default" {
-  name_regex = "ecs_instance_name"
-  status     = "Running"
+data "alicloud_zones" "example" {
+  available_resource_creation = "Instance"
+}
+
+data "alicloud_instance_types" "example" {
+  availability_zone = data.alicloud_zones.example.zones.0.id
+  cpu_core_count    = 1
+  memory_size       = 2
+}
+
+data "alicloud_images" "example" {
+  name_regex = "^ubuntu_18.*64"
+  owners     = "system"
+}
+
+resource "alicloud_vpc" "example" {
+  vpc_name   = "terraform-example"
+  cidr_block = "172.17.3.0/24"
+}
+
+resource "alicloud_vswitch" "example" {
+  vswitch_name = "terraform-example"
+  cidr_block   = "172.17.3.0/24"
+  vpc_id       = alicloud_vpc.example.id
+  zone_id      = data.alicloud_zones.example.zones.0.id
+}
+
+resource "alicloud_security_group" "example" {
+  name   = "terraform-example"
+  vpc_id = alicloud_vpc.example.id
+}
+
+resource "alicloud_instance" "example" {
+  image_id             = data.alicloud_images.example.images.0.id
+  instance_type        = data.alicloud_instance_types.example.instance_types.0.id
+  availability_zone    = data.alicloud_zones.example.zones.0.id
+  security_groups      = [alicloud_security_group.example.id]
+  instance_name        = "terraform-example"
+  internet_charge_type = "PayByBandwidth"
+  vswitch_id           = alicloud_vswitch.example.id
 }
 
 resource "alicloud_hbr_ecs_backup_client" "example" {
-  instance_id        = data.alicloud_instances.default.instances.0.id
+  instance_id        = alicloud_instance.example.id
   use_https          = false
-  data_network_type  = "PUBLIC"
+  data_network_type  = "VPC"
   max_cpu_core       = 2
   max_worker         = 4
   data_proxy_setting = "USE_CONTROL_PROXY"
@@ -76,6 +119,6 @@ The following attributes are exported:
 
 Hybrid Backup Recovery (HBR) Ecs Backup Client can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_hbr_ecs_backup_client.example <id>
 ```

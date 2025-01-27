@@ -75,6 +75,8 @@ type CreateDBNodesRequest struct {
 	ClientToken          string                 `position:"Query" name:"ClientToken"`
 	EndpointBindList     string                 `position:"Query" name:"EndpointBindList"`
 	PlannedEndTime       string                 `position:"Query" name:"PlannedEndTime"`
+	ResourceGroupId      string                 `position:"Query" name:"ResourceGroupId"`
+	DBNodeType           string                 `position:"Query" name:"DBNodeType"`
 	ResourceOwnerAccount string                 `position:"Query" name:"ResourceOwnerAccount"`
 	DBClusterId          string                 `position:"Query" name:"DBClusterId"`
 	OwnerAccount         string                 `position:"Query" name:"OwnerAccount"`

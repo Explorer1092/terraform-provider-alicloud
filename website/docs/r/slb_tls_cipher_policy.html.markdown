@@ -1,5 +1,5 @@
 ---
-subcategory: "Classic Load Balancer (CLB)"
+subcategory: "Classic Load Balancer (SLB)"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_slb_tls_cipher_policy"
 sidebar_current: "docs-alicloud-resource-slb-tls-cipher-policy"
@@ -18,6 +18,12 @@ For information about SLB Tls Cipher Policy and how to use it, see [What is Tls 
 ## Example Usage
 
 Basic Usage
+
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_slb_tls_cipher_policy&exampleId=3e716de4-15e8-7606-48c7-1de0162fe9474420b3df&activeTab=example&spm=docs.r.slb_tls_cipher_policy.0.3e716de415&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
 
 ```terraform
 resource "alicloud_slb_tls_cipher_policy" "example" {
@@ -46,6 +52,6 @@ The following attributes are exported:
 
 SLB Tls Cipher Policy can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_slb_tls_cipher_policy.example <id>
 ```

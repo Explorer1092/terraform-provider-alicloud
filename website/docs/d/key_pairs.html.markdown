@@ -9,7 +9,7 @@ description: |-
 
 # alicloud\_key\_pairs
 
--> **DEPRECATED:** This datasource has been renamed to [alicloud_ecs_key_pairs](https://www.terraform.io/docs/providers/alicloud/d/ecs_key_pairs.html) from version 1.121.0.
+-> **DEPRECATED:** This datasource has been renamed to [alicloud_ecs_key_pairs](https://www.terraform.io/docs/providers/alicloud/d/ecs_key_pairs) from version 1.121.0.
 
 This data source provides a list of key pairs in an Alibaba Cloud account according to the specified filters.
 
@@ -49,7 +49,7 @@ The following attributes are exported in addition to the arguments listed above:
     * `availability_zone` - The ID of the availability zone where the ECS instance is located.
     * `instance_id` - The ID of the ECS instance.
     * `instance_name` - The name of the ECS instance.
-    * `vswitch_id` - The ID of the VSwitch attached to the ECS instance.
+    * `vswitch_id` - The ID of the vSwitch attached to the ECS instance.
     * `public_ip` - The public IP address or EIP of the ECS instance.
     * `private_ip` - The private IP address of the ECS instance.
     * `resource_group_id` - The Id of resource group.

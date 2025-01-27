@@ -12,15 +12,16 @@ description: |-
 Provides a AnalyticDB for PostgreSQL instance resource which storage type is flexible. Compared to the reserved storage ADB PG instance, you can scale up each disk and smoothly scale out nodes online.  
 For more detail product introduction, see [here](https://www.alibabacloud.com/help/doc-detail/141368.htm).
 
--> **NOTE:**  Available in 1.127.0+
+-> **DEPRECATED:**  This resource  has been deprecated from version `1.147.0`. Please use new resource [alicloud_gpdb_instance](https://www.terraform.io/docs/providers/alicloud/r/alicloud_gpdb_instance).
 
+-> **NOTE:**  Available in 1.127.0+
 
 
 ## Example Usage
 
 ### Create a AnalyticDB for PostgreSQL instance
 
-```
+```terraform
 data "alicloud_zones" "default" {
   available_resource_creation = "Gpdb"
 }
@@ -31,23 +32,23 @@ resource "alicloud_vpc" "default" {
 }
 
 resource "alicloud_vswitch" "default" {
-  zone_id           = data.alicloud_zones.default.zones[0].id
-  vpc_id            = alicloud_vpc.default.id
-  cidr_block        = "172.16.0.0/24"
-  vswitch_name      = "vpc-123456"
+  zone_id      = data.alicloud_zones.default.zones[0].id
+  vpc_id       = alicloud_vpc.default.id
+  cidr_block   = "172.16.0.0/24"
+  vswitch_name = "vpc-123456"
 }
 
 resource "alicloud_gpdb_elastic_instance" "adb_pg_instance" {
-  engine                   = "gpdb"
-  engine_version           = "6.0"
-  seg_storage_type         = "cloud_essd"
-  seg_node_num             = 4
-  storage_size             = 50
-  instance_spec            = "2C16G"
-  db_instance_description  = "Created by terraform"
-  instance_network_type    = "VPC"
-  payment_type             = "PayAsYouGo"
-  vswitch_id               = alicloud_vswitch.default.id
+  engine                  = "gpdb"
+  engine_version          = "6.0"
+  seg_storage_type        = "cloud_essd"
+  seg_node_num            = 4
+  storage_size            = 50
+  instance_spec           = "2C16G"
+  db_instance_description = "Created by terraform"
+  instance_network_type   = "VPC"
+  payment_type            = "PayAsYouGo"
+  vswitch_id              = alicloud_vswitch.default.id
 }
 
 ```
@@ -96,12 +97,13 @@ The following attributes are exported:
 
 * `id` - The ID of the Instance.
 * `connection_string` - ADB PG instance connection string.
+* `port` - (Available in 1.196.0+) The connection port of the instance.
 * `status` - Instance status.
 
 ## Import
 
 AnalyticDB for PostgreSQL can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_gpdb_elastic_instance.adb_pg_instance gp-bpxxxxxxxxxxxxxx
 ```

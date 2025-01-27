@@ -19,7 +19,16 @@ For information about Open Search App Group and how to use it, see [What is App 
 
 Basic Usage
 
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_open_search_app_group&exampleId=d08e2f6e-c29c-8b4d-29cf-21a5218bdb10aba27995&activeTab=example&spm=docs.r.open_search_app_group.0.d08e2f6ec2&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
 ```terraform
+provider "alicloud" {
+  region = "cn-hangzhou"
+}
 variable "name" {
   default = "name"
 }
@@ -33,12 +42,11 @@ resource "alicloud_open_search_app_group" "default" {
     spec             = "opensearch.share.common"
   }
 }
-
 ```
 
 ## Argument Reference
 
-The resource does not support any argument.
+The following arguments are supported:
 
 * `app_group_name` - (Required,ForceNew) Application Group Name.
 * `type` - (Required,ForceNew) Application type. Valid Values: `standard`, `enhanced`.
@@ -83,6 +91,6 @@ The following attributes are exported:
 
 Open Search App Group can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_open_search_app_group.example <id>
 ```

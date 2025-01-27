@@ -1,5 +1,5 @@
 ---
-subcategory: "Message Center"
+subcategory: "Message Center (MscSub)"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_msc_sub_subscription"
 sidebar_current: "docs-alicloud-resource-msc-sub-subscription"
@@ -7,15 +7,21 @@ description: |-
   Provides a Alicloud Msc Sub Subscription resource.
 ---
 
-# alicloud\_msc\_sub\_subscription
+# alicloud_msc_sub_subscription
 
 Provides a Msc Sub Subscription resource.
 
--> **NOTE:** Available in v1.135.0+.
+-> **NOTE:** Available since v1.135.0.
 
 ## Example Usage
 
 Basic Usage
+
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_msc_sub_subscription&exampleId=71036df4-2b30-a554-1074-ce2145544083caf6e4b0&activeTab=example&spm=docs.r.msc_sub_subscription.0.71036df42b&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
 
 ```terraform
 resource "alicloud_msc_sub_subscription" "example" {
@@ -56,6 +62,6 @@ The following attributes are exported:
 
 Msc Sub Subscription can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_msc_sub_subscription.example <id>
 ```

@@ -7,54 +7,55 @@ description: |-
   Provides a ADB account resource.
 ---
 
-# alicloud\_adb\_account
+# alicloud_adb_account
 
-Provides a [ADB](https://www.alibabacloud.com/help/product/92664.htm) account resource and used to manage databases.
+Provides a [ADB](https://www.alibabacloud.com/help/en/analyticdb-for-mysql/latest/api-doc-adb-2019-03-15-api-doc-createaccount) account resource and used to manage databases.
 
--> **NOTE:** Available in v1.71.0+. 
+-> **NOTE:** Available since v1.71.0.
 
 ## Example Usage
 
-```
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_adb_account&exampleId=cf607244-cb42-08ac-56a7-3f3cf863b6ae3bca8348&activeTab=example&spm=docs.r.adb_account.0.cf607244cb&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
+```terraform
 variable "creation" {
   default = "ADB"
 }
 
 variable "name" {
-  default = "adbaccountmysql"
+  default = "tfexample"
 }
 
-data "alicloud_zones" "default" {
-  available_resource_creation = var.creation
+data "alicloud_adb_zones" "default" {}
+
+data "alicloud_vpcs" "default" {
+  name_regex = "^default-NODELETING$"
+}
+data "alicloud_vswitches" "default" {
+  vpc_id  = data.alicloud_vpcs.default.ids.0
+  zone_id = data.alicloud_adb_zones.default.ids.0
 }
 
-resource "alicloud_vpc" "default" {
-  name       = var.name
-  cidr_block = "172.16.0.0/16"
+locals {
+  vswitch_id = data.alicloud_vswitches.default.ids.0
 }
 
-resource "alicloud_vswitch" "default" {
-  vpc_id            = alicloud_vpc.default.id
-  cidr_block        = "172.16.0.0/24"
-  zone_id           = data.alicloud_zones.default.zones[0].id
-  name              = var.name
-}
-
-resource "alicloud_adb_cluster" "cluster" {
-  db_cluster_version  = "3.0"
-  db_cluster_category = "Cluster"
-  db_node_class       = "C8"
-  db_node_count       = 2
-  db_node_storage     = 200
-  pay_type            = "PostPaid"
-  vswitch_id          = alicloud_vswitch.default.id
+resource "alicloud_adb_db_cluster" "cluster" {
+  db_cluster_category = "MixedStorage"
+  mode                = "flexible"
+  compute_resource    = "8Core32GB"
+  vswitch_id          = local.vswitch_id
   description         = var.name
 }
 
-resource "alicloud_adb_account" "account" {
-  db_cluster_id       = alicloud_adb_cluster.cluster.id
-  account_name        = "tftestnormal"
-  account_password    = "Test12345"
+resource "alicloud_adb_account" "default" {
+  db_cluster_id       = alicloud_adb_db_cluster.cluster.id
+  account_name        = var.name
+  account_password    = "tf_example123"
   account_description = var.name
 }
 ```
@@ -69,6 +70,9 @@ The following arguments are supported:
 * `kms_encrypted_password` - (Optional) An KMS encrypts password used to a db account. If the `account_password` is filled in, this field will be ignored.
 * `kms_encryption_context` - (Optional) An KMS encryption context used to decrypt `kms_encrypted_password` before creating or updating a db account with `kms_encrypted_password`. See [Encryption Context](https://www.alibabacloud.com/help/doc-detail/42975.htm). It is valid when `kms_encrypted_password` is set.
 * `account_description` - (Optional) Account description. It cannot begin with https://. It must start with a Chinese character or English letter. It can include Chinese and English characters, underlines (_), hyphens (-), and numbers. The length may be 2-256 characters.
+* `account_type` - (Optional, ForceNew) The type of the database account. Default Value: `Super`. Valid values:
+  - `Normal`: standard account. Up to 256 standard accounts can be created for a cluster.
+  - `Super`: privileged account. Only a single privileged account can be created for a cluster.
 
 ## Attributes Reference
 
@@ -80,6 +84,6 @@ The following attributes are exported:
 
 ADB account can be imported using the id, e.g.
 
-```
-$ terraform import alicloud_adb_account.example "am-12345:tf_account"
+```shell
+$ terraform import alicloud_adb_account.example am-12345:tf_account
 ```

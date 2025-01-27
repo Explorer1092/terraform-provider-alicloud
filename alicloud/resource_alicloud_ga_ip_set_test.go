@@ -19,45 +19,38 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 )
 
-func TestAccAlicloudGaIpSet_basic(t *testing.T) {
+func TestAccAliCloudGaIpSet_basic(t *testing.T) {
 	var v map[string]interface{}
 	checkoutSupportedRegions(t, true, connectivity.GaSupportRegions)
 	resourceId := "alicloud_ga_ip_set.default"
-	ra := resourceAttrInit(resourceId, AlicloudGaIpSetMap)
+	ra := resourceAttrInit(resourceId, AliCloudGaIpSetMap)
 	rc := resourceCheckInitWithDescribeMethod(resourceId, &v, func() interface{} {
 		return &GaService{testAccProvider.Meta().(*connectivity.AliyunClient)}
 	}, "DescribeGaIpSet")
 	rac := resourceAttrCheckInit(rc, ra)
 	testAccCheck := rac.resourceAttrMapUpdateSet()
-	testAccConfig := resourceTestAccConfigFunc(resourceId, "", AlicloudGaIpSetBasicDependence)
+	testAccConfig := resourceTestAccConfigFunc(resourceId, "", AliCloudGaIpSetBasicDependence)
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccPreCheck(t)
 		},
-
 		IDRefreshName: resourceId,
 		Providers:     testAccProviders,
 		CheckDestroy:  rac.checkResourceDestroy(),
 		Steps: []resource.TestStep{
 			{
 				Config: testAccConfig(map[string]interface{}{
+					"accelerator_id":       "${alicloud_ga_bandwidth_package_attachment.default.accelerator_id}",
 					"accelerate_region_id": defaultRegionToTest,
 					"bandwidth":            "5",
-					"accelerator_id":       "${alicloud_ga_bandwidth_package_attachment.default.accelerator_id}",
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
+						"accelerator_id":       CHECKSET,
 						"accelerate_region_id": defaultRegionToTest,
 						"bandwidth":            "5",
-						"accelerator_id":       CHECKSET,
 					}),
 				),
-			},
-			{
-				ResourceName:            resourceId,
-				ImportState:             true,
-				ImportStateVerify:       true,
-				ImportStateVerifyIgnore: []string{"accelerator_id"},
 			},
 			{
 				Config: testAccConfig(map[string]interface{}{
@@ -69,46 +62,126 @@ func TestAccAlicloudGaIpSet_basic(t *testing.T) {
 					}),
 				),
 			},
+			{
+				ResourceName:      resourceId,
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
 		},
 	})
 }
 
-var AlicloudGaIpSetMap = map[string]string{
+func TestAccAliCloudGaIpSet_basic1(t *testing.T) {
+	var v map[string]interface{}
+	checkoutSupportedRegions(t, true, connectivity.GaSupportRegions)
+	resourceId := "alicloud_ga_ip_set.default"
+	ra := resourceAttrInit(resourceId, AliCloudGaIpSetMap)
+	rc := resourceCheckInitWithDescribeMethod(resourceId, &v, func() interface{} {
+		return &GaService{testAccProvider.Meta().(*connectivity.AliyunClient)}
+	}, "DescribeGaIpSet")
+	rac := resourceAttrCheckInit(rc, ra)
+	testAccCheck := rac.resourceAttrMapUpdateSet()
+	testAccConfig := resourceTestAccConfigFunc(resourceId, "", AliCloudGaIpSetBasicDependence1)
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		IDRefreshName: resourceId,
+		Providers:     testAccProviders,
+		CheckDestroy:  rac.checkResourceDestroy(),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"accelerator_id":       "${alicloud_ga_accelerator.default.id}",
+					"accelerate_region_id": defaultRegionToTest,
+					"bandwidth":            "5",
+					"ip_version":           "IPv4",
+					"isp_type":             "BGP",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"accelerator_id":       CHECKSET,
+						"accelerate_region_id": defaultRegionToTest,
+						"bandwidth":            "5",
+						"ip_version":           "IPv4",
+						"isp_type":             "BGP",
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"bandwidth": `10`,
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"bandwidth": "10",
+					}),
+				),
+			},
+			{
+				ResourceName:      resourceId,
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
+		},
+	})
+}
+
+var AliCloudGaIpSetMap = map[string]string{
 	"ip_address_list.#": CHECKSET,
 	"ip_version":        "IPv4",
 	"status":            "active",
 }
 
-func AlicloudGaIpSetBasicDependence(name string) string {
+func AliCloudGaIpSetBasicDependence(name string) string {
 	return fmt.Sprintf(`
-variable "name" {
-	default = "%s"
-}
-data "alicloud_ga_accelerators" "default" {
-  status = "active"
-}
+	variable "name" {
+  		default = "%s"
+	}
 
-resource "alicloud_ga_bandwidth_package" "default" {
-   	bandwidth              =  100
-  	type                   = "Basic"
-  	bandwidth_type         = "Basic"
-	payment_type           = "PayAsYouGo"
-  	billing_type           = "PayBy95"
-	ratio       = 30
-	bandwidth_package_name = var.name
-    auto_pay               = true
-    auto_use_coupon        = true
-}
+	data "alicloud_ga_accelerators" "default" {
+  		status = "active"
+		bandwidth_billing_type = "BandwidthPackage"
+	}
 
-resource "alicloud_ga_bandwidth_package_attachment" "default" {
-	// Please run resource ga_accelerator test case to ensure this account has at least one accelerator before run this case.
-	accelerator_id = data.alicloud_ga_accelerators.default.ids.0
-	bandwidth_package_id = alicloud_ga_bandwidth_package.default.id
-}
+	resource "alicloud_ga_bandwidth_package" "default" {
+  		bandwidth              = 100
+  		type                   = "Basic"
+  		bandwidth_type         = "Basic"
+  		payment_type           = "PayAsYouGo"
+  		billing_type           = "PayBy95"
+  		ratio                  = 30
+  		bandwidth_package_name = var.name
+  		auto_pay               = true
+  		auto_use_coupon        = true
+	}
+
+	resource "alicloud_ga_bandwidth_package_attachment" "default" {
+  		// Please run resource ga_accelerator test case to ensure this account has at least one accelerator before run this case.
+  		accelerator_id       = data.alicloud_ga_accelerators.default.ids.0
+  		bandwidth_package_id = alicloud_ga_bandwidth_package.default.id
+	}
 `, name)
 }
 
-func TestAccAlicloudGaIpSet_unit(t *testing.T) {
+func AliCloudGaIpSetBasicDependence1(name string) string {
+	return fmt.Sprintf(`
+	variable "name" {
+  		default = "%s"
+	}
+
+	resource "alicloud_ga_accelerator" "default" {
+  		accelerator_name       = var.name
+  		description            = var.name
+  		spec                   = "1"
+  		auto_use_coupon        = true
+  		duration               = 1
+  		bandwidth_billing_type = "CDT"
+	}
+`, name)
+}
+
+func TestUnitAliCloudGaIpSet(t *testing.T) {
 	p := Provider().(*schema.Provider).ResourcesMap
 	dInit, _ := schema.InternalMap(p["alicloud_ga_ip_set"].Schema).Data(nil, nil)
 	dExisted, _ := schema.InternalMap(p["alicloud_ga_ip_set"].Schema).Data(nil, nil)
@@ -179,7 +252,7 @@ func TestAccAlicloudGaIpSet_unit(t *testing.T) {
 				Message: String("loadEndpoint error"),
 			}
 		})
-		err := resourceAlicloudGaIpSetCreate(dInit, rawClient)
+		err := resourceAliCloudGaIpSetCreate(dInit, rawClient)
 		patches.Reset()
 		assert.NotNil(t, err)
 		ReadMockResponseDiff = map[string]interface{}{}
@@ -202,7 +275,7 @@ func TestAccAlicloudGaIpSet_unit(t *testing.T) {
 				}
 				return ReadMockResponse, nil
 			})
-			err := resourceAlicloudGaIpSetCreate(dInit, rawClient)
+			err := resourceAliCloudGaIpSetCreate(dInit, rawClient)
 			patches.Reset()
 			switch errorCode {
 			case "NonRetryableError":
@@ -230,7 +303,7 @@ func TestAccAlicloudGaIpSet_unit(t *testing.T) {
 				Message: String("loadEndpoint error"),
 			}
 		})
-		err := resourceAlicloudGaIpSetUpdate(dExisted, rawClient)
+		err := resourceAliCloudGaIpSetUpdate(dExisted, rawClient)
 		patches.Reset()
 		assert.NotNil(t, err)
 		// UpdateIpSet
@@ -264,7 +337,7 @@ func TestAccAlicloudGaIpSet_unit(t *testing.T) {
 				}
 				return ReadMockResponse, nil
 			})
-			err := resourceAlicloudGaIpSetUpdate(dExisted, rawClient)
+			err := resourceAliCloudGaIpSetUpdate(dExisted, rawClient)
 			patches.Reset()
 			switch errorCode {
 			case "NonRetryableError":
@@ -304,7 +377,7 @@ func TestAccAlicloudGaIpSet_unit(t *testing.T) {
 				}
 				return ReadMockResponse, nil
 			})
-			err := resourceAlicloudGaIpSetRead(dExisted, rawClient)
+			err := resourceAliCloudGaIpSetRead(dExisted, rawClient)
 			patches.Reset()
 			switch errorCode {
 			case "NonRetryableError":
@@ -324,7 +397,7 @@ func TestAccAlicloudGaIpSet_unit(t *testing.T) {
 				Message: String("loadEndpoint error"),
 			}
 		})
-		err := resourceAlicloudGaIpSetDelete(dExisted, rawClient)
+		err := resourceAliCloudGaIpSetDelete(dExisted, rawClient)
 		patches.Reset()
 		assert.NotNil(t, err)
 		errorCodes := []string{"NonRetryableError", "Throttling", "StateError.Accelerator", "StateError.IpSet", "nil", "NotExist.IpSets"}
@@ -346,7 +419,7 @@ func TestAccAlicloudGaIpSet_unit(t *testing.T) {
 				}
 				return ReadMockResponse, nil
 			})
-			err := resourceAlicloudGaIpSetDelete(dExisted, rawClient)
+			err := resourceAliCloudGaIpSetDelete(dExisted, rawClient)
 			patches.Reset()
 			switch errorCode {
 			case "NonRetryableError":

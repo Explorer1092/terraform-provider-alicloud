@@ -7,17 +7,23 @@ description: |-
   Provides a Alicloud CDN Fc Trigger resource.
 ---
 
-# alicloud\_cdn\_fc\_trigger
+# alicloud_cdn_fc_trigger
 
 Provides a CDN Fc Trigger resource.
 
-For information about CDN Fc Trigger and how to use it, see [What is Fc Trigger](https://www.alibabacloud.com/help/zh/alibaba-cloud-cdn/latest/add-function-calculation-trigger).
+For information about CDN Fc Trigger and how to use it, see [What is Fc Trigger](https://www.alibabacloud.com/help/en/cdn/developer-reference/api-cdn-2018-05-10-addfctrigger).
 
 -> **NOTE:** Available in v1.165.0+.
 
 ## Example Usage
 
 Basic Usage
+
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_cdn_fc_trigger&exampleId=440e5074-5d83-747d-850f-ef311e2c568ad90af5d8&activeTab=example&spm=docs.r.cdn_fc_trigger.0.440e50745d&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
 
 ```terraform
 data "alicloud_account" "default" {}
@@ -45,7 +51,7 @@ The following arguments are supported:
 * `notes` - (Required) The Note information.
 * `role_arn` - (Required) The role authorized by RAM. The value formats as `acs:ram::{AccountID}:role/{RoleName}`.
 * `source_arn` - (Required) Resources and filters for event listening. The value formats as `acs:cdn:{RegionID}:{AccountID}:{Filter}`.
-* `trigger_arn` - (Required, ForceNew) The trigger corresponding to the function Compute Service. The value formats as `acs:fc:{RegionID}:{AccountID}:{Filter}`. See [Create a CDN Fc Trigger](https://www.alibabacloud.com/help/zh/alibaba-cloud-cdn/latest/add-function-calculation-trigger) for more details.
+* `trigger_arn` - (Required, ForceNew) The trigger corresponding to the function Compute Service. The value formats as `acs:fc:{RegionID}:{AccountID}:{Filter}`. See [Create a CDN Fc Trigger](https://www.alibabacloud.com/help/en/cdn/developer-reference/api-cdn-2018-05-10-addfctrigger) for more details.
 
 ## Attributes Reference
 
@@ -65,6 +71,6 @@ The `timeouts` block allows you to specify [timeouts](https://www.terraform.io/d
 
 CDN Fc Trigger can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_cdn_fc_trigger.example <trigger_arn>
 ```

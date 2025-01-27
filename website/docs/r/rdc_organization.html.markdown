@@ -7,13 +7,15 @@ description: |-
   Provides a Alicloud RDC Organization resource.
 ---
 
-# alicloud\_rdc\_organization
+# alicloud_rdc_organization
 
 Provides a RDC Organization resource.
 
-For information about RDC Organization and how to use it, see [What is Organization](https://help.aliyun.com/product/51588.html).
+For information about RDC Organization and how to use it, see [What is Organization](https://help.aliyun.com/document_detail/51678.html).
 
--> **NOTE:** Available in v1.137.0+.
+-> **NOTE:** Available since v1.137.0.
+
+-> **DEPRECATED:** This resource has been deprecated from version `1.238.0`.
 
 ## Example Usage
 
@@ -46,6 +48,6 @@ The following attributes are exported:
 
 RDC Organization can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_rdc_organization.example <id>
 ```

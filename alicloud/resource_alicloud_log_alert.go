@@ -59,10 +59,9 @@ func resourceAlicloudLogAlert() *schema.Resource {
 				Deprecated: "Deprecated from 1.161.0+, use dashboardId in query_list",
 			},
 			"mute_until": {
-				Type:         schema.TypeInt,
-				Optional:     true,
-				ValidateFunc: validation.IntAtLeast(0),
-				Default:      time.Now().Unix(),
+				Type:     schema.TypeInt,
+				Optional: true,
+				Computed: true,
 			},
 			"throttling": {
 				Type:       schema.TypeString,
@@ -98,7 +97,7 @@ func resourceAlicloudLogAlert() *schema.Resource {
 			},
 			"query_list": {
 				Type:     schema.TypeList,
-				Required: true,
+				Optional: true,
 				Elem: &schema.Resource{
 					Schema: map[string]*schema.Schema{
 						"chart_title": {
@@ -305,15 +304,94 @@ func resourceAlicloudLogAlert() *schema.Resource {
 					},
 				},
 			},
-			"schedule_interval": {
-				Type:     schema.TypeString,
+			"template_configuration": {
+				Type:     schema.TypeList,
 				Optional: true,
-				Default:  "60s",
+				MaxItems: 1,
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"id": {
+							Type:     schema.TypeString,
+							Required: true,
+						},
+						"lang": {
+							Type:     schema.TypeString,
+							Optional: true,
+						},
+						"type": {
+							Type:         schema.TypeString,
+							Required:     true,
+							ValidateFunc: validation.StringInSlice([]string{"sys", "user"}, false),
+						},
+						"tokens": {
+							Type:     schema.TypeMap,
+							Optional: true,
+							Elem:     &schema.Schema{Type: schema.TypeString},
+						},
+						"annotations": {
+							Type:     schema.TypeMap,
+							Optional: true,
+							Elem:     &schema.Schema{Type: schema.TypeString},
+						},
+					},
+				},
+			},
+			"schedule_interval": {
+				Type:          schema.TypeString,
+				Optional:      true,
+				Computed:      true,
+				Deprecated:    "Field 'schedule_interval' has been deprecated from provider version 1.176.0. New field 'schedule' instead.",
+				ConflictsWith: []string{"schedule"},
 			},
 			"schedule_type": {
-				Type:     schema.TypeString,
+				Type:          schema.TypeString,
+				Optional:      true,
+				Computed:      true,
+				Deprecated:    "Field 'schedule_type' has been deprecated from provider version 1.176.0. New field 'schedule' instead.",
+				ConflictsWith: []string{"schedule"},
+			},
+			"schedule": {
+				Type:     schema.TypeSet,
 				Optional: true,
-				Default:  "FixedRate",
+				MaxItems: 1,
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"type": {
+							Type:         schema.TypeString,
+							Required:     true,
+							ValidateFunc: validation.StringInSlice([]string{"FixedRate", "Cron", "Hourly", "Daily", "Weekly"}, false),
+						},
+						"interval": {
+							Type:     schema.TypeString,
+							Optional: true,
+						},
+						"cron_expression": {
+							Type:     schema.TypeString,
+							Optional: true,
+						},
+						"day_of_week": {
+							Type:     schema.TypeInt,
+							Optional: true,
+						},
+						"hour": {
+							Type:     schema.TypeInt,
+							Optional: true,
+						},
+						"delay": {
+							Type:     schema.TypeInt,
+							Optional: true,
+						},
+						"run_immediately": {
+							Type:     schema.TypeBool,
+							Optional: true,
+						},
+						"time_zone": {
+							Type:     schema.TypeString,
+							Optional: true,
+						},
+					},
+				},
+				ConflictsWith: []string{"schedule_type", "schedule_interval"},
 			},
 		},
 	}
@@ -325,15 +403,30 @@ func resourceAlicloudLogAlertCreate(d *schema.ResourceData, meta interface{}) er
 	alert_name := d.Get("alert_name").(string)
 	alert_displayname := d.Get("alert_displayname").(string)
 
+	schedule := &sls.Schedule{
+		Type:     d.Get("schedule_type").(string),
+		Interval: d.Get("schedule_interval").(string),
+	}
+	if v, ok := d.GetOk("schedule"); ok {
+		for _, e := range v.(*schema.Set).List() {
+			scheduleMap := e.(map[string]interface{})
+			schedule.Type, _ = scheduleMap["type"].(string)
+			schedule.Interval, _ = scheduleMap["interval"].(string)
+			schedule.CronExpression, _ = scheduleMap["cron_expression"].(string)
+			schedule.Hour = int32(scheduleMap["hour"].(int))
+			schedule.DayOfWeek = int32(scheduleMap["day_of_week"].(int))
+			schedule.Delay = int32(scheduleMap["delay"].(int))
+			schedule.RunImmediately, _ = scheduleMap["run_immediately"].(bool)
+			schedule.TimeZone, _ = scheduleMap["time_zone"].(string)
+		}
+	}
+
 	alert := &sls.Alert{
 		Name:        alert_name,
 		DisplayName: alert_displayname,
 		Description: d.Get("alert_description").(string),
 		State:       "Enabled",
-		Schedule: &sls.Schedule{
-			Type:     d.Get("schedule_type").(string),
-			Interval: d.Get("schedule_interval").(string),
-		},
+		Schedule:    schedule,
 	}
 	if err := resource.Retry(2*time.Minute, func() *resource.RetryError {
 		_, err := client.WithLogClient(func(slsClient *sls.Client) (interface{}, error) {
@@ -391,8 +484,22 @@ func resourceAlicloudLogAlertRead(d *schema.ResourceData, meta interface{}) erro
 	d.Set("notify_threshold", object.Configuration.NotifyThreshold)
 	d.Set("condition", object.Configuration.Condition)
 	d.Set("dashboard", object.Configuration.Dashboard)
-	var notiList []map[string]interface{}
 
+	var schedules []map[string]interface{}
+	scheduleConf := map[string]interface{}{
+		"type":            object.Schedule.Type,
+		"interval":        object.Schedule.Interval,
+		"cron_expression": object.Schedule.CronExpression,
+		"delay":           object.Schedule.Delay,
+		"day_of_week":     object.Schedule.DayOfWeek,
+		"hour":            object.Schedule.Hour,
+		"run_immediately": object.Schedule.RunImmediately,
+		"time_zone":       object.Schedule.TimeZone,
+	}
+	schedules = append(schedules, scheduleConf)
+	d.Set("schedule", schedules)
+
+	var notiList []map[string]interface{}
 	for _, v := range object.Configuration.NotificationList {
 		mapping := getNotiMap(v)
 		notiList = append(notiList, mapping)
@@ -464,22 +571,39 @@ func resourceAlicloudLogAlertRead(d *schema.ResourceData, meta interface{}) erro
 	}
 	d.Set("join_configurations", joinConfigurations)
 
-	var groupConfigurations []map[string]interface{}
-	groupConf := map[string]interface{}{
-		"type":   object.Configuration.GroupConfiguration.Type,
-		"fields": object.Configuration.GroupConfiguration.Fields,
+	if object.Configuration.GroupConfiguration.Type != "" {
+		var groupConfigurations []map[string]interface{}
+		groupConf := map[string]interface{}{
+			"type":   object.Configuration.GroupConfiguration.Type,
+			"fields": object.Configuration.GroupConfiguration.Fields,
+		}
+		groupConfigurations = append(groupConfigurations, groupConf)
+		d.Set("group_configuration", groupConfigurations)
 	}
-	groupConfigurations = append(groupConfigurations, groupConf)
-	d.Set("group_configuration", groupConfigurations)
 
-	var policyConfigurations []map[string]interface{}
-	policyConf := map[string]interface{}{
-		"alert_policy_id":  object.Configuration.PolicyConfiguration.AlertPolicyId,
-		"action_policy_id": object.Configuration.PolicyConfiguration.ActionPolicyId,
-		"repeat_interval":  object.Configuration.PolicyConfiguration.RepeatInterval,
+	if object.Configuration.PolicyConfiguration.AlertPolicyId != "" {
+		var policyConfigurations []map[string]interface{}
+		policyConf := map[string]interface{}{
+			"alert_policy_id":  object.Configuration.PolicyConfiguration.AlertPolicyId,
+			"action_policy_id": object.Configuration.PolicyConfiguration.ActionPolicyId,
+			"repeat_interval":  object.Configuration.PolicyConfiguration.RepeatInterval,
+		}
+		policyConfigurations = append(policyConfigurations, policyConf)
+		d.Set("policy_configuration", policyConfigurations)
 	}
-	policyConfigurations = append(policyConfigurations, policyConf)
-	d.Set("policy_configuration", policyConfigurations)
+
+	if object.Configuration.TemplateConfiguration != nil && object.Configuration.TemplateConfiguration.Id != "" {
+		var templateConfigurations []map[string]interface{}
+		templateConfiguration := map[string]interface{}{
+			"id":          object.Configuration.TemplateConfiguration.Id,
+			"type":        object.Configuration.TemplateConfiguration.Type,
+			"lang":        object.Configuration.TemplateConfiguration.Lang,
+			"tokens":      object.Configuration.TemplateConfiguration.Tokens,
+			"annotations": object.Configuration.TemplateConfiguration.Annotations,
+		}
+		templateConfigurations = append(templateConfigurations, templateConfiguration)
+		d.Set("template_configuration", templateConfigurations)
+	}
 
 	for _, v := range object.Configuration.QueryList {
 		mapping := map[string]interface{}{
@@ -510,15 +634,29 @@ func resourceAlicloudLogAlertUpdate(d *schema.ResourceData, meta interface{}) er
 	}
 
 	client := meta.(*connectivity.AliyunClient)
+	schedule := &sls.Schedule{
+		Type:     d.Get("schedule_type").(string),
+		Interval: d.Get("schedule_interval").(string),
+	}
+	if v, ok := d.GetOk("schedule"); ok {
+		for _, e := range v.(*schema.Set).List() {
+			scheduleMap := e.(map[string]interface{})
+			schedule.Type, _ = scheduleMap["type"].(string)
+			schedule.Interval, _ = scheduleMap["interval"].(string)
+			schedule.CronExpression, _ = scheduleMap["cron_expression"].(string)
+			schedule.Hour = int32(scheduleMap["hour"].(int))
+			schedule.DayOfWeek = int32(scheduleMap["day_of_week"].(int))
+			schedule.Delay = int32(scheduleMap["delay"].(int))
+			schedule.RunImmediately, _ = scheduleMap["run_immediately"].(bool)
+			schedule.TimeZone, _ = scheduleMap["time_zone"].(string)
+		}
+	}
 	params := &sls.Alert{
 		Name:        parts[1],
 		DisplayName: d.Get("alert_displayname").(string),
 		Description: d.Get("alert_description").(string),
 		State:       "Enabled",
-		Schedule: &sls.Schedule{
-			Type:     d.Get("schedule_type").(string),
-			Interval: d.Get("schedule_interval").(string),
-		},
+		Schedule:    schedule,
 	}
 
 	if err := resource.Retry(2*time.Minute, func() *resource.RetryError {
@@ -774,6 +912,31 @@ func createAlert2Config(d *schema.ResourceData) *sls.AlertConfiguration {
 		}
 	}
 
+	var templateConfiguration *sls.TemplateConfiguration
+	if v, ok := d.GetOk("template_configuration"); ok {
+		for _, e := range v.([]interface{}) {
+			templateConfiguration = &sls.TemplateConfiguration{}
+			templateConfigurationMap := e.(map[string]interface{})
+			templateConfiguration.Id, _ = templateConfigurationMap["id"].(string)
+			templateConfiguration.Type, _ = templateConfigurationMap["type"].(string)
+			templateConfiguration.Lang, _ = templateConfigurationMap["lang"].(string)
+			templateConfiguration.Tokens = map[string]string{}
+			templateConfiguration.Annotations = map[string]string{}
+			templateConfiguration.Version = "1"
+
+			if tokensMap, ok := templateConfigurationMap["tokens"].(map[string]interface{}); ok {
+				for tokenK, tokenV := range tokensMap {
+					templateConfiguration.Tokens[tokenK], _ = tokenV.(string)
+				}
+			}
+			if annotationsMap, ok := templateConfigurationMap["annotations"].(map[string]interface{}); ok {
+				for annotationK, annotationV := range annotationsMap {
+					templateConfiguration.Annotations[annotationK], _ = annotationV.(string)
+				}
+			}
+		}
+	}
+
 	queryList := []*sls.AlertQuery{}
 
 	if v, ok := d.GetOk("query_list"); ok {
@@ -827,6 +990,9 @@ func createAlert2Config(d *schema.ResourceData) *sls.AlertConfiguration {
 		SendResolved:           d.Get("send_resolved").(bool),
 		MuteUntil:              int64(d.Get("mute_until").(int)),
 		AutoAnnotation:         autoAnnotation,
+	}
+	if templateConfiguration != nil {
+		config.TemplateConfiguration = templateConfiguration
 	}
 	return config
 }

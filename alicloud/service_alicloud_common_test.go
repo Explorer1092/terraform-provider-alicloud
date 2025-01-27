@@ -2,10 +2,13 @@ package alicloud
 
 import (
 	"fmt"
+	"os"
 	"reflect"
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 
 	util "github.com/alibabacloud-go/tea-utils/service"
 
@@ -62,23 +65,59 @@ type resourceCheck struct {
 
 	// service describe method name
 	describeMethod string
+
+	// additional attributes
+	additionalAttrs []string
+
+	// additional attributes type
+	additionalAttrsType map[string]schema.ValueType
 }
 
-func resourceCheckInit(resourceId string, resourceObject interface{}, serviceFunc func() interface{}) *resourceCheck {
-	return &resourceCheck{
-		resourceId:     resourceId,
-		resourceObject: resourceObject,
-		serviceFunc:    serviceFunc,
+func resourceCheckInit(resourceId string, resourceObject interface{}, serviceFunc func() interface{}, additionalAttrs ...string) *resourceCheck {
+	rc := &resourceCheck{
+		resourceId:      resourceId,
+		resourceObject:  resourceObject,
+		serviceFunc:     serviceFunc,
+		additionalAttrs: additionalAttrs,
 	}
+	if len(rc.additionalAttrs) > 0 {
+		rc.setAdditionalAttrsType()
+	}
+	return rc
 }
 
-func resourceCheckInitWithDescribeMethod(resourceId string, resourceObject interface{}, serviceFunc func() interface{}, describeMethod string) *resourceCheck {
-	return &resourceCheck{
-		resourceId:     resourceId,
-		resourceObject: resourceObject,
-		serviceFunc:    serviceFunc,
-		describeMethod: describeMethod,
+func resourceCheckInitWithDescribeMethod(resourceId string, resourceObject interface{}, serviceFunc func() interface{}, describeMethod string, additionalAttrs ...string) *resourceCheck {
+	rc := &resourceCheck{
+		resourceId:      resourceId,
+		resourceObject:  resourceObject,
+		serviceFunc:     serviceFunc,
+		describeMethod:  describeMethod,
+		additionalAttrs: additionalAttrs,
 	}
+	if len(rc.additionalAttrs) > 0 {
+		rc.setAdditionalAttrsType()
+	}
+	return rc
+}
+
+// caching the additional attribute type used to convert the addition attribute value type before calling Get method
+func (rc *resourceCheck) setAdditionalAttrsType() {
+	provider := Provider().(*schema.Provider)
+	resourceType, ok := provider.ResourcesMap[strings.Split(rc.resourceId, ".")[0]]
+	if !ok {
+		log.Panicf("invalid resource type: %s", strings.Split(rc.resourceId, ".")[0])
+	}
+	if rc.additionalAttrsType == nil {
+		rc.additionalAttrsType = make(map[string]schema.ValueType)
+	}
+	for _, attr := range rc.additionalAttrs {
+		if s, ok := resourceType.Schema[attr]; !ok {
+			log.Panicf("invalid resource attribute: %s", attr)
+		} else {
+			rc.additionalAttrsType[attr] = s.Type
+		}
+	}
+	return
 }
 
 // check attribute only
@@ -196,6 +235,23 @@ func (rc *resourceCheck) callDescribeMethod(rs *terraform.ResourceState) ([]refl
 		return nil, WrapError(Error("The service type %s does not have method %s", typeName, rc.describeMethod))
 	}
 	inValue := []reflect.Value{reflect.ValueOf(rs.Primary.ID)}
+	for _, attr := range rc.additionalAttrs {
+		if attrValue, ok := rs.Primary.Attributes[attr]; ok {
+			if attrType, o := rc.additionalAttrsType[attr]; o {
+				switch attrType {
+				case schema.TypeBool:
+					v, _ := strconv.ParseBool(attrValue)
+					inValue = append(inValue, reflect.ValueOf(v))
+					continue
+				case schema.TypeInt:
+					v, _ := strconv.ParseInt(attrValue, 10, 64)
+					inValue = append(inValue, reflect.ValueOf(v))
+					continue
+				}
+			}
+			inValue = append(inValue, reflect.ValueOf(attrValue))
+		}
+	}
 	return value.Call(inValue), nil
 }
 
@@ -349,6 +405,7 @@ func resourceTestAccConfigFunc(resourceId string,
 		resourceId:       resourceId,
 		attributeMap:     make(map[string]interface{}),
 		configDependence: configDependence,
+		number:           0,
 	}
 	return basicInfo.configBuild(false)
 }
@@ -377,6 +434,9 @@ type resourceConfig struct {
 
 	// generate assistant test config
 	configDependence func(name string) string
+
+	// step number
+	number int
 }
 
 // according to changeMap to change the attributeMap value
@@ -418,12 +478,19 @@ func (b *resourceConfig) configBuild(overwrite bool) ResourceTestAccConfigFunc {
 		} else {
 			primaryConfig = fmt.Sprintf("\n\nresource \"%s\" \"%s\" ", strs[0], strs[1])
 		}
-		return assistantConfig + primaryConfig + valueConvert(0, reflect.ValueOf(b.attributeMap))
+		config := assistantConfig + primaryConfig + fmt.Sprint(valueConvert(0, reflect.ValueOf(b.attributeMap)))
+		for _, part := range strings.Split(os.Getenv("DEBUG"), ",") {
+			if strings.TrimSpace(part) == "terraform_test" {
+				log.Printf("###### (step %d) terraform test configuration ###### %s \n###### (END) ######\n\n", b.number, config)
+				b.number += 1
+			}
+		}
+		return config
 	}
 }
 
 // deal with the parameter common method
-func valueConvert(indentation int, val reflect.Value) string {
+func valueConvert(indentation int, val reflect.Value) interface{} {
 	switch val.Kind() {
 	case reflect.Interface:
 		return valueConvert(indentation, reflect.ValueOf(val.Interface()))
@@ -433,8 +500,12 @@ func valueConvert(indentation int, val reflect.Value) string {
 		return listValue(indentation, val)
 	case reflect.Map:
 		return mapValue(indentation, val)
+	case reflect.Bool:
+		return val.Bool()
+	case reflect.Int:
+		return val.Int()
 	default:
-		log.Panicf("the map value must be string  map or slice type! %s", val)
+		log.Panicf("invalid attribute value type: %#v", val)
 	}
 	return ""
 }
@@ -444,7 +515,7 @@ func listValue(indentation int, val reflect.Value) string {
 	var valList []string
 	for i := 0; i < val.Len(); i++ {
 		valList = append(valList, addIndentation(indentation+CHILDINDEND)+
-			valueConvert(indentation+CHILDINDEND, val.Index(i)))
+			fmt.Sprint(valueConvert(indentation+CHILDINDEND, val.Index(i))))
 	}
 
 	return fmt.Sprintf("[\n%s\n%s]", strings.Join(valList, ",\n"), addIndentation(indentation))
@@ -465,8 +536,16 @@ func mapValue(indentation int, val reflect.Value) string {
 				continue
 			}
 		}
-		line = fmt.Sprintf(`%s%s = %s`, addIndentation(indentation+CHILDINDEND), keyV.String(),
-			valueConvert(indentation+len(keyV.String())+CHILDINDEND+3, val.MapIndex(keyV)))
+		value := valueConvert(indentation+len(keyV.String())+CHILDINDEND+3, val.MapIndex(keyV))
+		switch value.(type) {
+		case bool:
+			line = fmt.Sprintf(`%s%s = %t`, addIndentation(indentation+CHILDINDEND), keyV.String(), value)
+		case int:
+			line = fmt.Sprintf(`%s%s = %d`, addIndentation(indentation+CHILDINDEND), keyV.String(), value)
+		default:
+			line = fmt.Sprintf(`%s%s = %s`, addIndentation(indentation+CHILDINDEND), keyV.String(), value)
+		}
+
 		valList = append(valList, line)
 	}
 	return fmt.Sprintf("{\n%s\n%s}", strings.Join(valList, "\n"), addIndentation(indentation))
@@ -750,27 +829,33 @@ func (s *SlbService) sweepSlb(id string) error {
 
 const EcsInstanceCommonNoZonesTestCase = `
 data "alicloud_instance_types" "default" {
-  cpu_core_count    = 1
-  memory_size       = 2
+  instance_type_family = "ecs.sn1ne"
 }
 data "alicloud_images" "default" {
   name_regex  = "^ubuntu_[0-9]+_[0-9]+_x64*"
   most_recent = true
   owners      = "system"
 }
+
+data "alicloud_vpcs" "default" {
+    name_regex = "^default-NODELETING$"
+}
+
 resource "alicloud_vpc" "default" {
-  vpc_name       = "${var.name}"
-  cidr_block = "172.16.0.0/16"
+	vpc_name = var.name
+	cidr_block = "172.16.0.0/16"
 }
+
 resource "alicloud_vswitch" "default" {
-  vpc_id            = "${alicloud_vpc.default.id}"
-  cidr_block        = "172.16.0.0/24"
-  zone_id = "${data.alicloud_instance_types.default.instance_types.0.availability_zones.0}"
-  vswitch_name              = "${var.name}"
+	vswitch_name = var.name
+	cidr_block = "172.16.1.0/24"
+	vpc_id = alicloud_vpc.default.id
+	zone_id = data.alicloud_instance_types.default.instance_types.0.availability_zones.0
 }
+
 resource "alicloud_security_group" "default" {
-  name   = "${var.name}"
-  vpc_id = "${alicloud_vpc.default.id}"
+  	name   = "${var.name}"
+	vpc_id = alicloud_vpc.default.id
 }
 resource "alicloud_security_group_rule" "default" {
   	type = "ingress"
@@ -825,29 +910,49 @@ resource "alicloud_security_group_rule" "default" {
 const PolarDBCommonTestCase = `
 data "alicloud_polardb_zones" "default"{}
 data "alicloud_vpcs" "default" {
-	name_regex = "default-NODELETING"
+	name_regex = "^default-NODELETING$"
 }
-data "alicloud_vswitches" "default" {
-	zone_id = local.zone_id
-	vpc_id = data.alicloud_vpcs.default.ids.0
+resource "alicloud_vpc" "default" {
+    vpc_name = var.name
 }
-resource "alicloud_vswitch" "this" {
- count = length(data.alicloud_vswitches.default.ids) > 0 ? 0 : 1
+resource "alicloud_vswitch" "default" {
  vswitch_name = "tf_testAccPolarDB"
- vpc_id = data.alicloud_vpcs.default.ids.0
+ vpc_id  = alicloud_vpc.default.id
  zone_id = data.alicloud_polardb_zones.default.ids.0
- cidr_block = cidrsubnet(data.alicloud_vpcs.default.vpcs.0.cidr_block, 8, 4)
+ cidr_block = cidrsubnet(alicloud_vpc.default.cidr_block, 8, 4)
 }
 locals {
-  vpc_id = data.alicloud_vpcs.default.ids.0
-  vswitch_id = length(data.alicloud_vswitches.default.ids) > 0 ? data.alicloud_vswitches.default.ids.0 : concat(alicloud_vswitch.this.*.id, [""])[0]
+  vpc_id = alicloud_vpc.default.id
+  vswitch_id = concat(alicloud_vswitch.default.*.id, [""])[0]
   zone_id = data.alicloud_polardb_zones.default.ids[length(data.alicloud_polardb_zones.default.ids)-1]
 }
 `
+
+const PolarDBPostgreSQLCommonTestCase = `
+data "alicloud_polardb_zones" "default"{}
+data "alicloud_vpcs" "default" {
+	name_regex = "^default-NODELETING$"
+}
+resource "alicloud_vpc" "default" {
+    vpc_name = var.name
+}
+resource "alicloud_vswitch" "this" {
+ vswitch_name = "tf_testAccPolarDB"
+ vpc_id = alicloud_vpc.default.id
+ zone_id = data.alicloud_polardb_zones.default.ids.0
+ cidr_block = cidrsubnet(alicloud_vpc.default.cidr_block, 8, 4)
+}
+locals {
+  vpc_id = alicloud_vpc.default.id
+  vswitch_id = concat(alicloud_vswitch.this.*.id, [""])[0]	
+  zone_id = data.alicloud_polardb_zones.default.ids[length(data.alicloud_polardb_zones.default.ids)-2]
+}
+`
+
 const AdbCommonTestCase = `
 data "alicloud_adb_zones" "default" {}
 data "alicloud_vpcs" "default" {
-	name_regex = "default-NODELETING"
+	name_regex = "^default-NODELETING$"
 }
 data "alicloud_vswitches" "default" {
   vpc_id = data.alicloud_vpcs.default.ids.0
@@ -864,7 +969,7 @@ data "alicloud_kvstore_zones" "default"{
 	instance_charge_type = "PostPaid"
 }
 data "alicloud_vpcs" "default" {
-	name_regex = "default-NODELETING"
+	name_regex = "^default-NODELETING$"
 }
 data "alicloud_vswitches" "default" {
 	zone_id = data.alicloud_kvstore_zones.default.zones[length(data.alicloud_kvstore_zones.default.ids) - 1].id
@@ -891,16 +996,27 @@ resource "alicloud_vswitch" "default" {
 
 const ElasticsearchInstanceCommonTestCase = `
 data "alicloud_elasticsearch_zones" "default" {}
+
+data "alicloud_resource_manager_resource_groups" "default" {}
+
 data "alicloud_vpcs" "default" {
-  name_regex = "default-NODELETING"
+    name_regex = "^default-NODELETING$"
 }
+
+resource "alicloud_security_group" "default" {
+    name = "${var.name}"
+    vpc_id = data.alicloud_vpcs.default.ids.0
+}
+
 data "alicloud_vswitches" "default" {
-  vpc_id = data.alicloud_vpcs.default.ids.0
-  zone_id = data.alicloud_elasticsearch_zones.default.ids.0
+  	vpc_id = data.alicloud_vpcs.default.ids.0
+  	zone_id = data.alicloud_elasticsearch_zones.default.zones[0].id
 }
 
 locals {
-  vswitch_id = data.alicloud_vswitches.default.ids[0]
+  	vswitch_id = data.alicloud_vswitches.default.ids[0]
+	resource_group_id = data.alicloud_resource_manager_resource_groups.default.ids.0
+	security_group  = alicloud_security_group.default.id
 }
 
 `
@@ -924,13 +1040,15 @@ resource "alicloud_vswitch" "default" {
 `
 
 const EmrCommonTestCase = `
+data "alicloud_resource_manager_resource_groups" "default" {}
+
 data "alicloud_emr_main_versions" "default" {
 	cluster_type = ["HADOOP"]
 }
 
 data "alicloud_emr_instance_types" "default" {
     destination_resource = "InstanceType"
-    cluster_type = data.alicloud_emr_main_versions.default.main_versions.0.cluster_types.0
+    cluster_type = "HADOOP"
     support_local_storage = false
     instance_charge_type = "PostPaid"
     support_node_type = ["MASTER", "CORE"]
@@ -938,7 +1056,7 @@ data "alicloud_emr_instance_types" "default" {
 
 data "alicloud_emr_disk_types" "data_disk" {
 	destination_resource = "DataDisk"
-	cluster_type = data.alicloud_emr_main_versions.default.main_versions.0.cluster_types.0
+	cluster_type = "HADOOP"
 	instance_charge_type = "PostPaid"
 	instance_type = data.alicloud_emr_instance_types.default.types.0.id
 	zone_id = data.alicloud_emr_instance_types.default.types.0.zone_id
@@ -946,7 +1064,7 @@ data "alicloud_emr_disk_types" "data_disk" {
 
 data "alicloud_emr_disk_types" "system_disk" {
 	destination_resource = "SystemDisk"
-	cluster_type = data.alicloud_emr_main_versions.default.main_versions.0.cluster_types.0
+	cluster_type = "HADOOP"
 	instance_charge_type = "PostPaid"
 	instance_type = data.alicloud_emr_instance_types.default.types.0.id
 	zone_id = data.alicloud_emr_instance_types.default.types.0.zone_id
@@ -960,13 +1078,13 @@ resource "alicloud_vpc" "default" {
 resource "alicloud_vswitch" "default" {
   vpc_id = "${alicloud_vpc.default.id}"
   cidr_block = "172.16.0.0/21"
-  availability_zone = "${data.alicloud_emr_instance_types.default.types.0.zone_id}"
-  name = "${var.name}"
+  zone_id = "${data.alicloud_emr_instance_types.default.types.0.zone_id}"
+  vswitch_name = "${var.name}"
 }
 
 resource "alicloud_security_group" "default" {
-    name = "${var.name}"
-    vpc_id = "${alicloud_vpc.default.id}"
+  name = "${var.name}"
+  vpc_id = "${alicloud_vpc.default.id}"
 }
 
 resource "alicloud_ram_role" "default" {
@@ -979,7 +1097,288 @@ resource "alicloud_ram_role" "default" {
             "Effect": "Allow",
             "Principal": {
             "Service": [
-                "emr.aliyuncs.com", 
+                "emr.aliyuncs.com",
+                "ecs.aliyuncs.com"
+            ]
+            }
+        }
+        ],
+        "Version": "1"
+    }
+    EOF
+    description = "this is a role test."
+    force = true
+}
+`
+
+const EmrV2CommonTestCase = `
+data "alicloud_resource_manager_resource_groups" "default" {
+	status = "OK"
+}
+
+data "alicloud_kms_keys" "default" {
+	status = "Enabled"
+}
+
+data "alicloud_zones" "default" {
+	available_instance_type = "ecs.g7.xlarge"
+}
+
+resource "alicloud_vpc" "default" {
+	vpc_name = "${var.name}"
+	cidr_block = "172.16.0.0/12"
+}
+
+resource "alicloud_vswitch" "default" {
+  vpc_id = "${alicloud_vpc.default.id}"
+  cidr_block = "172.16.0.0/21"
+  zone_id = "${data.alicloud_zones.default.zones.0.id}"
+  vswitch_name = "${var.name}"
+}
+
+resource "alicloud_ecs_key_pair" "default" {
+  key_pair_name = "${var.name}"
+}
+
+resource "alicloud_security_group" "default" {
+    name = "${var.name}"
+    vpc_id = "${alicloud_vpc.default.id}"
+}
+
+resource "alicloud_ram_role" "default" {
+  name        = var.name
+  document    = <<EOF
+    {
+        "Statement": [
+        {
+            "Action": "sts:AssumeRole",
+            "Effect": "Allow",
+            "Principal": {
+            "Service": [
+                "emr.aliyuncs.com",
+                "ecs.aliyuncs.com"
+            ]
+            }
+        }
+        ],
+        "Version": "1"
+    }
+    EOF
+  description = "this is a role test."
+  force       = true
+}
+`
+
+const EmrV2AckConfigTestCase = `
+data "alicloud_resource_manager_resource_groups" "default" {
+	status = "OK"
+}
+
+data "alicloud_kms_keys" "default" {
+	status = "Enabled"
+}
+
+data "alicloud_zones" "default" {
+	available_instance_type = "ecs.g7.xlarge"
+}
+
+resource "alicloud_vpc" "default" {
+    vpc_name   = "${var.name}"
+    cidr_block = "10.0.0.0/8"
+}
+
+resource "alicloud_vswitch" "vswitches" {
+    count      = 2
+    vpc_id     = join("", alicloud_vpc.default.*.id)
+    cidr_block = ["10.1.0.0/16", "10.2.0.0/16"][count.index]
+    zone_id    = "${data.alicloud_zones.default.zones.0.id}"
+}
+
+resource "alicloud_vswitch" "terway_vswitches" {
+    count      = 2
+    vpc_id     = join("", alicloud_vpc.default.*.id)
+    cidr_block = ["10.4.0.0/16", "10.5.0.0/16"][count.index]
+    zone_id    = "${data.alicloud_zones.default.zones.0.id}"
+}
+
+resource "alicloud_vswitch" "default" {
+    vpc_id = "${alicloud_vpc.default.id}"
+    cidr_block = "10.6.0.0/16"
+    zone_id = "${data.alicloud_zones.default.zones.0.id}"
+    vswitch_name = "${var.name}"
+}
+
+resource "alicloud_ecs_key_pair" "default" {
+    key_pair_name = "${var.name}"
+}
+
+resource "alicloud_security_group" "default" {
+    name = "${var.name}"
+    vpc_id = "${alicloud_vpc.default.id}"
+}
+
+resource "alicloud_ram_role" "default" {
+    name        = var.name
+    document    = <<EOF
+    {
+        "Statement": [
+        {
+            "Action": "sts:AssumeRole",
+            "Effect": "Allow",
+            "Principal": {
+            "Service": [
+                "emr.aliyuncs.com",
+                "ecs.aliyuncs.com"
+            ]
+            }
+        }
+        ],
+        "Version": "1"
+    }
+    EOF
+    description = "this is a role test."
+    force       = true
+}
+
+resource "alicloud_cs_managed_kubernetes" "k8s" {
+	name               = "${var.name}"
+	cluster_spec       = "ack.pro.small"
+	worker_vswitch_ids = split(",", join(",", alicloud_vswitch.vswitches.*.id))
+	pod_vswitch_ids    = split(",", join(",", alicloud_vswitch.terway_vswitches.*.id))
+	new_nat_gateway    = true
+	node_cidr_mask     = 24
+	proxy_mode         = "ipvs"
+	service_cidr       = "192.168.0.0/16"
+
+    addons {
+        name = "terway-eniip"
+    }
+    addons {
+        name = "csi-plugin"
+    }
+    addons {
+        name = "csi-provisioner"
+    }
+    addons {
+        name = "logtail-ds"
+        config = jsonencode({
+            IngressDashboardEnabled = "true"
+      })
+    }
+    addons {
+        name = "nginx-ingress-controller"
+        config = jsonencode({
+            IngressSlbNetworkType = "internet"
+        })
+    }
+    addons {
+        name = "arms-prometheus"
+    }
+    addons {
+        name = "ack-node-problem-detector"
+        config = jsonencode({
+        })
+    }
+}
+`
+
+const EmrHadoopClusterTestCase = `
+data "alicloud_emr_main_versions" "default" {
+	cluster_type = ["HADOOP"]
+	emr_version = "EMR-3.24.0"
+}
+
+data "alicloud_db_zones" "default" {
+	engine = "MySQL"
+	engine_version = "8.0"
+	category = "Basic"
+	instance_charge_type = "PostPaid"
+	db_instance_storage_type = "cloud_essd"
+}
+
+data "alicloud_emr_instance_types" "default" {
+	destination_resource = "InstanceType"
+	cluster_type = "HADOOP"
+	zone_id = data.alicloud_db_zones.default.ids[length(data.alicloud_db_zones.default.ids)-1]
+	support_local_storage = false
+	instance_charge_type = "PostPaid"
+	support_node_type = ["MASTER", "CORE"]
+}
+
+data "alicloud_emr_disk_types" "data_disk" {
+	destination_resource = "DataDisk"
+	cluster_type = "HADOOP"
+	instance_charge_type = "PostPaid"
+	instance_type = data.alicloud_emr_instance_types.default.types.0.id
+	zone_id = data.alicloud_db_zones.default.ids[length(data.alicloud_db_zones.default.ids)-1]
+}
+
+data "alicloud_emr_disk_types" "system_disk" {
+	destination_resource = "SystemDisk"
+	cluster_type = "HADOOP"
+	instance_charge_type = "PostPaid"
+	instance_type = data.alicloud_emr_instance_types.default.types.0.id
+	zone_id = data.alicloud_db_zones.default.ids[length(data.alicloud_db_zones.default.ids)-1]
+}
+
+data "alicloud_db_instance_classes" "default" {
+	zone_id = data.alicloud_db_zones.default.ids[length(data.alicloud_db_zones.default.ids)-1]
+	engine = "MySQL"
+	engine_version = "8.0"
+	category = "Basic"
+	db_instance_storage_type = "cloud_essd"
+	instance_charge_type = "PostPaid"
+}
+
+resource "alicloud_vpc" "default" {
+	vpc_name = "${var.name}"
+	cidr_block = "172.16.0.0/12"
+}
+
+resource "alicloud_vswitch" "default" {
+	vpc_id = "${alicloud_vpc.default.id}"
+	cidr_block = "172.16.0.0/21"
+	zone_id = data.alicloud_db_zones.default.ids[length(data.alicloud_db_zones.default.ids)-1]
+	vswitch_name = "${var.name}"
+}
+
+resource "alicloud_security_group" "default" {
+    name = "${var.name}"
+    vpc_id = "${alicloud_vpc.default.id}"
+}
+
+resource "alicloud_db_instance" "default" {
+	engine = "MySQL"
+	engine_version = "8.0"
+	instance_type = data.alicloud_db_instance_classes.default.instance_classes.0.instance_class
+	instance_storage = data.alicloud_db_instance_classes.default.instance_classes.0.storage_range.min
+	zone_id = data.alicloud_db_zones.default.ids[length(data.alicloud_db_zones.default.ids)-1]
+	instance_charge_type = "Postpaid"
+	db_instance_storage_type = "cloud_essd"
+	vswitch_id = "${alicloud_vswitch.default.id}"
+	instance_name = "${var.name}"
+	security_ips = ["${alicloud_vswitch.default.cidr_block}"]
+}
+
+resource "alicloud_rds_account" "default" {
+	db_instance_id = "${alicloud_db_instance.default.id}"
+	account_type = "Normal"
+	account_name = "taihao"
+	account_password = "EMRtest1234!"
+	account_description = "tf-test"
+}
+
+resource "alicloud_ram_role" "default" {
+	name = "${var.name}"
+	document = <<EOF
+    {
+        "Statement": [
+        {
+            "Action": "sts:AssumeRole",
+            "Effect": "Allow",
+            "Principal": {
+            "Service": [
+                "emr.aliyuncs.com",
                 "ecs.aliyuncs.com"
             ]
             }
@@ -1054,8 +1453,8 @@ resource "alicloud_vpc" "default" {
 resource "alicloud_vswitch" "default" {
   vpc_id = "${alicloud_vpc.default.id}"
   cidr_block = "172.16.0.0/21"
-  availability_zone = "${data.alicloud_emr_instance_types.default.types.0.zone_id}"
-  name = "${var.name}"
+  zone_id = "${data.alicloud_emr_instance_types.default.types.0.zone_id}"
+  vswitch_name = "${var.name}"
 }
 
 resource "alicloud_security_group" "default" {
@@ -1118,6 +1517,7 @@ resource "alicloud_emr_cluster" "default" {
     }
 
     high_availability_enable = true
+    meta_store_type = "local"
     zone_id = data.alicloud_emr_instance_types.default.types.0.zone_id
     security_group_id = alicloud_security_group.default.id
     is_open_public_ip = true
@@ -1138,7 +1538,7 @@ data "alicloud_emr_instance_types" "local_disk" {
     cluster_type = data.alicloud_emr_main_versions.default.main_versions.0.cluster_types.0
     support_local_storage = true
     instance_charge_type = "PostPaid"
-    support_node_type = ["CORE"]
+    support_node_type = ["MASTER","CORE"]
 }
 
 data "alicloud_emr_instance_types" "cloud_disk" {
@@ -1173,8 +1573,8 @@ resource "alicloud_vpc" "default" {
 resource "alicloud_vswitch" "default" {
   vpc_id = "${alicloud_vpc.default.id}"
   cidr_block = "172.16.0.0/21"
-  availability_zone = "${data.alicloud_emr_instance_types.cloud_disk.types.0.zone_id}"
-  name = "${var.name}"
+  zone_id = "${data.alicloud_emr_instance_types.cloud_disk.types.0.zone_id}"
+  vswitch_name = "${var.name}"
 }
 
 resource "alicloud_security_group" "default" {

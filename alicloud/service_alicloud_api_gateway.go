@@ -7,6 +7,9 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/PaesslerAG/jsonpath"
+	util "github.com/alibabacloud-go/tea-utils/service"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
@@ -41,6 +44,7 @@ func (s *CloudApiService) DescribeApiGatewayGroup(id string) (*cloudapi.Describe
 	}
 	return apiGroup, nil
 }
+
 func (s *CloudApiService) WaitForApiGatewayGroup(id string, status Status, timeout int) error {
 	deadline := time.Now().Add(time.Duration(timeout) * time.Second)
 	for {
@@ -208,6 +212,62 @@ func (s *CloudApiService) DescribeApiGatewayAppAttachment(id string) (*cloudapi.
 	}
 	app = &filteredAppsTemp[0]
 	return app, nil
+}
+
+func (s *CloudApiService) DescribeApiGatewayPluginAttachment(id string) (*cloudapi.PluginAttribute, error) {
+	plugin := &cloudapi.PluginAttribute{}
+	request := cloudapi.CreateDescribePluginsByApiRequest()
+	request.RegionId = s.client.RegionId
+	parts, err := ParseResourceId(id, 4)
+	if err != nil {
+		return plugin, WrapError(err)
+	}
+	request.GroupId = parts[0]
+	request.ApiId = parts[1]
+	request.StageName = parts[3]
+	pluginId := parts[2]
+
+	var allPlugins []cloudapi.PluginAttribute
+
+	for {
+		raw, err := s.client.WithCloudApiClient(func(cloudApiClient *cloudapi.Client) (interface{}, error) {
+			return cloudApiClient.DescribePluginsByApi(request)
+		})
+		if err != nil {
+			if IsExpectedErrors(err, []string{"NotFoundApiGroup", "NotFoundApi"}) {
+				return plugin, WrapErrorf(err, NotFoundMsg, AlibabaCloudSdkGoERROR)
+			}
+			return plugin, WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR)
+		}
+		addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+		response, _ := raw.(*cloudapi.DescribePluginsByApiResponse)
+
+		allPlugins = append(allPlugins, response.Plugins.PluginAttribute...)
+
+		if len(allPlugins) < PageSizeLarge {
+			break
+		}
+
+		page, err := getNextpageNumber(request.PageNumber)
+		if err != nil {
+			return plugin, WrapError(err)
+		}
+		request.PageNumber = page
+	}
+
+	var filteredPluginsTemp []cloudapi.PluginAttribute
+	for _, plugin := range allPlugins {
+		if plugin.PluginId == pluginId {
+			filteredPluginsTemp = append(filteredPluginsTemp, plugin)
+		}
+	}
+
+	if len(filteredPluginsTemp) < 1 {
+		return plugin, WrapErrorf(Error(GetNotFoundMessage("ApiGatewayPluginAttachment", id)), NotFoundMsg, ProviderERROR)
+	}
+
+	plugin = &filteredPluginsTemp[0]
+	return plugin, nil
 }
 
 func (s *CloudApiService) DescribeApiGatewayVpcAccess(id string) (*cloudapi.VpcAccessAttribute, error) {
@@ -484,4 +544,143 @@ func (s *CloudApiService) tagsFromMap(m map[string]interface{}) []cloudapi.TagRe
 	}
 
 	return result
+}
+
+func (s *CloudApiService) DescribeApiGatewayBackend(id string) (object map[string]interface{}, err error) {
+	conn, err := s.client.NewApigatewayClient()
+	if err != nil {
+		return object, WrapError(err)
+	}
+
+	request := map[string]interface{}{
+		"BackendId": id,
+	}
+
+	var response map[string]interface{}
+	action := "DescribeBackendInfo"
+	runtime := util.RuntimeOptions{}
+	runtime.SetAutoretry(true)
+	wait := incrementalWait(3*time.Second, 3*time.Second)
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		resp, err := conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2016-07-14"), StringPointer("AK"), nil, request, &runtime)
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		response = resp
+		addDebug(action, response, request)
+		return nil
+	})
+	if err != nil {
+		if IsExpectedErrors(err, []string{"NotFoundBackend"}) {
+			return object, WrapErrorf(err, NotFoundMsg, AlibabaCloudSdkGoERROR)
+		}
+		return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
+	}
+	v, err := jsonpath.Get("$.BackendInfo", response)
+	if err != nil {
+		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$.BackendInfo", response)
+	}
+	return v.(map[string]interface{}), nil
+}
+
+func (s *CloudApiService) DescribeApiGatewayLogConfig(id string) (object map[string]interface{}, err error) {
+	var response map[string]interface{}
+	conn, err := s.client.NewApigatewayClient()
+	if err != nil {
+		return nil, WrapError(err)
+	}
+	action := "DescribeLogConfig"
+	request := map[string]interface{}{
+		"LogType": id,
+	}
+	runtime := util.RuntimeOptions{}
+	runtime.SetAutoretry(true)
+	wait := incrementalWait(3*time.Second, 3*time.Second)
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2016-07-14"), StringPointer("AK"), nil, request, &runtime)
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		return nil
+	})
+	addDebug(action, response, request)
+	if err != nil {
+		return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
+	}
+	v, err := jsonpath.Get("$.LogInfos.LogInfo", response)
+	if err != nil {
+		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$.LogInfos.LogInfo", response)
+	}
+	if len(v.([]interface{})) < 1 {
+		return object, WrapErrorf(Error(GetNotFoundMessage("ApiGateway", id)), NotFoundWithResponse, response)
+	} else {
+		if fmt.Sprint(v.([]interface{})[0].(map[string]interface{})["LogType"]) != id {
+			return object, WrapErrorf(Error(GetNotFoundMessage("ApiGateway", id)), NotFoundWithResponse, response)
+		}
+	}
+	object = v.([]interface{})[0].(map[string]interface{})
+	return object, nil
+}
+
+func (s *CloudApiService) DescribeApiGatewayModel(id string) (object map[string]interface{}, err error) {
+	var response map[string]interface{}
+	action := "DescribeModels"
+
+	conn, err := s.client.NewApigatewayClient()
+	if err != nil {
+		return nil, WrapError(err)
+	}
+
+	parts, err := ParseResourceId(id, 2)
+	if err != nil {
+		return nil, WrapError(err)
+	}
+	request := map[string]interface{}{
+		"GroupId":   parts[0],
+		"ModelName": parts[1],
+	}
+
+	runtime := util.RuntimeOptions{}
+	runtime.SetAutoretry(true)
+	wait := incrementalWait(3*time.Second, 3*time.Second)
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2016-07-14"), StringPointer("AK"), nil, request, &runtime)
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		return nil
+	})
+	addDebug(action, response, request)
+	if err != nil {
+		return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
+	}
+
+	v, err := jsonpath.Get("$.ModelDetails.ModelDetail", response)
+	if err != nil {
+		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$.ModelDetails.ModelDetail", response)
+	}
+
+	if len(v.([]interface{})) < 1 {
+		return object, WrapErrorf(Error(GetNotFoundMessage("ApiGateway", id)), NotFoundWithResponse, response)
+	} else {
+		if fmt.Sprint(v.([]interface{})[0].(map[string]interface{})["ModelName"]) != parts[1] {
+			return object, WrapErrorf(Error(GetNotFoundMessage("ApiGateway", id)), NotFoundWithResponse, response)
+		}
+	}
+
+	object = v.([]interface{})[0].(map[string]interface{})
+
+	return object, nil
 }

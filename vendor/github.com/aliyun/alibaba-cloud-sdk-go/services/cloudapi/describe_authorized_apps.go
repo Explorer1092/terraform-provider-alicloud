@@ -21,7 +21,6 @@ import (
 )
 
 // DescribeAuthorizedApps invokes the cloudapi.DescribeAuthorizedApps API synchronously
-// api document: https://help.aliyun.com/api/cloudapi/describeauthorizedapps.html
 func (client *Client) DescribeAuthorizedApps(request *DescribeAuthorizedAppsRequest) (response *DescribeAuthorizedAppsResponse, err error) {
 	response = CreateDescribeAuthorizedAppsResponse()
 	err = client.DoAction(request, response)
@@ -29,8 +28,6 @@ func (client *Client) DescribeAuthorizedApps(request *DescribeAuthorizedAppsRequ
 }
 
 // DescribeAuthorizedAppsWithChan invokes the cloudapi.DescribeAuthorizedApps API asynchronously
-// api document: https://help.aliyun.com/api/cloudapi/describeauthorizedapps.html
-// asynchronous document: https://help.aliyun.com/document_detail/66220.html
 func (client *Client) DescribeAuthorizedAppsWithChan(request *DescribeAuthorizedAppsRequest) (<-chan *DescribeAuthorizedAppsResponse, <-chan error) {
 	responseChan := make(chan *DescribeAuthorizedAppsResponse, 1)
 	errChan := make(chan error, 1)
@@ -53,8 +50,6 @@ func (client *Client) DescribeAuthorizedAppsWithChan(request *DescribeAuthorized
 }
 
 // DescribeAuthorizedAppsWithCallback invokes the cloudapi.DescribeAuthorizedApps API asynchronously
-// api document: https://help.aliyun.com/api/cloudapi/describeauthorizedapps.html
-// asynchronous document: https://help.aliyun.com/document_detail/66220.html
 func (client *Client) DescribeAuthorizedAppsWithCallback(request *DescribeAuthorizedAppsRequest, callback func(response *DescribeAuthorizedAppsResponse, err error)) <-chan int {
 	result := make(chan int, 1)
 	err := client.AddAsyncTask(func() {
@@ -90,11 +85,11 @@ type DescribeAuthorizedAppsRequest struct {
 // DescribeAuthorizedAppsResponse is the response struct for api DescribeAuthorizedApps
 type DescribeAuthorizedAppsResponse struct {
 	*responses.BaseResponse
-	RequestId      string         `json:"RequestId" xml:"RequestId"`
-	TotalCount     int            `json:"TotalCount" xml:"TotalCount"`
-	PageSize       int            `json:"PageSize" xml:"PageSize"`
-	PageNumber     int            `json:"PageNumber" xml:"PageNumber"`
-	AuthorizedApps AuthorizedApps `json:"AuthorizedApps" xml:"AuthorizedApps"`
+	PageNumber     int                                    `json:"PageNumber" xml:"PageNumber"`
+	RequestId      string                                 `json:"RequestId" xml:"RequestId"`
+	PageSize       int                                    `json:"PageSize" xml:"PageSize"`
+	TotalCount     int                                    `json:"TotalCount" xml:"TotalCount"`
+	AuthorizedApps AuthorizedAppsInDescribeAuthorizedApps `json:"AuthorizedApps" xml:"AuthorizedApps"`
 }
 
 // CreateDescribeAuthorizedAppsRequest creates a request to invoke DescribeAuthorizedApps API

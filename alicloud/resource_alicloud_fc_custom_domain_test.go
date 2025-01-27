@@ -187,7 +187,7 @@ func testSweepFCCustomDomain(region string) error {
 }
 
 func TestAccAlicloudFCCustomDomainUpdate(t *testing.T) {
-	checkoutSupportedRegions(t, true, connectivity.FCCustomDomainSupportRegions)
+	checkoutSupportedRegions(t, true, connectivity.FCV2FunctionSupportRegions)
 	var v *fc.GetCustomDomainOutput
 	rand := acctest.RandIntRange(10000, 999999)
 	name := fmt.Sprintf("tf-testacc-%s-alicloudfccustomdomain-%d-cd", defaultRegionToTest, rand)
@@ -207,13 +207,13 @@ func TestAccAlicloudFCCustomDomainUpdate(t *testing.T) {
 	testAccConfig := resourceTestAccConfigFunc(resourceId, name, resourceFcCustomDomainConfigDependence)
 
 	resource.Test(t, resource.TestCase{
-		PreCheck:     func() { testAccPreCheckWithRegions(t, false, connectivity.FcNoSupportedRegions) },
+		PreCheck:     func() { testAccPreCheckWithRegions(t, true, connectivity.FCV2FunctionSupportRegions) },
 		Providers:    testAccProviders,
 		CheckDestroy: rac.checkResourceDestroy(),
 		Steps: []resource.TestStep{
 			{
 				Config: testAccConfig(map[string]interface{}{
-					"domain_name": "alicloud-provider.shop",
+					"domain_name": "${alicloud_alidns_record.record.domain_name}",
 					"protocol":    "HTTP",
 				}),
 				Check: resource.ComposeTestCheckFunc(
@@ -229,7 +229,6 @@ func TestAccAlicloudFCCustomDomainUpdate(t *testing.T) {
 			},
 			{
 				Config: testAccConfig(map[string]interface{}{
-					"protocol": "HTTP,HTTPS",
 					"route_config": []map[string]interface{}{
 						{
 							"path":          "/*",
@@ -246,17 +245,9 @@ func TestAccAlicloudFCCustomDomainUpdate(t *testing.T) {
 							"methods":       []string{"HEAD", "PATCH"},
 						},
 					},
-					"cert_config": []map[string]interface{}{
-						{
-							"cert_name":   "test",
-							"private_key": testFcPrivateKey,
-							"certificate": testFcCertificate,
-						},
-					},
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
-						"protocol":                     "HTTP,HTTPS",
 						"route_config.0.path":          "/*",
 						"route_config.0.service_name":  name,
 						"route_config.0.function_name": name,
@@ -267,8 +258,25 @@ func TestAccAlicloudFCCustomDomainUpdate(t *testing.T) {
 						"route_config.1.qualifier":     "?region",
 						"route_config.1.methods.0":     "HEAD",
 						"route_config.1.methods.1":     "PATCH",
-						"cert_config.0.cert_name":      "test",
-						"cert_config.0.certificate":    strings.Replace(testFcCertificate, `\n`, "\n", -1),
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"protocol": "HTTP,HTTPS",
+					"cert_config": []map[string]interface{}{
+						{
+							"cert_name":   name,
+							"private_key": testFcPrivateKey,
+							"certificate": testFcCertificate,
+						},
+					},
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"protocol":                  "HTTP,HTTPS",
+						"cert_config.0.cert_name":   name,
+						"cert_config.0.certificate": strings.Replace(testFcCertificate, `\n`, "\n", -1),
 					}),
 				),
 			},
@@ -304,8 +312,21 @@ resource "alicloud_fc_function" "default" {
   oss_bucket = "${alicloud_oss_bucket.default.id}"
   oss_key = "${alicloud_oss_bucket_object.default.key}"
   memory_size = 512
-  runtime = "python2.7"
+  runtime = "python3.9"
   handler = "hello.handler"
+}
+data "alicloud_account" "current" {}
+data "alicloud_regions" "current" {
+  current = true
+}
+
+resource "alicloud_alidns_record" "record" {
+  domain_name = "tftestacc.com"
+  rr          = "@"
+  type        = "CNAME"
+  value       = "${data.alicloud_account.current.id}.${data.alicloud_regions.current.ids.0}.fc.aliyuncs.com"
+  remark      = "tf-example"
+  status      = "ENABLE"
 }
 `, name)
 }

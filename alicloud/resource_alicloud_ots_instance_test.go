@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"testing"
 
+	otsTunnel "github.com/aliyun/aliyun-tablestore-go-sdk/tunnel"
+
 	"log"
 	"strings"
 	"time"
@@ -68,20 +70,20 @@ func testSweepOtsInstances(region string) error {
 			req.PageNum = page
 		}
 	}
-	sweeped := false
-
 	for _, v := range insts {
 		name := v.InstanceName
 		skip := true
-		for _, prefix := range prefixes {
-			if strings.HasPrefix(strings.ToLower(name), strings.ToLower(prefix)) {
-				skip = false
-				break
+		if !sweepAll() {
+			for _, prefix := range prefixes {
+				if strings.HasPrefix(strings.ToLower(name), strings.ToLower(prefix)) {
+					skip = false
+					break
+				}
 			}
-		}
-		if skip {
-			log.Printf("[INFO] Skipping OTS Instance: %s", name)
-			continue
+			if skip {
+				log.Printf("[INFO] Skipping OTS Instance: %s", name)
+				continue
+			}
 		}
 		log.Printf("[INFO] Deleting OTS Instance %s table stores.", name)
 		raw, err := otsService.client.WithTableStoreClient(name, func(tableStoreClient *tablestore.TableStoreClient) (interface{}, error) {
@@ -93,6 +95,7 @@ func testSweepOtsInstances(region string) error {
 		tables, _ := raw.(*tablestore.ListTableResponse)
 		if tables != nil && len(tables.TableNames) > 0 {
 			for _, t := range tables.TableNames {
+				sweepTunnelsInTable(otsService.client, name, t)
 				req := new(tablestore.DeleteTableRequest)
 				req.TableName = t
 				if _, err := otsService.client.WithTableStoreClient(name, func(tableStoreClient *tablestore.TableStoreClient) (interface{}, error) {
@@ -111,17 +114,40 @@ func testSweepOtsInstances(region string) error {
 		})
 		if err != nil {
 			log.Printf("[ERROR] Failed to delete OTS Instance (%s): %s", name, err)
-		} else {
-			sweeped = true
 		}
 	}
-	if sweeped {
-		time.Sleep(3 * time.Minute)
-	}
+
 	return nil
 }
 
-func TestAccAlicloudOtsInstance_basic(t *testing.T) {
+func sweepTunnelsInTable(client *connectivity.AliyunClient, instanceName string, tableName string) {
+	log.Printf("[INFO] Deleting OTS Tunnels, instance: %s, table: %s", instanceName, tableName)
+	raw, err := client.WithTableStoreTunnelClient(instanceName, func(tunnelClient otsTunnel.TunnelClient) (interface{}, error) {
+		return tunnelClient.ListTunnel(&otsTunnel.ListTunnelRequest{
+			TableName: tableName,
+		})
+	})
+	if err != nil {
+		log.Printf("[ERROR] List OTS Tunnel failed, instance: %s, table: %s, error: %#v", instanceName, tableName, err)
+		return
+	}
+
+	tunnels, _ := raw.(*otsTunnel.ListTunnelResponse)
+	if tunnels != nil && len(tunnels.Tunnels) > 0 {
+		for _, t := range tunnels.Tunnels {
+			if _, err := client.WithTableStoreTunnelClient(instanceName, func(tunnelClient otsTunnel.TunnelClient) (interface{}, error) {
+				return tunnelClient.DeleteTunnel(&otsTunnel.DeleteTunnelRequest{
+					TableName:  tableName,
+					TunnelName: t.TunnelName,
+				})
+			}); err != nil {
+				log.Printf("[ERROR] Delete OTS Tunnel failed, instance: %s, table: %s, tunnel: %s, error: %#v", instanceName, tableName, t.TunnelName, err)
+			}
+		}
+	}
+}
+
+func TestAccAliCloudOtsInstance_basic(t *testing.T) {
 	var v ots.InstanceInfo
 
 	resourceId := "alicloud_ots_instance.default"
@@ -157,9 +183,13 @@ func TestAccAlicloudOtsInstance_basic(t *testing.T) {
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
-						"name":          name,
-						"description":   name,
-						"instance_type": "Capacity",
+						"name":                 name,
+						"description":          name,
+						"instance_type":        "Capacity",
+						"network_type_acl.#":   "3",
+						"network_source_acl.#": "1",
+						"resource_group_id":    CHECKSET,
+						"accessed_by":          "Any",
 					}),
 				),
 			},
@@ -174,7 +204,10 @@ func TestAccAlicloudOtsInstance_basic(t *testing.T) {
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
-						"accessed_by": "Vpc",
+						"accessed_by":          "Vpc",
+						"network_type_acl.#":   CHECKSET,
+						"network_source_acl.#": CHECKSET,
+						"resource_group_id":    CHECKSET,
 					}),
 				),
 			},
@@ -184,12 +217,16 @@ func TestAccAlicloudOtsInstance_basic(t *testing.T) {
 						"Created": "TF",
 						"For":     "acceptance test",
 					},
+					"resource_group_id": "${data.alicloud_resource_manager_resource_groups.default.groups.0.id}",
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
-						"tags.%":       "2",
-						"tags.Created": "TF",
-						"tags.For":     "acceptance test",
+						"tags.%":               "2",
+						"tags.Created":         "TF",
+						"tags.For":             "acceptance test",
+						"network_type_acl.#":   CHECKSET,
+						"network_source_acl.#": CHECKSET,
+						"resource_group_id":    CHECKSET,
 					}),
 				),
 			},
@@ -203,10 +240,13 @@ func TestAccAlicloudOtsInstance_basic(t *testing.T) {
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
-						"tags.%":       "3",
-						"tags.Created": "TF",
-						"tags.For":     "acceptance test",
-						"tags.Updated": "TF",
+						"tags.%":               "3",
+						"tags.Created":         "TF",
+						"tags.For":             "acceptance test",
+						"tags.Updated":         "TF",
+						"network_type_acl.#":   CHECKSET,
+						"network_source_acl.#": CHECKSET,
+						"resource_group_id":    CHECKSET,
 					}),
 				),
 			},
@@ -217,11 +257,14 @@ func TestAccAlicloudOtsInstance_basic(t *testing.T) {
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
-						"accessed_by":  "Any",
-						"tags.%":       "0",
-						"tags.Created": REMOVEKEY,
-						"tags.For":     REMOVEKEY,
-						"tags.Updated": REMOVEKEY,
+						"accessed_by":          "Vpc",
+						"tags.%":               "0",
+						"tags.Created":         REMOVEKEY,
+						"tags.For":             REMOVEKEY,
+						"tags.Updated":         REMOVEKEY,
+						"network_type_acl.#":   CHECKSET,
+						"network_source_acl.#": CHECKSET,
+						"resource_group_id":    CHECKSET,
 					}),
 				),
 			},
@@ -229,7 +272,135 @@ func TestAccAlicloudOtsInstance_basic(t *testing.T) {
 	})
 }
 
-func TestAccAlicloudOtsInstanceHighPerformance(t *testing.T) {
+func TestAccAliCloudOtsInstance_acl(t *testing.T) {
+	var v ots.InstanceInfo
+
+	resourceId := "alicloud_ots_instance.default"
+	ra := resourceAttrInit(resourceId, otsInstanceBasicMap)
+
+	serviceFunc := func() interface{} {
+		return &OtsService{testAccProvider.Meta().(*connectivity.AliyunClient)}
+	}
+	rc := resourceCheckInit(resourceId, &v, serviceFunc)
+
+	rac := resourceAttrCheckInit(rc, ra)
+
+	testAccCheck := rac.resourceAttrMapUpdateSet()
+	rand := acctest.RandIntRange(10000, 99999)
+	name := fmt.Sprintf("tf-testAcc%d", rand)
+	testAccConfig := resourceTestAccConfigFunc(resourceId, name, resourceOtsInstanceConfigDependence)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+			testAccPreCheckWithRegions(t, false, connectivity.OtsCapacityNoSupportedRegions)
+		},
+		// module name
+		IDRefreshName: resourceId,
+		Providers:     testAccProviders,
+		CheckDestroy:  rac.checkResourceDestroy(),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"name":               name,
+					"description":        name,
+					"instance_type":      "Capacity",
+					"network_type_acl":   []string{"INTERNET", "VPC"},
+					"network_source_acl": []string{"TRUST_PROXY"},
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"name":                 name,
+						"description":          name,
+						"instance_type":        "Capacity",
+						"network_type_acl.#":   "2",
+						"network_source_acl.#": "1",
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"name":        name,
+					"description": name,
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"name":                 name,
+						"description":          name,
+						"network_type_acl.#":   "2",
+						"network_source_acl.#": "1",
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"name":               name,
+					"description":        name,
+					"network_type_acl":   []string{"VPC"},
+					"network_source_acl": []string{"TRUST_PROXY"},
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"name":                 name,
+						"description":          name,
+						"network_type_acl.#":   "1",
+						"network_source_acl.#": "1",
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"name":               name,
+					"description":        name,
+					"network_type_acl":   []string{"VPC"},
+					"network_source_acl": []string{},
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"name":                 name,
+						"description":          name,
+						"network_type_acl.#":   "1",
+						"network_source_acl.#": "0",
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"name":               name,
+					"description":        name,
+					"network_type_acl":   []string{"CLASSIC"},
+					"network_source_acl": []string{"TRUST_PROXY"},
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"name":                 name,
+						"description":          name,
+						"network_type_acl.#":   "1",
+						"network_source_acl.#": "1",
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"name":               name,
+					"description":        name,
+					"network_type_acl":   []string{"INTERNET"},
+					"network_source_acl": []string{"TRUST_PROXY"},
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"name":                 name,
+						"description":          name,
+						"network_type_acl.#":   "1",
+						"network_source_acl.#": "1",
+					}),
+				),
+			},
+		},
+	})
+}
+
+func TestAccAliCloudOtsInstanceHighPerformance(t *testing.T) {
 	var v ots.InstanceInfo
 
 	resourceId := "alicloud_ots_instance.default"
@@ -265,9 +436,12 @@ func TestAccAlicloudOtsInstanceHighPerformance(t *testing.T) {
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
-						"name":          name,
-						"description":   name,
-						"instance_type": "HighPerformance",
+						"name":                 name,
+						"description":          name,
+						"instance_type":        "HighPerformance",
+						"network_type_acl.#":   CHECKSET,
+						"network_source_acl.#": CHECKSET,
+						"resource_group_id":    CHECKSET,
 					}),
 				),
 			},
@@ -282,7 +456,10 @@ func TestAccAlicloudOtsInstanceHighPerformance(t *testing.T) {
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
-						"accessed_by": "Vpc",
+						"accessed_by":          "Vpc",
+						"network_type_acl.#":   CHECKSET,
+						"network_source_acl.#": CHECKSET,
+						"resource_group_id":    CHECKSET,
 					}),
 				),
 			},
@@ -295,9 +472,12 @@ func TestAccAlicloudOtsInstanceHighPerformance(t *testing.T) {
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
-						"tags.%":       "2",
-						"tags.Created": "TF",
-						"tags.For":     "acceptance test",
+						"tags.%":               "2",
+						"tags.Created":         "TF",
+						"tags.For":             "acceptance test",
+						"network_type_acl.#":   CHECKSET,
+						"network_source_acl.#": CHECKSET,
+						"resource_group_id":    CHECKSET,
 					}),
 				),
 			},
@@ -311,10 +491,13 @@ func TestAccAlicloudOtsInstanceHighPerformance(t *testing.T) {
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
-						"tags.%":       "3",
-						"tags.Created": "TF",
-						"tags.For":     "acceptance test",
-						"tags.Updated": "TF",
+						"tags.%":               "3",
+						"tags.Created":         "TF",
+						"tags.For":             "acceptance test",
+						"tags.Updated":         "TF",
+						"network_type_acl.#":   CHECKSET,
+						"network_source_acl.#": CHECKSET,
+						"resource_group_id":    CHECKSET,
 					}),
 				),
 			},
@@ -325,11 +508,14 @@ func TestAccAlicloudOtsInstanceHighPerformance(t *testing.T) {
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
-						"accessed_by":  "Any",
-						"tags.%":       "0",
-						"tags.Created": REMOVEKEY,
-						"tags.For":     REMOVEKEY,
-						"tags.Updated": REMOVEKEY,
+						"accessed_by":          "Vpc",
+						"tags.%":               "0",
+						"tags.Created":         REMOVEKEY,
+						"tags.For":             REMOVEKEY,
+						"tags.Updated":         REMOVEKEY,
+						"network_type_acl.#":   CHECKSET,
+						"network_source_acl.#": CHECKSET,
+						"resource_group_id":    CHECKSET,
 					}),
 				),
 			},
@@ -337,7 +523,7 @@ func TestAccAlicloudOtsInstanceHighPerformance(t *testing.T) {
 	})
 }
 
-func TestAccAlicloudOtsInstance_multi(t *testing.T) {
+func TestAccAliCloudOtsInstance_multi(t *testing.T) {
 	var v ots.InstanceInfo
 
 	resourceId := "alicloud_ots_instance.default.4"
@@ -381,7 +567,12 @@ func TestAccAlicloudOtsInstance_multi(t *testing.T) {
 }
 
 func resourceOtsInstanceConfigDependence(name string) string {
-	return ""
+	return fmt.Sprintf(`
+		variable "name" {
+			default = "%s"
+		}
+		
+		data "alicloud_resource_manager_resource_groups" "default" {}`, name)
 }
 
 var otsInstanceBasicMap = map[string]string{
@@ -391,7 +582,7 @@ var otsInstanceBasicMap = map[string]string{
 	"description":   CHECKSET,
 }
 
-func testAccCheckOtsInstanceExist(n string, instance *ots.InstanceInfo) resource.TestCheckFunc {
+func testAccCheckOtsInstanceExist(n string, instance *RestOtsInstanceInfo) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		rs, ok := s.RootModule().Resources[n]
 		if !ok {

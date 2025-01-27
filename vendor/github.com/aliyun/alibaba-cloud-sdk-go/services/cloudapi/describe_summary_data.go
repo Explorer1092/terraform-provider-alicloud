@@ -21,7 +21,6 @@ import (
 )
 
 // DescribeSummaryData invokes the cloudapi.DescribeSummaryData API synchronously
-// api document: https://help.aliyun.com/api/cloudapi/describesummarydata.html
 func (client *Client) DescribeSummaryData(request *DescribeSummaryDataRequest) (response *DescribeSummaryDataResponse, err error) {
 	response = CreateDescribeSummaryDataResponse()
 	err = client.DoAction(request, response)
@@ -29,8 +28,6 @@ func (client *Client) DescribeSummaryData(request *DescribeSummaryDataRequest) (
 }
 
 // DescribeSummaryDataWithChan invokes the cloudapi.DescribeSummaryData API asynchronously
-// api document: https://help.aliyun.com/api/cloudapi/describesummarydata.html
-// asynchronous document: https://help.aliyun.com/document_detail/66220.html
 func (client *Client) DescribeSummaryDataWithChan(request *DescribeSummaryDataRequest) (<-chan *DescribeSummaryDataResponse, <-chan error) {
 	responseChan := make(chan *DescribeSummaryDataResponse, 1)
 	errChan := make(chan error, 1)
@@ -53,8 +50,6 @@ func (client *Client) DescribeSummaryDataWithChan(request *DescribeSummaryDataRe
 }
 
 // DescribeSummaryDataWithCallback invokes the cloudapi.DescribeSummaryData API asynchronously
-// api document: https://help.aliyun.com/api/cloudapi/describesummarydata.html
-// asynchronous document: https://help.aliyun.com/document_detail/66220.html
 func (client *Client) DescribeSummaryDataWithCallback(request *DescribeSummaryDataRequest, callback func(response *DescribeSummaryDataResponse, err error)) <-chan int {
 	result := make(chan int, 1)
 	err := client.AddAsyncTask(func() {
@@ -85,10 +80,11 @@ type DescribeSummaryDataResponse struct {
 	*responses.BaseResponse
 	RequestId              string `json:"RequestId" xml:"RequestId"`
 	UsageGroupNum          int    `json:"UsageGroupNum" xml:"UsageGroupNum"`
-	UsageApiNum            int    `json:"UsageApiNum" xml:"UsageApiNum"`
 	UsageInstanceNum       int    `json:"UsageInstanceNum" xml:"UsageInstanceNum"`
-	ComeingSoonInstanceNum int    `json:"ComeingSoonInstanceNum" xml:"ComeingSoonInstanceNum"`
+	UsageApiNum            int    `json:"UsageApiNum" xml:"UsageApiNum"`
 	Region                 string `json:"Region" xml:"Region"`
+	ComeingSoonInstanceNum int    `json:"ComeingSoonInstanceNum" xml:"ComeingSoonInstanceNum"`
+	ExpireInstanceNum      int    `json:"ExpireInstanceNum" xml:"ExpireInstanceNum"`
 }
 
 // CreateDescribeSummaryDataRequest creates a request to invoke DescribeSummaryData API

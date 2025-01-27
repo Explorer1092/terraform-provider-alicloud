@@ -7,17 +7,23 @@ description: |-
   Provides a Alicloud Application Real-Time Monitoring Service (ARMS) Alert Contact resource.
 ---
 
-# alicloud\_arms\_alert\_contact
+# alicloud_arms_alert_contact
 
 Provides a Application Real-Time Monitoring Service (ARMS) Alert Contact resource.
 
-For information about Application Real-Time Monitoring Service (ARMS) Alert Contact and how to use it, see [What is Alert Contact](https://www.alibabacloud.com/help/en/doc-detail/42953.htm).
+For information about Application Real-Time Monitoring Service (ARMS) Alert Contact and how to use it, see [What is Alert Contact](https://www.alibabacloud.com/help/en/application-real-time-monitoring-service/latest/createalertcontact).
 
--> **NOTE:** Available in v1.129.0+.
+-> **NOTE:** Available since v1.129.0.
 
 ## Example Usage
 
 Basic Usage
+
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_arms_alert_contact&exampleId=87d466b0-3a49-65d7-33aa-377007af720e98c756b9&activeTab=example&spm=docs.r.arms_alert_contact.0.87d466b03a&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
 
 ```terraform
 resource "alicloud_arms_alert_contact" "example" {
@@ -49,6 +55,6 @@ The following attributes are exported:
 
 Application Real-Time Monitoring Service (ARMS) Alert Contact can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_arms_alert_contact.example <id>
 ```

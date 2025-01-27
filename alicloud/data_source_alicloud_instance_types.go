@@ -1,11 +1,17 @@
 package alicloud
 
 import (
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
+
+	"github.com/PaesslerAG/jsonpath"
+	util "github.com/alibabacloud-go/tea-utils/service"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/bssopenapi"
 
@@ -13,11 +19,10 @@ import (
 	"github.com/aliyun/terraform-provider-alicloud/alicloud/connectivity"
 	"github.com/denverdino/aliyungo/common"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
-	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
 )
 
 type instanceTypeWithOriginalPrice struct {
-	InstanceType  ecs.InstanceType
+	InstanceType  map[string]interface{}
 	OriginalPrice float64
 }
 
@@ -35,7 +40,7 @@ func dataSourceAlicloudInstanceTypes() *schema.Resource {
 				Type:         schema.TypeString,
 				Optional:     true,
 				ForceNew:     true,
-				ValidateFunc: validation.StringMatch(regexp.MustCompile(`^ecs\..*`), "prefix must be 'ecs.'"),
+				ValidateFunc: StringMatch(regexp.MustCompile(`^ecs\..*`), "prefix must be 'ecs.'"),
 			},
 			"cpu_core_count": {
 				Type:     schema.TypeInt,
@@ -63,20 +68,25 @@ func dataSourceAlicloudInstanceTypes() *schema.Resource {
 				ForceNew: true,
 				Default:  PostPaid,
 				// %q must contain a valid InstanceChargeType, expected common.PrePaid, common.PostPaid
-				ValidateFunc: validation.StringInSlice([]string{string(common.PrePaid), string(common.PostPaid)}, false),
+				ValidateFunc: StringInSlice([]string{string(common.PrePaid), string(common.PostPaid)}, false),
 			},
 			"network_type": {
 				Type:         schema.TypeString,
 				Optional:     true,
 				ForceNew:     true,
-				ValidateFunc: validation.StringInSlice([]string{"Vpc", "Classic"}, false),
+				ValidateFunc: StringInSlice([]string{"Vpc", "Classic"}, false),
+			},
+			"instance_type": {
+				Type:     schema.TypeString,
+				Optional: true,
+				ForceNew: true,
 			},
 			"spot_strategy": {
 				Type:         schema.TypeString,
 				Optional:     true,
 				ForceNew:     true,
 				Default:      NoSpot,
-				ValidateFunc: validation.StringInSlice([]string{"NoSpot", "SpotAsPriceGo", "SpotWithPriceLimit"}, false),
+				ValidateFunc: StringInSlice([]string{"NoSpot", "SpotAsPriceGo", "SpotWithPriceLimit"}, false),
 			},
 			"eni_amount": {
 				Type:     schema.TypeInt,
@@ -87,7 +97,7 @@ func dataSourceAlicloudInstanceTypes() *schema.Resource {
 				Type:     schema.TypeString,
 				Optional: true,
 				ForceNew: true,
-				ValidateFunc: validation.StringInSlice([]string{
+				ValidateFunc: StringInSlice([]string{
 					string(KubernetesNodeMaster),
 					string(KubernetesNodeWorker),
 				}, false),
@@ -100,7 +110,7 @@ func dataSourceAlicloudInstanceTypes() *schema.Resource {
 				Type:     schema.TypeString,
 				Optional: true,
 				ForceNew: true,
-				ValidateFunc: validation.StringInSlice([]string{
+				ValidateFunc: StringInSlice([]string{
 					"CPU",
 					"Memory",
 					"Price",
@@ -110,7 +120,7 @@ func dataSourceAlicloudInstanceTypes() *schema.Resource {
 				Type:         schema.TypeString,
 				Optional:     true,
 				ForceNew:     true,
-				ValidateFunc: validation.StringInSlice([]string{"cloud", "ephemeral_ssd", "cloud_essd", "cloud_efficiency", "cloud_ssd"}, false),
+				ValidateFunc: StringInSlice([]string{"cloud", "ephemeral_ssd", "cloud_essd", "cloud_efficiency", "cloud_ssd", "cloud_essd_entry", "cloud_auto"}, false),
 			},
 			"output_file": {
 				Type:     schema.TypeString,
@@ -123,6 +133,16 @@ func dataSourceAlicloudInstanceTypes() *schema.Resource {
 			},
 			"image_id": {
 				Type:     schema.TypeString,
+				Optional: true,
+				ForceNew: true,
+			},
+			"minimum_eni_ipv6_address_quantity": {
+				Type:     schema.TypeInt,
+				Optional: true,
+				ForceNew: true,
+			},
+			"minimum_eni_private_ip_address_quantity": {
+				Type:     schema.TypeInt,
 				Optional: true,
 				ForceNew: true,
 			},
@@ -193,6 +213,34 @@ func dataSourceAlicloudInstanceTypes() *schema.Resource {
 							Type:     schema.TypeInt,
 							Computed: true,
 						},
+						"eni_quantity": {
+							Type:     schema.TypeInt,
+							Computed: true,
+						},
+						"primary_eni_queue_number": {
+							Type:     schema.TypeInt,
+							Computed: true,
+						},
+						"secondary_eni_queue_number": {
+							Type:     schema.TypeInt,
+							Computed: true,
+						},
+						"eni_ipv6_address_quantity": {
+							Type:     schema.TypeInt,
+							Computed: true,
+						},
+						"maximum_queue_number_per_eni": {
+							Type:     schema.TypeInt,
+							Computed: true,
+						},
+						"total_eni_queue_quantity": {
+							Type:     schema.TypeInt,
+							Computed: true,
+						},
+						"eni_private_ip_address_quantity": {
+							Type:     schema.TypeInt,
+							Computed: true,
+						},
 						"nvme_support": {
 							Type:     schema.TypeString,
 							Computed: true,
@@ -255,100 +303,156 @@ func dataSourceAlicloudInstanceTypesRead(d *schema.ResourceData, meta interface{
 
 	cpu := d.Get("cpu_core_count").(int)
 	mem := d.Get("memory_size").(float64)
-	family := strings.TrimSpace(d.Get("instance_type_family").(string))
 	gpuAmount := d.Get("gpu_amount").(int)
-	gpuSpec := d.Get("gpu_spec").(string)
 
-	req := ecs.CreateDescribeInstanceTypesRequest()
-	req.InstanceTypeFamily = family
+	request := make(map[string]interface{})
 
-	raw, err := client.WithEcsClient(func(ecsClient *ecs.Client) (interface{}, error) {
-		return ecsClient.DescribeInstanceTypes(req)
-	})
+	if v, ok := d.GetOkExists("minimum_eni_ipv6_address_quantity"); ok {
+		request["MinimumEniIpv6AddressQuantity"] = v
+	}
+
+	if v, ok := d.GetOkExists("minimum_eni_private_ip_address_quantity"); ok {
+		request["MinimumEniPrivateIpAddressQuantity"] = v
+	}
+
+	if v, ok := d.GetOk("instance_type_family"); ok {
+		request["InstanceTypeFamily"] = v
+	}
+
+	if v, ok := d.GetOk("gpu_spec"); ok {
+		request["GPUSpec"] = v
+	}
+	if v, ok := d.GetOk("system_disk_category"); ok {
+		request["SystemDiskCategory"] = v
+	}
+	if v, ok := d.GetOk("instance_type"); ok {
+		request["InstanceType"] = v
+	}
+
+	conn, err := client.NewEcsClient()
 	if err != nil {
-		return err
+		return WrapError(err)
+	}
+	var objects []interface{}
+	var response map[string]interface{}
+
+	for {
+		action := "DescribeInstanceTypes"
+		runtime := util.RuntimeOptions{}
+		runtime.SetAutoretry(true)
+		wait := incrementalWait(3*time.Second, 3*time.Second)
+		err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+			resp, err := conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2014-05-26"), StringPointer("AK"), nil, request, &runtime)
+			if err != nil {
+				if NeedRetry(err) {
+					wait()
+					return resource.RetryableError(err)
+				}
+				return resource.NonRetryableError(err)
+			}
+			response = resp
+			addDebug(action, response, request)
+			return nil
+		})
+		if err != nil {
+			return WrapErrorf(err, DataDefaultErrorMsg, "alicloud_instance_types", action, AlibabaCloudSdkGoERROR)
+		}
+		resp, err := jsonpath.Get("$.InstanceTypes.InstanceType", response)
+		if err != nil {
+			return WrapErrorf(err, FailedGetAttributeMsg, action, "$.InstanceTypes.InstanceType", response)
+		}
+		result, _ := resp.([]interface{})
+		for _, v := range result {
+			item := v.(map[string]interface{})
+			objects = append(objects, item)
+		}
+		if nextToken, ok := response["NextToken"].(string); ok && nextToken != "" {
+			request["NextToken"] = nextToken
+		} else {
+			break
+		}
 	}
 	var instanceTypes []instanceTypeWithOriginalPrice
-	resp, _ := raw.(*ecs.DescribeInstanceTypesResponse)
-	if resp != nil {
-		imageSupportInstanceTypesMap := make(map[string]struct{}, 0)
-		imageId := strings.TrimSpace(d.Get("image_id").(string))
+	imageSupportInstanceTypesMap := make(map[string]struct{}, 0)
+	imageId := strings.TrimSpace(d.Get("image_id").(string))
+	if imageId != "" {
+		reqImageId := ecs.CreateDescribeImageSupportInstanceTypesRequest()
+		reqImageId.ImageId = imageId
+
+		raw1, err := client.WithEcsClient(func(ecsClient *ecs.Client) (interface{}, error) {
+			return ecsClient.DescribeImageSupportInstanceTypes(reqImageId)
+		})
+		if err != nil {
+			return err
+		}
+		imageSupportInstanceTypes, _ := raw1.(*ecs.DescribeImageSupportInstanceTypesResponse)
+
+		for _, types := range imageSupportInstanceTypes.InstanceTypes.InstanceType {
+			imageSupportInstanceTypesMap[types.InstanceTypeId] = struct{}{}
+		}
+	}
+
+	eniAmount := d.Get("eni_amount").(int)
+	k8sNode := strings.TrimSpace(d.Get("kubernetes_node_role").(string))
+
+	for _, v := range objects {
+		object := v.(map[string]interface{})
+		if _, ok := mapInstanceTypes[object["InstanceTypeId"].(string)]; !ok {
+			continue
+		}
+
 		if imageId != "" {
-			reqImageId := ecs.CreateDescribeImageSupportInstanceTypesRequest()
-			reqImageId.ImageId = imageId
-
-			raw1, err := client.WithEcsClient(func(ecsClient *ecs.Client) (interface{}, error) {
-				return ecsClient.DescribeImageSupportInstanceTypes(reqImageId)
-			})
-			if err != nil {
-				return err
-			}
-			imageSupportInstanceTypes, _ := raw1.(*ecs.DescribeImageSupportInstanceTypesResponse)
-
-			for _, types := range imageSupportInstanceTypes.InstanceTypes.InstanceType {
-				imageSupportInstanceTypesMap[types.InstanceTypeId] = struct{}{}
-			}
-		}
-
-		eniAmount := d.Get("eni_amount").(int)
-		k8sNode := strings.TrimSpace(d.Get("kubernetes_node_role").(string))
-		for _, types := range resp.InstanceTypes.InstanceType {
-			if _, ok := mapInstanceTypes[types.InstanceTypeId]; !ok {
-				continue
-			}
-
 			if len(imageSupportInstanceTypesMap) > 0 {
-				if _, ok := imageSupportInstanceTypesMap[types.InstanceTypeId]; !ok {
+				if _, ok := imageSupportInstanceTypesMap[object["InstanceTypeId"].(string)]; !ok {
 					continue
 				}
-			}
-
-			if cpu > 0 && types.CpuCoreCount != cpu {
+			} else {
 				continue
 			}
-
-			if mem > 0 && types.MemorySize != mem {
-				continue
-			}
-			if eniAmount > types.EniQuantity {
-				continue
-			}
-			if gpuAmount > 0 && types.GPUAmount != gpuAmount {
-				continue
-			}
-			if gpuSpec != "" && types.GPUSpec != gpuSpec {
-				continue
-			}
-			// Kubernetes node does not support instance types which family is "ecs.t5" and spec less that c2g4
-			// Kubernetes master node does not support gpu instance types which family prefixes with "ecs.gn"
-			if k8sNode != "" {
-				if types.InstanceTypeFamily == "ecs.t5" {
-					continue
-				}
-				if types.CpuCoreCount < 2 || types.MemorySize < 4 {
-					continue
-				}
-				if k8sNode == string(KubernetesNodeMaster) && strings.HasPrefix(types.InstanceTypeFamily, "ecs.gn") {
-					continue
-				}
-			}
-
-			instanceTypes = append(instanceTypes, instanceTypeWithOriginalPrice{
-				InstanceType: types,
-			})
 		}
-		sortedBy := d.Get("sorted_by").(string)
 
-		if sortedBy == "Price" && len(instanceTypes) > 0 {
-			bssopenapiService := BssopenapiService{client}
+		if cpu > 0 && formatInt(object["CpuCoreCount"]) != cpu {
+			continue
+		}
 
-			priceList, err := getEcsInstanceTypePrice(bssopenapiService, d.Get("instance_charge_type").(string), instanceTypes)
-			if err != nil {
-				return WrapError(err)
+		if mem > 0 && formatFloat64(object["MemorySize"]) != mem {
+			continue
+		}
+		if eniAmount > formatInt(object["EniQuantity"]) {
+			continue
+		}
+		if gpuAmount > 0 && formatInt(object["GPUAmount"]) != gpuAmount {
+			continue
+		}
+		// Kubernetes node does not support instance types which family is "ecs.t5" and spec less that c2g4
+		// Kubernetes master node does not support gpu instance types which family prefixes with "ecs.gn"
+		if k8sNode != "" {
+			if object["InstanceTypeFamily"].(string) == "ecs.t5" {
+				continue
 			}
-			for i := 0; i < len(instanceTypes); i++ {
-				instanceTypes[i].OriginalPrice = priceList[i]
+			if formatInt(object["CpuCoreCount"]) < 2 || formatFloat64(object["MemorySize"]) < 4 {
+				continue
 			}
+			if k8sNode == string(KubernetesNodeMaster) && strings.HasPrefix(object["InstanceTypeFamily"].(string), "ecs.gn") {
+				continue
+			}
+		}
+
+		instanceTypes = append(instanceTypes, instanceTypeWithOriginalPrice{
+			InstanceType: object,
+		})
+	}
+	sortedBy := d.Get("sorted_by").(string)
+
+	if sortedBy == "Price" && len(instanceTypes) > 0 {
+		bssopenapiService := BssopenapiService{client}
+
+		priceList, err := getEcsInstanceTypePrice(bssopenapiService, d.Get("instance_charge_type").(string), instanceTypes)
+		if err != nil {
+			return WrapError(err)
+		}
+		for i := 0; i < len(instanceTypes); i++ {
+			instanceTypes[i].OriginalPrice = priceList[i]
 		}
 	}
 
@@ -363,9 +467,9 @@ func instanceTypesDescriptionAttributes(d *schema.ResourceData, types []instance
 			case "Price":
 				return types[i].OriginalPrice < types[j].OriginalPrice
 			case "CPU":
-				return types[i].InstanceType.CpuCoreCount < types[j].InstanceType.CpuCoreCount
+				return formatInt(types[i].InstanceType["CpuCoreCount"]) < formatInt(types[j].InstanceType["CpuCoreCount"])
 			case "Memory":
-				return types[i].InstanceType.MemorySize < types[j].InstanceType.MemorySize
+				return formatFloat64(types[i].InstanceType["MemorySize"]) < formatFloat64(types[j].InstanceType["MemorySize"])
 			}
 			return false
 		})
@@ -375,37 +479,48 @@ func instanceTypesDescriptionAttributes(d *schema.ResourceData, types []instance
 	var s []map[string]interface{}
 	for _, t := range types {
 		mapping := map[string]interface{}{
-			"id":             t.InstanceType.InstanceTypeId,
-			"cpu_core_count": t.InstanceType.CpuCoreCount,
-			"memory_size":    t.InstanceType.MemorySize,
-			"family":         t.InstanceType.InstanceTypeFamily,
-			"eni_amount":     t.InstanceType.EniQuantity,
-			"nvme_support":   t.InstanceType.NvmeSupport,
+			"id":                              t.InstanceType["InstanceTypeId"],
+			"cpu_core_count":                  formatInt(t.InstanceType["CpuCoreCount"]),
+			"memory_size":                     formatFloat64(t.InstanceType["MemorySize"]),
+			"family":                          t.InstanceType["InstanceTypeFamily"],
+			"eni_amount":                      t.InstanceType["EniQuantity"],
+			"nvme_support":                    t.InstanceType["NvmeSupport"],
+			"eni_quantity":                    t.InstanceType["EniQuantity"],
+			"primary_eni_queue_number":        t.InstanceType["PrimaryEniQueueNumber"],
+			"secondary_eni_queue_number":      t.InstanceType["SecondaryEniQueueNumber"],
+			"eni_ipv6_address_quantity":       t.InstanceType["EniIpv6AddressQuantity"],
+			"maximum_queue_number_per_eni":    t.InstanceType["MaximumQueueNumberPerEni"],
+			"total_eni_queue_quantity":        t.InstanceType["TotalEniQueueQuantity"],
+			"eni_private_ip_address_quantity": t.InstanceType["EniPrivateIpAddressQuantity"],
 		}
 		if sortedBy == "Price" {
 			mapping["price"] = fmt.Sprintf("%.4f", t.OriginalPrice)
 		}
-		zoneIds := mapTypes[t.InstanceType.InstanceTypeId]
+		zoneIds := mapTypes[t.InstanceType["InstanceTypeId"].(string)]
 		sort.Strings(zoneIds)
 		mapping["availability_zones"] = zoneIds
 		gpu := map[string]interface{}{
-			"amount":   strconv.Itoa(t.InstanceType.GPUAmount),
-			"category": t.InstanceType.GPUSpec,
+			"amount":   strconv.Itoa(formatInt(t.InstanceType["GPUAmount"])),
+			"category": t.InstanceType["GPUSpec"],
 		}
 		mapping["gpu"] = gpu
 		brust := map[string]interface{}{
-			"initial_credit":  strconv.Itoa(t.InstanceType.InitialCredit),
-			"baseline_credit": strconv.Itoa(t.InstanceType.BaselineCredit),
+			"initial_credit":  strconv.Itoa(formatInt(t.InstanceType["InitialCredit"])),
+			"baseline_credit": strconv.Itoa(formatInt(t.InstanceType["BaselineCredit"])),
 		}
 		mapping["burstable_instance"] = brust
 		local := map[string]interface{}{
-			"capacity": strconv.FormatInt(t.InstanceType.LocalStorageCapacity, 10),
-			"amount":   strconv.Itoa(t.InstanceType.LocalStorageAmount),
-			"category": t.InstanceType.LocalStorageCategory,
+			"amount":   strconv.Itoa(formatInt(t.InstanceType["LocalStorageAmount"])),
+			"category": t.InstanceType["LocalStorageCategory"],
+		}
+		if v, ok := t.InstanceType["LocalStorageCapacity"]; ok {
+			local["capacity"] = v.(json.Number).String()
+		} else {
+			local["capacity"] = "0"
 		}
 		mapping["local_storage"] = local
 
-		ids = append(ids, t.InstanceType.InstanceTypeId)
+		ids = append(ids, fmt.Sprint(t.InstanceType["InstanceTypeId"]))
 		s = append(s, mapping)
 	}
 
@@ -432,7 +547,7 @@ func getEcsInstanceTypePrice(bssopenapiService BssopenapiService, instanceCharge
 	var subsciption []bssopenapi.GetSubscriptionPriceModuleList
 	for _, types := range instanceTypes {
 		config := fmt.Sprintf("InstanceType:%s,IoOptimized:IoOptimized,ImageOs:linux,Region:%s",
-			types.InstanceType.InstanceTypeId, client.RegionId)
+			fmt.Sprint(types.InstanceType["InstanceTypeId"]), client.RegionId)
 		if instanceChargeType == string(PostPaid) {
 			payAsYouGo = append(payAsYouGo, bssopenapi.GetPayAsYouGoPriceModuleList{
 				ModuleCode: moduleCode,

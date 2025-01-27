@@ -7,30 +7,50 @@ description: |-
   Provides a Alicloud Event Bridge Event Source resource.
 ---
 
-# alicloud\_event\_bridge\_event\_source
+# alicloud_event_bridge_event_source
 
 Provides a Event Bridge Event Source resource.
 
-For information about Event Bridge Event Source and how to use it, see [What is Event Source](https://www.alibabacloud.com/help/doc-detail/188425.htm).
+For information about Event Bridge Event Source and how to use it, see [What is Event Source](https://www.alibabacloud.com/help/en/eventbridge/latest/api-eventbridge-2020-04-01-createeventsource).
 
--> **NOTE:** Available in v1.130.0+.
+-> **NOTE:** Available since v1.130.0.
 
 ## Example Usage
 
 Basic Usage
 
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_event_bridge_event_source&exampleId=cc6d99f0-df8d-c48f-df08-84324242fee34a3aabf6&activeTab=example&spm=docs.r.event_bridge_event_source.0.cc6d99f0df&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
 ```terraform
+variable "name" {
+  default = "tf-example"
+}
+
+resource "random_integer" "default" {
+  min = 10000
+  max = 99999
+}
+
+resource "alicloud_event_bridge_event_bus" "example" {
+  event_bus_name = var.name
+}
+resource "alicloud_mns_queue" "example" {
+  name = "${var.name}-${random_integer.default.result}"
+}
 resource "alicloud_event_bridge_event_source" "example" {
-  event_bus_name         = "bus_name"
-  event_source_name      = "tftest"
-  description            = "tf-test"
+  event_bus_name         = alicloud_event_bridge_event_bus.example.event_bus_name
+  event_source_name      = var.name
+  description            = var.name
   linked_external_source = true
   external_source_type   = "MNS"
   external_source_config = {
-    QueueName = "mns_queuqe_name"
+    QueueName = alicloud_mns_queue.example.name
   }
 }
-
 ```
 
 ## Argument Reference
@@ -67,6 +87,6 @@ The following attributes are exported:
 
 Event Bridge Event Source can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_event_bridge_event_source.example <event_source_name>
 ```

@@ -21,10 +21,69 @@ Manage image sharing permissions. You can share your custom image to other Aliba
 
 ## Example Usage
 
-```
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_image_share_permission&exampleId=b9baaeb7-928e-38e8-47e0-1ce33e5f0c4e21991e94&activeTab=example&spm=docs.r.image_share_permission.0.b9baaeb792&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
+```terraform
+data "alicloud_zones" "default" {
+  available_resource_creation = "Instance"
+}
+
+data "alicloud_instance_types" "default" {
+  instance_type_family = "ecs.sn1ne"
+}
+
+data "alicloud_images" "default" {
+  name_regex = "^ubuntu_18.*64"
+  owners     = "system"
+}
+
+resource "alicloud_vpc" "default" {
+  vpc_name   = "terraform-example"
+  cidr_block = "172.17.3.0/24"
+}
+
+resource "alicloud_vswitch" "default" {
+  vswitch_name = "terraform-example"
+  cidr_block   = "172.17.3.0/24"
+  vpc_id       = alicloud_vpc.default.id
+  zone_id      = data.alicloud_zones.default.zones.0.id
+}
+
+resource "alicloud_security_group" "default" {
+  name   = "terraform-example"
+  vpc_id = alicloud_vpc.default.id
+}
+
+resource "alicloud_instance" "default" {
+  availability_zone          = data.alicloud_zones.default.zones.0.id
+  instance_name              = "terraform-example"
+  security_groups            = [alicloud_security_group.default.id]
+  vswitch_id                 = alicloud_vswitch.default.id
+  instance_type              = data.alicloud_instance_types.default.ids[0]
+  image_id                   = data.alicloud_images.default.ids[0]
+  internet_max_bandwidth_out = 10
+}
+
+resource "random_integer" "default" {
+  min = 10000
+  max = 99999
+}
+
+resource "alicloud_image" "default" {
+  instance_id = alicloud_instance.default.id
+  image_name  = "terraform-example-${random_integer.default.result}"
+  description = "terraform-example"
+}
+variable "another_uid" {
+  default = "123456789"
+}
 resource "alicloud_image_share_permission" "default" {
-  image_id           = "m-bp1gxyh***"
-  account_id         = "1234567890"
+  image_id   = alicloud_image.default.id
+  account_id = var.another_uid
 }
 ```
 
@@ -46,6 +105,6 @@ The following arguments are supported:
  
 image can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_image_share_permission.default m-uf66yg1q:123456789
 ```

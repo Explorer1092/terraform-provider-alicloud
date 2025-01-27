@@ -7,39 +7,47 @@ description: |-
   Provides a Alicloud HBR Oss Backup Plan resource.
 ---
 
-# alicloud\_hbr\_oss\_backup\_plan
+# alicloud_hbr_oss_backup_plan
 
 Provides a HBR Oss Backup Plan resource.
 
 For information about HBR Oss Backup Plan and how to use it, see [What is Oss Backup Plan](https://www.alibabacloud.com/help/doc-detail/130040.htm).
 
--> **NOTE:** Available in v1.131.0+.
+-> **NOTE:** Available since v1.131.0+.
 
 ## Example Usage
 
 Basic Usage
 
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_hbr_oss_backup_plan&exampleId=ab9773de-48f4-54d7-b158-fd4be518aaa3d846fd7a&activeTab=example&spm=docs.r.hbr_oss_backup_plan.0.ab9773de48&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
 ```terraform
-variable "name" {
-  default = "tf-test112358"
+resource "random_integer" "default" {
+  max = 99999
+  min = 10000
 }
 
 resource "alicloud_hbr_vault" "default" {
-  vault_name = var.name
+  vault_name = "terraform-example-${random_integer.default.result}"
 }
 
 resource "alicloud_oss_bucket" "default" {
-  bucket = var.name
+  bucket = "terraform-example-${random_integer.default.result}"
 }
 
 resource "alicloud_hbr_oss_backup_plan" "default" {
-  oss_backup_plan_name = var.name
-  prefix               = "/"
-  bucket               = alicloud_oss_bucket.default.bucket
-  vault_id             = alicloud_hbr_vault.default.id
-  schedule             = "I|1602673264|PT2H"
-  backup_type          = "COMPLETE"
-  retention            = "2"
+  oss_backup_plan_name = "terraform-example"
+  # the prefix of object you want to back up
+  prefix      = "/example"
+  bucket      = alicloud_oss_bucket.default.bucket
+  vault_id    = alicloud_hbr_vault.default.id
+  schedule    = "I|1602673264|PT2H"
+  backup_type = "COMPLETE"
+  retention   = "2"
 }
 ```
 
@@ -57,7 +65,9 @@ The following arguments are supported:
 * `backup_type` - (Required, ForceNew) Backup type. Valid values: `COMPLETE`.
 * `disabled` - (Optional) Whether to disable the backup task. Valid values: `true`, `false`.
 * `prefix` - (Optional) Backup prefix. Once specified, only objects with matching prefixes will be backed up.
-
+* `cross_account_type` - (Optional, ForceNew, Computed, Available in v1.189.0+) The type of the cross account backup. Valid values: `SELF_ACCOUNT`, `CROSS_ACCOUNT`.
+* `cross_account_user_id` - (Optional, ForceNew, Available in v1.189.0+) The original account ID of the cross account backup managed by the current account.
+* `cross_account_role_name` - (Optional, ForceNew, Available in v1.189.0+) The role name created in the original account RAM backup by the cross account managed by the current account.
 
 ## Attributes Reference
 
@@ -69,6 +79,6 @@ The following attributes are exported:
 
 HBR Oss Backup Plan can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_hbr_oss_backup_plan.example <id>
 ```

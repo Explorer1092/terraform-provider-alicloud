@@ -1,5 +1,5 @@
 ---
-subcategory: "Elastic Desktop Service(EDS)"
+subcategory: "Elastic Desktop Service (ECD)"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_ecd_desktop"
 sidebar_current: "docs-alicloud-resource-ecd-desktop"
@@ -7,63 +7,73 @@ description: |-
   Provides a Alicloud ECD Desktop resource.
 ---
 
-# alicloud\_ecd\_desktop
+# alicloud_ecd_desktop
 
 Provides a ECD Desktop resource.
 
-For information about ECD Desktop and how to use it, see [What is Desktop](https://help.aliyun.com/document_detail/188382.html).
+For information about ECD Desktop and how to use it, see [What is Desktop](https://www.alibabacloud.com/help/en/wuying-workspace/developer-reference/api-ecd-2020-09-30-createdesktops)
 
--> **NOTE:** Available in v1.144.0+.
+-> **NOTE:** Available since v1.144.0.
 
 ## Example Usage
 
+
 Basic Usage
 
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_ecd_desktop&exampleId=3ff92ccf-ee32-0331-2fef-f16f44573556f17005be&activeTab=example&spm=docs.r.ecd_desktop.0.3ff92ccfee&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
 ```terraform
+variable "name" {
+  default = "terraform-example"
+}
+
+resource "random_integer" "default" {
+  min = 10000
+  max = 99999
+}
 
 resource "alicloud_ecd_simple_office_site" "default" {
-  cidr_block             = "172.16.0.0/12"
-  desktop_access_type    = "Internet"
-  office_site_name       = "your_office_site_name"
-  enable_internet_access = false
+  cidr_block          = "172.16.0.0/12"
+  enable_admin_access = true
+  desktop_access_type = "Internet"
+  office_site_name    = "${var.name}-${random_integer.default.result}"
+}
+
+resource "alicloud_ecd_policy_group" "default" {
+  policy_group_name = var.name
+  clipboard         = "read"
+  local_drive       = "read"
+  usb_redirect      = "off"
+  watermark         = "off"
+
+  authorize_access_policy_rules {
+    description = var.name
+    cidr_ip     = "1.2.3.45/24"
+  }
+  authorize_security_policy_rules {
+    type        = "inflow"
+    policy      = "accept"
+    description = var.name
+    port_range  = "80/80"
+    ip_protocol = "TCP"
+    priority    = "1"
+    cidr_ip     = "1.2.3.4/24"
+  }
 }
 
 data "alicloud_ecd_bundles" "default" {
   bundle_type = "SYSTEM"
 }
 
-resource "alicloud_ecd_policy_group" "default" {
-  policy_group_name = "your_policy_group_name"
-  clipboard         = "readwrite"
-  local_drive       = "read"
-  authorize_access_policy_rules {
-    description = "example_value"
-    cidr_ip     = "1.2.3.4/24"
-  }
-  authorize_security_policy_rules {
-    type        = "inflow"
-    policy      = "accept"
-    description = "example_value"
-    port_range  = "80/80"
-    ip_protocol = "TCP"
-    priority    = "1"
-    cidr_ip     = "0.0.0.0/0"
-  }
-}
-
 resource "alicloud_ecd_desktop" "default" {
   office_site_id  = alicloud_ecd_simple_office_site.default.id
   policy_group_id = alicloud_ecd_policy_group.default.id
-  bundle_id       = data.alicloud_ecd_bundles.default.bundles.0.id
-  desktop_name    = "your_desktop_name"
-  end_user_ids    = [alicloud_ecd_user.default.id]
-}
-
-resource "alicloud_ecd_user" "default" {
-  end_user_id = "your_end_user_id"
-  email       = "your_email"
-  phone       = "your_phone"
-  password    = "your_password"
+  bundle_id       = data.alicloud_ecd_bundles.default.bundles.1.id
+  desktop_name    = var.name
 }
 ```
 
@@ -97,7 +107,7 @@ The following attributes are exported:
 
 * `id` - The resource ID in terraform of Desktop.
 
-### Timeouts
+## Timeouts
 
 The `timeouts` block allows you to specify [timeouts](https://www.terraform.io/docs/configuration-0-11/resources.html#timeouts) for certain actions:
 
@@ -109,6 +119,6 @@ The `timeouts` block allows you to specify [timeouts](https://www.terraform.io/d
 
 ECD Desktop can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_ecd_desktop.example <id>
 ```

@@ -16,13 +16,13 @@ const (
 	MoreThanOrEqual = ">="
 	LessThan        = "<"
 	LessThanOrEqual = "<="
-	Equal           = "=="
 	NotEqual        = "!="
+	Equal           = "=="
 )
 
 const (
 	SiteMonitorHTTP = "HTTP"
-	SiteMonitorPing = "Ping"
+	SiteMonitorPing = "PING"
 	SiteMonitorTCP  = "TCP"
 	SiteMonitorUDP  = "UDP"
 	SiteMonitorDNS  = "DNS"

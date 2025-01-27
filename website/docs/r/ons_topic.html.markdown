@@ -1,5 +1,5 @@
 ---
-subcategory: "RocketMQ"
+subcategory: "RocketMQ (Ons)"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_ons_topic"
 sidebar_current: "docs-alicloud-resource-ons-topic"
@@ -7,7 +7,7 @@ description: |-
   Provides a Alicloud ONS Topic resource.
 ---
 
-# alicloud\_ons\_topic
+# alicloud_ons_topic
 
 Provides an ONS topic resource.
 
@@ -19,6 +19,12 @@ For more information about how to use it, see [RocketMQ Topic Management API](ht
 
 Basic Usage
 
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_ons_topic&exampleId=51c8c410-42ff-d122-f626-491fa574ed62726e2f4c&activeTab=example&spm=docs.r.ons_topic.0.51c8c41042&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
 ```terraform
 variable "name" {
   default = "onsInstanceName"
@@ -28,9 +34,15 @@ variable "topic" {
   default = "onsTopicName"
 }
 
+resource "random_integer" "default" {
+  min = 10000
+  max = 99999
+}
+
+
 resource "alicloud_ons_instance" "default" {
-  name   = var.name
-  remark = "default_ons_instance_remark"
+  instance_name = "${var.name}-${random_integer.default.result}"
+  remark        = "default_ons_instance_remark"
 }
 
 resource "alicloud_ons_topic" "default" {
@@ -45,12 +57,12 @@ resource "alicloud_ons_topic" "default" {
 
 The following arguments are supported:
 
-* `instance_id` - (Required) ID of the ONS Instance that owns the topics.
-* `topic` - (Optional, Deprecated in v1.97.0+) Replaced by `topic_name` after version 1.97.0.
-* `topic_name` - (Optional, Available in v1.97.0+) Name of the topic. Two topics on a single instance cannot have the same name and the name cannot start with 'GID' or 'CID'. The length cannot exceed 64 characters.
-* `message_type` - (Required) The type of the message. Read [Ons Topic Create](https://www.alibabacloud.com/help/doc-detail/29591.html) for further details.
-* `remark` - (Optional) This attribute is a concise description of topic. The length cannot exceed 128.
-* `perm` - (Optional) This attribute is used to set the read-write mode for the topic. Read [Request parameters](https://www.alibabacloud.com/help/doc-detail/56880.html) for further details.
+* `instance_id` - (Required, ForceNew) ID of the ONS Instance that owns the topics.
+* `topic` - (Optional, Deprecated from v1.97.0+) Replaced by `topic_name` after version 1.97.0.
+* `topic_name` - (Optional, ForceNew, Available in v1.97.0+) Name of the topic. Two topics on a single instance cannot have the same name and the name cannot start with 'GID' or 'CID'. The length cannot exceed 64 characters.
+* `message_type` - (Required, ForceNew) The type of the message. Read [Ons Topic Create](https://www.alibabacloud.com/help/doc-detail/29591.html) for further details.
+* `remark` - (Optional, ForceNew) This attribute is a concise description of topic. The length cannot exceed 128.
+* `perm` - (Deprecated) This attribute has been deprecated.
 * `tags` - (Optional, Available in v1.97.0+) A mapping of tags to assign to the resource.
     - Key: It can be up to 64 characters in length. It cannot begin with "aliyun", "acs:", "http://", or "https://". It cannot be a null string.
     - Value: It can be up to 128 characters in length. It cannot begin with "aliyun", "acs:", "http://", or "https://". It can be a null string.
@@ -67,6 +79,6 @@ The following attributes are exported:
 
 ONS TOPIC can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_ons_topic.topic MQ_INST_1234567890_Baso1234567:onsTopicDemo
 ```

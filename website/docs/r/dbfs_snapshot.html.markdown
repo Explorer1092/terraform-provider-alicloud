@@ -4,78 +4,44 @@ layout: "alicloud"
 page_title: "Alicloud: alicloud_dbfs_snapshot"
 sidebar_current: "docs-alicloud-resource-dbfs-snapshot"
 description: |-
-  Provides a Alicloud DBFS Snapshot resource.
+  Provides a Alicloud Database File System (DBFS) Snapshot resource.
 ---
 
-# alicloud\_dbfs\_snapshot
+# alicloud_dbfs_snapshot
 
-Provides a DBFS Snapshot resource.
+Provides a Database File System (DBFS) Snapshot resource.
 
-For information about DBFS Snapshot and how to use it, see [What is Snapshot](https://help.aliyun.com/document_detail/149726.html).
+For information about Database File System (DBFS) Snapshot and how to use it, see [What is Snapshot](https://help.aliyun.com/zh/dbfs/developer-reference/api-dbfs-2020-04-18-createsnapshot).
 
--> **NOTE:** Available in v1.156.0+.
+-> **NOTE:** Available since v1.156.0.
 
 ## Example Usage
 
 Basic Usage
 
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_dbfs_snapshot&exampleId=135d92d4-7aa3-a5c3-9737-98713dcd086f2359e22e&activeTab=example&spm=docs.r.dbfs_snapshot.0.135d92d47a&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
 ```terraform
-data "alicloud_vpcs" "default" {
-  name_regex = "default-NODELETING"
+variable "name" {
+  default = "terraform-example"
 }
 
-locals {
-  zone_id = "cn-hangzhou-i"
+provider "alicloud" {
+  region = "cn-hangzhou"
 }
 
-data "alicloud_vswitches" "default" {
-  vpc_id  = data.alicloud_vpcs.default.ids.0
-  zone_id = local.zone_id
-}
-
-resource "alicloud_security_group" "default" {
-  name        = var.name
-  description = "tf test"
-  vpc_id      = data.alicloud_vpcs.default.ids.0
-}
-
-data "alicloud_images" "default" {
-  owners      = "system"
-  name_regex  = "^centos_8"
-  most_recent = true
-}
-
-resource "alicloud_instance" "default" {
-  image_id             = data.alicloud_images.default.images[0].id
-  instance_name        = var.name
-  instance_type        = "ecs.g7se.large"
-  availability_zone    = local.zone_id
-  vswitch_id           = data.alicloud_vswitches.default.ids[0]
-  system_disk_category = "cloud_essd"
-  security_groups = [
-    alicloud_security_group.default.id
-  ]
-}
-
-resource "alicloud_dbfs_instance" "default" {
-  category          = "standard"
-  zone_id           = alicloud_instance.default.availability_zone
-  performance_level = "PL1"
-  instance_name     = var.name
-  size              = 100
-}
-
-resource "alicloud_dbfs_instance_attachment" "default" {
-  ecs_id      = alicloud_instance.default.id
-  instance_id = alicloud_dbfs_instance.default.id
+data "alicloud_dbfs_instances" "default" {
 }
 
 resource "alicloud_dbfs_snapshot" "example" {
-  depends_on     = [alicloud_dbfs_instance_attachment.default]
-  instance_id    = data.alicloud_dbfs_instances.default.ids.0
-  snapshot_name  = "example_value"
-  description    = "example_value"
-  retention_days = 30
+  instance_id    = data.alicloud_dbfs_instances.default.instances.0.id
+  retention_days = 50
+  snapshot_name  = var.name
+  description    = "DbfsSnapshot"
 }
 ```
 
@@ -83,11 +49,13 @@ resource "alicloud_dbfs_snapshot" "example" {
 
 The following arguments are supported:
 
-* `description` - (Optional, ForceNew) Description of the snapshot. The description must be `2` to `256` characters in length. It must start with a letter, and cannot start with `http://` or `https://`.
-* `force` - (Optional) Whether to force deletion of snapshots.
-* `instance_id` - (Required, ForceNew) The ID of the database file system.
-* `retention_days` - (Optional, ForceNew) The retention time of the snapshot. Unit: days. Snapshots are automatically released after the retention time expires. Valid values: `1` to `65536`.
-* `snapshot_name` - (Optional, ForceNew) The display name of the snapshot. The length is `2` to `128` characters. It must start with a large or small letter or Chinese, and cannot start with `http://` and `https://`. It can contain numbers, colons (:), underscores (_), or hyphens (-). To prevent name conflicts with automatic snapshots, you cannot start with `auto`.
+* `instance_id` - (Required, ForceNew) The ID of the Database File System.
+* `retention_days` - (Optional, ForceNew, Int) The retention period of the snapshot. Valid values: `1` to `65536`.
+* `snapshot_name` - (Optional) The name of the snapshot. The `snapshot_name` must be `2` to `128` characters in length. It must start with a large or small letter or Chinese, and cannot start with `http://`, `https://`, `auto` or `dbfs-auto`. It can contain numbers, colons (:), underscores (_), or hyphens (-). **NOTE:** From version 1.233.1, `snapshot_name` can be modified.
+* `description` - (Optional) The description of the snapshot. The `description` must be `2` to `256` characters in length. It cannot start with `http://` or `https://`. **NOTE:** From version 1.233.1, `description` can be modified.
+* `force` - (Optional, Bool) Specifies whether to force delete the snapshot. Valid values:
+  - `true`: Enable.
+  - `false`: Disable.
 
 ## Attributes Reference
 
@@ -96,17 +64,18 @@ The following attributes are exported:
 * `id` - The resource ID in terraform of Snapshot.
 * `status` - The status of the Snapshot.
 
-### Timeouts
+## Timeouts
 
 The `timeouts` block allows you to specify [timeouts](https://www.terraform.io/docs/configuration-0-11/resources.html#timeouts) for certain actions:
 
 * `create` - (Defaults to 5 mins) Used when create the Snapshot.
+* `update` - (Defaults to 5 mins) Used when update the Snapshot.
 * `delete` - (Defaults to 1 mins) Used when delete the Snapshot.
 
 ## Import
 
-DBFS Snapshot can be imported using the id, e.g.
+Database File System (DBFS) Snapshot can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_dbfs_snapshot.example <id>
 ```

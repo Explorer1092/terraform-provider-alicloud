@@ -19,31 +19,51 @@ For information about Microservice Engine (MSE) Znode and how to use it, see [Wh
 
 Basic Usage
 
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_mse_znode&exampleId=10e5f0d2-bd79-1768-9372-4bd99a4bf87e8e4c8235&activeTab=example&spm=docs.r.mse_znode.0.10e5f0d2bd&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
 ```terraform
-data "alicloud_mongodb_zones" "default" {}
-data "alicloud_vpcs" "default" {
-  name_regex = "default-NODELETING"
-}
-data "alicloud_vswitches" "default" {
-  vpc_id  = data.alicloud_vpcs.default.ids.0
-  zone_id = "${data.alicloud_mongodb_zones.default.zones.0.id}"
-}
-resource "alicloud_mse_cluster" "default" {
-  cluster_specification = "MSE_SC_1_2_200_c"
-  cluster_type          = "ZooKeeper"
-  cluster_version       = "ZooKeeper_3_5_5"
-  instance_count        = 1
-  net_type              = "privatenet"
-  vswitch_id            = data.alicloud_vswitches.default.ids.0
-  pub_network_flow      = "1"
-  acl_entry_list        = ["127.0.0.1/32"]
-  cluster_alias_name    = "example_value"
+provider "alicloud" {
+  region = "cn-hangzhou"
 }
 
-resource "alicloud_mse_znode" "default" {
-  cluster_id = alicloud_mse_cluster.default.cluster_id
-  data       = "example_value"
-  path       = "example_value"
+data "alicloud_zones" "example" {
+  available_resource_creation = "VSwitch"
+}
+
+resource "alicloud_vpc" "example" {
+  vpc_name   = "terraform-example"
+  cidr_block = "172.17.3.0/24"
+}
+
+resource "alicloud_vswitch" "example" {
+  vswitch_name = "terraform-example"
+  cidr_block   = "172.17.3.0/24"
+  vpc_id       = alicloud_vpc.example.id
+  zone_id      = data.alicloud_zones.example.zones.0.id
+}
+
+resource "alicloud_mse_cluster" "example" {
+  cluster_specification = "MSE_SC_1_2_60_c"
+  cluster_type          = "ZooKeeper"
+  cluster_version       = "ZooKeeper_3_8_0"
+  instance_count        = 1
+  net_type              = "privatenet"
+  pub_network_flow      = "1"
+  acl_entry_list        = ["127.0.0.1/32"]
+  cluster_alias_name    = "terraform-example"
+  mse_version           = "mse_dev"
+  vswitch_id            = alicloud_vswitch.example.id
+  vpc_id                = alicloud_vpc.example.id
+}
+
+resource "alicloud_mse_znode" "example" {
+  cluster_id = alicloud_mse_cluster.example.cluster_id
+  data       = "terraform-example"
+  path       = "/example"
 }
 ```
 
@@ -74,6 +94,6 @@ The `timeouts` block allows you to specify [timeouts](https://www.terraform.io/d
 
 Microservice Engine (MSE) Znode can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_mse_znode.example <cluster_id>:<path>
 ```

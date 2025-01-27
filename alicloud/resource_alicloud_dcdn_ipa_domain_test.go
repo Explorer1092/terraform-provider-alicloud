@@ -42,7 +42,7 @@ func testSweepDcdnIpaDomain(region string) error {
 	if err != nil {
 		return fmt.Errorf("error getting Alicloud client: %s", err)
 	}
-	aliyunClient := rawClient.(*connectivity.AliyunClient)
+	client := rawClient.(*connectivity.AliyunClient)
 	prefixes := []string{
 		"tf-testAcc",
 		"tf_testAcc",
@@ -54,17 +54,10 @@ func testSweepDcdnIpaDomain(region string) error {
 	request["PageNumber"] = 1
 
 	var response map[string]interface{}
-	conn, err := aliyunClient.NewDcdnClient()
-	if err != nil {
-		log.Printf("[ERROR] %s get an error: %#v", action, err)
-		return nil
-	}
 	for {
-		runtime := util.RuntimeOptions{}
-		runtime.SetAutoretry(true)
 		wait := incrementalWait(3*time.Second, 3*time.Second)
 		err = resource.Retry(1*time.Minute, func() *resource.RetryError {
-			response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2018-01-15"), StringPointer("AK"), nil, request, &runtime)
+			response, err = client.RpcPost("dcdn", "2018-01-15", action, nil, request, true)
 			if err != nil {
 				if NeedRetry(err) {
 					wait()
@@ -103,7 +96,7 @@ func testSweepDcdnIpaDomain(region string) error {
 			request := map[string]interface{}{
 				"DomainName": item["DomainName"],
 			}
-			_, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2018-01-15"), StringPointer("AK"), nil, request, &util.RuntimeOptions{})
+			_, err = client.RpcPost("dcdn", "2018-01-15", action, nil, request, true)
 			if err != nil {
 				log.Printf("[ERROR] Failed to delete Dcdn Ipa Domain (%s): %s", item["DomainName"].(string), err)
 			}
@@ -116,7 +109,7 @@ func testSweepDcdnIpaDomain(region string) error {
 	}
 	return nil
 }
-func TestAccAlicloudDCDNIpaDomain_basic0(t *testing.T) {
+func TestAccAliCloudDcdnIpaDomain_basic0(t *testing.T) {
 	var v map[string]interface{}
 	resourceId := "alicloud_dcdn_ipa_domain.default"
 	checkoutSupportedRegions(t, true, connectivity.DCDNSupportRegions)
@@ -127,7 +120,7 @@ func TestAccAlicloudDCDNIpaDomain_basic0(t *testing.T) {
 	rac := resourceAttrCheckInit(rc, ra)
 	testAccCheck := rac.resourceAttrMapUpdateSet()
 	rand := acctest.RandIntRange(10000, 99999)
-	name := fmt.Sprintf("tf-testacccn-%d.xiaozhu.com", rand)
+	name := fmt.Sprintf("tf-testacccn-%d.alicloud-provider.cn", rand)
 	testAccConfig := resourceTestAccConfigFunc(resourceId, name, AlicloudDCDNIpaDomainBasicDependence0)
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
@@ -141,9 +134,10 @@ func TestAccAlicloudDCDNIpaDomain_basic0(t *testing.T) {
 			{
 				Config: testAccConfig(map[string]interface{}{
 					"domain_name": "${var.domain_name}",
+					"scope":       "overseas",
 					"sources": []map[string]interface{}{
 						{
-							"content":  "www.xiaozhu.com",
+							"content":  "www.alicloud-provider.cn",
 							"port":     "8898",
 							"priority": "20",
 							"type":     "domain",
@@ -155,6 +149,7 @@ func TestAccAlicloudDCDNIpaDomain_basic0(t *testing.T) {
 					testAccCheck(map[string]string{
 						"resource_group_id": CHECKSET,
 						"domain_name":       name,
+						"scope":             "overseas",
 						"sources.#":         "1",
 					}),
 				),
@@ -222,7 +217,7 @@ func TestAccAlicloudDCDNIpaDomain_basic0(t *testing.T) {
 		},
 	})
 }
-func TestAccAlicloudDCDNIpaDomain_basic1(t *testing.T) {
+func TestAccAliCloudDcdnIpaDomain_basic1(t *testing.T) {
 	var v map[string]interface{}
 	resourceId := "alicloud_dcdn_ipa_domain.default"
 	checkoutSupportedRegions(t, true, connectivity.DCDNSupportRegions)
@@ -233,7 +228,7 @@ func TestAccAlicloudDCDNIpaDomain_basic1(t *testing.T) {
 	rac := resourceAttrCheckInit(rc, ra)
 	testAccCheck := rac.resourceAttrMapUpdateSet()
 	rand := acctest.RandIntRange(10000, 99999)
-	name := fmt.Sprintf("tf-testacccn-%d.xiaozhu.com", rand)
+	name := fmt.Sprintf("tf-testacccn-%d.alicloud-provider.cn", rand)
 	testAccConfig := resourceTestAccConfigFunc(resourceId, name, AlicloudDCDNIpaDomainBasicDependence0)
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
@@ -249,14 +244,14 @@ func TestAccAlicloudDCDNIpaDomain_basic1(t *testing.T) {
 					"domain_name": "${var.domain_name}",
 					"sources": []map[string]interface{}{
 						{
-							"content":  "www.xiaozhu.com",
+							"content":  "www.alicloud-provider.cn",
 							"port":     "8898",
 							"priority": "20",
 							"type":     "domain",
 							"weight":   "10",
 						},
 					},
-					"scope":             "global",
+					"scope":             "overseas",
 					"status":            "online",
 					"resource_group_id": "${data.alicloud_resource_manager_resource_groups.default.groups.0.id}",
 				}),
@@ -266,7 +261,7 @@ func TestAccAlicloudDCDNIpaDomain_basic1(t *testing.T) {
 						"domain_name":       name,
 						"sources.#":         "1",
 						"status":            "online",
-						"scope":             "global",
+						"scope":             "overseas",
 					}),
 				),
 			},
@@ -297,7 +292,7 @@ data "alicloud_resource_manager_resource_groups" "default" {
 `, name)
 }
 
-func TestAccAlicloudDCDNIpaDomain_unit(t *testing.T) {
+func TestUnitAlicloudDCDNIpaDomain(t *testing.T) {
 	p := Provider().(*schema.Provider).ResourcesMap
 	d, _ := schema.InternalMap(p["alicloud_dcdn_ipa_domain"].Schema).Data(nil, nil)
 	dCreate, _ := schema.InternalMap(p["alicloud_dcdn_ipa_domain"].Schema).Data(nil, nil)

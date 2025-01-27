@@ -7,31 +7,28 @@ description: |-
   Provides a resource to add a alarm contact for cloud monitor.
 ---
 
-# alicloud\_cms\_alarm\_contact
+# alicloud_cms_alarm_contact
 
-Creates or modifies an alarm contact. For information about alarm contact and how to use it, see [What is alarm contact](https://www.alibabacloud.com/help/en/doc-detail/114923.htm).
+Creates or modifies an alarm contact. For information about alarm contact and how to use it, see [What is alarm contact](https://www.alibabacloud.com/help/en/cloudmonitor/latest/putcontact).
 
--> **NOTE:** Available in v1.99.0+.
+-> **NOTE:** Available since v1.99.0.
 
 ## Example Usage
 
 Basic Usage
 
-```terraform
-# If you use this template, you need to activate the link before you can return to the alarm contact information, otherwise diff will appear in terraform. So please confirm the activation link as soon as possible.
-resource "alicloud_cms_alarm_contact" "example" {
-  alarm_contact_name = "zhangsan"
-  describe           = "For Test"
-  channels_mail      = "terraform.test.com"
-}
-```
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_cms_alarm_contact&exampleId=b511846b-0994-7e9f-b042-04a42a552d33a0f0c35e&activeTab=example&spm=docs.r.cms_alarm_contact.0.b511846b09&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
 
 ```terraform
-# If you use this template, you can ignore the diff of the alarm contact information by `lifestyle`. We recommend the above usage and activate the link in time.
+# You need to activate the link before you can return to the alarm contact information, otherwise diff will appear in terraform. So please confirm the activation link as soon as possible. Besides, you can ignore the diff of the alarm contact information by `lifestyle`. 
 resource "alicloud_cms_alarm_contact" "example" {
-  alarm_contact_name = "zhangsan"
-  describe           = "For Test"
-  channels_mail      = "terraform.test.com"
+  alarm_contact_name = "tf-example"
+  describe           = "For example"
+  channels_mail      = "terraform@test.com"
   lifecycle {
     ignore_changes = [channels_mail]
   }
@@ -62,6 +59,6 @@ The following attributes are exported:
 
 Alarm contact can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_cms_alarm_contact.example abc12345
 ```

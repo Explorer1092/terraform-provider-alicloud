@@ -7,13 +7,15 @@ description: |-
   Provides a Alicloud MongoDB Serverless Instance resource.
 ---
 
-# alicloud\_mongodb\_serverless\_instance
+# alicloud_mongodb_serverless_instance
 
 Provides a MongoDB Serverless Instance resource.
 
 For information about MongoDB Serverless Instance and how to use it, see [What is Serverless Instance](https://www.alibabacloud.com/help/doc-detail/26558.html).
 
--> **NOTE:** Available in v1.148.0+.
+-> **NOTE:** Deprecated since v1.214.0.
+
+-> **DEPRECATED:**  This resource has been deprecated from version `1.214.0`.
 
 ## Example Usage
 
@@ -111,6 +113,6 @@ The `timeouts` block allows you to specify [timeouts](https://www.terraform.io/d
 
 MongoDB Serverless Instance can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_mongodb_serverless_instance.example <id>
 ```

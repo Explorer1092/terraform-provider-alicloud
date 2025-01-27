@@ -1,5 +1,5 @@
 ---
-subcategory: "ApsaraDB for MyBase"
+subcategory: "ApsaraDB for MyBase (CDDC)"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_cddc_dedicated_host"
 sidebar_current: "docs-alicloud-resource-cddc-dedicated-host"
@@ -7,25 +7,46 @@ description: |-
   Provides a Alicloud ApsaraDB for MyBase Dedicated Host resource.
 ---
 
-# alicloud\_cddc\_dedicated\_host
+# alicloud_cddc_dedicated_host
 
 Provides a ApsaraDB for MyBase Dedicated Host resource.
 
-For information about ApsaraDB for MyBase Dedicated Host and how to use it, see [What is Dedicated Host](https://www.alibabacloud.com/help/doc-detail/210864.html).
+For information about ApsaraDB for MyBase Dedicated Host and how to use it, see [What is Dedicated Host](https://www.alibabacloud.com/help/en/apsaradb-for-mybase/latest/creatededicatedhost).
 
--> **NOTE:** Available in v1.147.0+.
+-> **NOTE:** Available since v1.147.0.
+
+-> **DEPRECATED:**  This resource has been [deprecated](https://www.alibabacloud.com/help/en/apsaradb-for-mybase/latest/notice-stop-selling-mybase-hosted-instances-from-august-31-2023) from version `1.225.1`. 
 
 ## Example Usage
 
 Basic Usage
 
 ```terraform
-
-data "alicloud_vpcs" "default" {
-  name_regex = "default-NODELETING"
+variable "name" {
+  default = "tf-example"
+}
+data "alicloud_cddc_zones" "default" {}
+resource "alicloud_vpc" "default" {
+  vpc_name   = var.name
+  cidr_block = "10.4.0.0/16"
+}
+resource "alicloud_vswitch" "default" {
+  vswitch_name = var.name
+  cidr_block   = "10.4.0.0/24"
+  vpc_id       = alicloud_vpc.default.id
+  zone_id      = data.alicloud_cddc_zones.default.ids.0
 }
 
-data "alicloud_cddc_zones" "default" {}
+resource "alicloud_cddc_dedicated_host_group" "default" {
+  engine                    = "MySQL"
+  vpc_id                    = alicloud_vpc.default.id
+  cpu_allocation_ratio      = 101
+  mem_allocation_ratio      = 50
+  disk_allocation_ratio     = 200
+  allocation_policy         = "Evenly"
+  host_replace_policy       = "Manual"
+  dedicated_host_group_desc = var.name
+}
 
 data "alicloud_cddc_host_ecs_level_infos" "default" {
   db_type      = "mysql"
@@ -33,36 +54,25 @@ data "alicloud_cddc_host_ecs_level_infos" "default" {
   storage_type = "cloud_essd"
 }
 
-data "alicloud_vswitches" "default" {
-  vpc_id  = data.alicloud_vpcs.default.ids.0
-  zone_id = data.alicloud_cddc_zones.default.ids.0
-}
-
-resource "alicloud_cddc_dedicated_host_group" "default" {
-  engine                    = "MySQL"
-  vpc_id                    = data.alicloud_vpcs.default.ids.0
-  cpu_allocation_ratio      = 101
-  mem_allocation_ratio      = 50
-  disk_allocation_ratio     = 200
-  allocation_policy         = "Evenly"
-  host_replace_policy       = "Manual"
-  dedicated_host_group_desc = "example_value"
-}
-
 resource "alicloud_cddc_dedicated_host" "default" {
-  host_name               = "example_value"
+  host_name               = var.name
   dedicated_host_group_id = alicloud_cddc_dedicated_host_group.default.id
   host_class              = data.alicloud_cddc_host_ecs_level_infos.default.infos.0.res_class_code
   zone_id                 = data.alicloud_cddc_zones.default.ids.0
-  vswitch_id              = data.alicloud_vswitches.default.ids.0
+  vswitch_id              = alicloud_vswitch.default.id
   payment_type            = "Subscription"
   tags = {
     Created = "TF"
     For     = "CDDC_DEDICATED"
   }
 }
-
 ```
+
+### Deleting `alicloud_cddc_dedicated_host` or removing it from your configuration
+
+The `alicloud_cddc_dedicated_host` resource allows you to manage `payment_type = "Subscription"` host instance, but Terraform cannot destroy it.
+Deleting the subscription resource or removing it from your configuration will remove it from your state file and management, but will not destroy the Host Instance.
+You can resume managing the subscription host instance via the AlibabaCloud Console.
 
 ## Argument Reference
 
@@ -93,7 +103,7 @@ The following attributes are exported:
 * `dedicated_host_id` - The ID of the host.
 * `status` - The state of the host. Valid values: `0:` The host is being created. `1`: The host is running. `2`: The host is faulty. `3`: The host is ready for deactivation. `4`: The host is being maintained. `5`: The host is deactivated. `6`: The host is restarting. `7`: The host is locked.
 
-### Timeouts
+## Timeouts
 
 The `timeouts` block allows you to specify [timeouts](https://www.terraform.io/docs/configuration-0-11/resources.html#timeouts) for certain actions:
 
@@ -105,6 +115,6 @@ The `timeouts` block allows you to specify [timeouts](https://www.terraform.io/d
 
 ApsaraDB for MyBase Dedicated Host can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_cddc_dedicated_host.example <dedicated_host_group_id>:<dedicated_host_id>
 ```

@@ -7,7 +7,7 @@ description: |-
     Provides a list of VPCs owned by an Alibaba Cloud account.
 ---
 
-# alicloud\_vpcs
+# alicloud_vpcs
 
 This data source provides VPCs available to the user.
 
@@ -33,7 +33,7 @@ The following arguments are supported:
 * `status` - (Optional) Filter results by a specific status. Valid value are `Pending` and `Available`.
 * `name_regex` - (Optional) A regex string to filter VPCs by name.
 * `is_default` - (Optional, type: bool) Indicate whether the VPC is the default one in the specified region.
-* `vswitch_id` - (Optional) Filter results by the specified VSwitch.
+* `vswitch_id` - (Optional) Filter results by the specified vSwitch.
 * `tags` - (Optional, Available in v1.55.3+) A mapping of tags to assign to the resource.
 * `output_file` - (Optional) File name where to save data source results (after running `terraform plan`).
 * `ids` - (Optional, Available in 1.52.0+) A list of VPC IDs.
@@ -55,11 +55,14 @@ The following attributes are exported in addition to the arguments listed above:
   * `region_id` - ID of the region where the VPC is located.
   * `status` - Status of the VPC.
   * `vpc_name` - Name of the VPC.
-  * `vswitch_ids` - List of VSwitch IDs in the specified VPC
+  * `vswitch_ids` - List of vSwitch IDs in the specified VPC
   * `cidr_block` - CIDR block of the VPC.
   * `vrouter_id` - ID of the VRouter.
   * `route_table_id` - Route table ID of the VRouter.
   * `description` - Description of the VPC
+  * `dhcp_options_set_id` - The ID of the DHCP options set.
+  * `dhcp_options_set_status` - The status of the DHCP options set. Valid values: `Available`, `InUse`, `Deleted`, `Pending`.
+  * `dns_hostname_status` - Indicates whether the Domain Name System (DNS) feature is enabled.
   * `is_default` - Whether the VPC is the default VPC in the region.
   * `creation_time` - Time of creation.
   * `tags` - A map of tags assigned to the VPC.

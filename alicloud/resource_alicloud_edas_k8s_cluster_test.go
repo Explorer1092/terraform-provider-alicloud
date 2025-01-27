@@ -57,16 +57,18 @@ func testSweepEdasK8sCluster(region string) error {
 	for _, v := range listClusterResponse.ClusterList.Cluster {
 		name := v.ClusterName
 		skip := true
-		for _, prefix := range prefixes {
-			if strings.HasPrefix(strings.ToLower(name), strings.ToLower(prefix)) {
-				skip = false
-				break
+		if !sweepAll() {
+			for _, prefix := range prefixes {
+				if strings.HasPrefix(strings.ToLower(name), strings.ToLower(prefix)) {
+					skip = false
+					break
+				}
 			}
-		}
 
-		if skip {
-			log.Printf("[INFO] Skipping edas cluster: %s", name)
-			continue
+			if skip {
+				log.Printf("[INFO] Skipping edas cluster: %s", name)
+				continue
+			}
 		}
 		log.Printf("[INFO] delete edas cluster: %s", name)
 
@@ -212,7 +214,7 @@ func resourceEdasK8sClusterConfigDependence(name string) string {
 		}
 
 		data "alicloud_vpcs" "default" {
-			name_regex = "default-NODELETING"
+			name_regex = "^default-NODELETING$"
 		}
 		data "alicloud_vswitches" "default" {
 			vpc_id = data.alicloud_vpcs.default.ids.0

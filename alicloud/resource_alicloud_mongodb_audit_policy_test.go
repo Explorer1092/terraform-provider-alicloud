@@ -95,7 +95,7 @@ variable "name" {
 data "alicloud_mongodb_zones" "default" {}
 
 data "alicloud_vpcs" "default" {
-  name_regex = "default-NODELETING"
+    name_regex = "^default-NODELETING$"
 }
 
 data "alicloud_vswitches" "default" {
@@ -104,7 +104,7 @@ data "alicloud_vswitches" "default" {
 }
 
 resource "alicloud_mongodb_instance" "default" {
-  engine_version      = "3.4"
+  engine_version      = "4.2"
   db_instance_class   = "dds.mongo.mid"
   db_instance_storage = 10
   name                = var.name
@@ -117,7 +117,7 @@ resource "alicloud_mongodb_instance" "default" {
 `, name)
 }
 
-func TestAccAlicloudMongoDBAuditPolicy_unit(t *testing.T) {
+func TestUnitAlicloudMongoDBAuditPolicy(t *testing.T) {
 	p := Provider().(*schema.Provider).ResourcesMap
 	dInit, _ := schema.InternalMap(p["alicloud_mongodb_audit_policy"].Schema).Data(nil, nil)
 	dExisted, _ := schema.InternalMap(p["alicloud_mongodb_audit_policy"].Schema).Data(nil, nil)

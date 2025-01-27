@@ -7,19 +7,21 @@ description: |-
   Provides a Web Application Firewall Domain resource.
 ---
 
-# alicloud\_waf\_domain
+# alicloud_waf_domain
+
+-> **DEPRECATED:**  This resource has been deprecated and using [alicloud_wafv3_domain](https://registry.terraform.io/providers/aliyun/alicloud/latest/docs/resources/wafv3_domain) instead.
 
 Provides a WAF Domain resource to create domain in the Web Application Firewall.
 
 For information about WAF and how to use it, see [What is Alibaba Cloud WAF](https://www.alibabacloud.com/help/doc-detail/28517.htm).
 
--> **NOTE:** Available in 1.82.0+ .
+-> **NOTE:** Available since v1.82.0.
 
 ## Example Usage
 
-```
+```terraform
 resource "alicloud_waf_domain" "domain" {
-  domain            = "www.aliyun.com"
+  domain_name       = "alicloud-provider.cn"
   instance_id       = "waf-123455"
   is_access_product = "On"
   source_ips        = ["1.1.1.1"]
@@ -42,7 +44,7 @@ The following arguments are supported:
 
 * `cluster_type` - (Optional) The type of the WAF cluster. Valid values: `PhysicalCluster` and `VirtualCluster`. Default to `PhysicalCluster`.
 * `connection_time` - (Optional) The connection timeout for WAF exclusive clusters. Unit: seconds.
-* `domain` - (Optional, ForceNew, Deprecated in v1.94.0+)  Field `domain` has been deprecated from version 1.94.0. Use `domain_name` instead.
+* `domain` - (Optional, ForceNew, Deprecated from v1.94.0+)  Field `domain` has been deprecated from version 1.94.0. Use `domain_name` instead.
 * `domain_name` - (Optional, ForceNew, Available in v1.94.0+) The domain that you want to add to WAF. The `domain_name` is required when the value of the `domain`  is Empty.
 * `http2_port` - (Optional) List of the HTTP 2.0 ports.
 * `http_port` - (Optional) List of the HTTP ports.
@@ -73,6 +75,6 @@ The following attributes are exported:
 
 WAF domain can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_waf_domain.domain waf-132435:www.domain.com
 ```

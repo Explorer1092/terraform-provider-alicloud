@@ -57,12 +57,6 @@ func TestAccAlicloudCenTransitRouter_basic(t *testing.T) {
 				),
 			},
 			{
-				ResourceName:            resourceId,
-				ImportState:             true,
-				ImportStateVerify:       true,
-				ImportStateVerifyIgnore: []string{"dry_run"},
-			},
-			{
 				Config: testAccConfig(map[string]interface{}{
 					"transit_router_description": "deds",
 				}),
@@ -94,6 +88,12 @@ func TestAccAlicloudCenTransitRouter_basic(t *testing.T) {
 					}),
 				),
 			},
+			{
+				ResourceName:            resourceId,
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"dry_run"},
+			},
 		},
 	})
 }
@@ -113,9 +113,8 @@ func TestAccAlicloudCenTransitRouter_basic1(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccPreCheck(t)
-			testAccPreCheckWithRegions(t, true, connectivity.CenTRSupportRegions)
+			testAccPreCheckWithRegions(t, true, connectivity.TestSalveRegions)
 		},
-
 		IDRefreshName: resourceId,
 		Providers:     testAccProviders,
 		CheckDestroy:  rac.checkResourceDestroy(),
@@ -125,14 +124,38 @@ func TestAccAlicloudCenTransitRouter_basic1(t *testing.T) {
 					"cen_id":                     "${alicloud_cen_instance.default.id}",
 					"transit_router_name":        "${var.name}",
 					"transit_router_description": "tf",
+					"support_multicast":          "true",
 					"dry_run":                    "false",
+					"tags": map[string]string{
+						"Created": "TF",
+						"For":     "TransitRouter",
+					},
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
 						"cen_id":                     CHECKSET,
 						"transit_router_name":        name,
 						"transit_router_description": "tf",
+						"support_multicast":          "true",
 						"dry_run":                    "false",
+						"tags.%":                     "2",
+						"tags.Created":               "TF",
+						"tags.For":                   "TransitRouter",
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"tags": map[string]string{
+						"Created": "TF_Update",
+						"For":     "TransitRouter_Update",
+					},
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"tags.%":       "2",
+						"tags.Created": "TF_Update",
+						"tags.For":     "TransitRouter_Update",
 					}),
 				),
 			},
@@ -166,7 +189,7 @@ func AlicloudCenTransitRouterBasicDependence(name string) string {
 	`, name)
 }
 
-func TestAccAlicloudCenTransitRouter_unit(t *testing.T) {
+func TestUnitAlicloudCenTransitRouter(t *testing.T) {
 	p := Provider().(*schema.Provider).ResourcesMap
 	d, _ := schema.InternalMap(p["alicloud_cen_transit_router"].Schema).Data(nil, nil)
 	dCreate, _ := schema.InternalMap(p["alicloud_cen_transit_router"].Schema).Data(nil, nil)

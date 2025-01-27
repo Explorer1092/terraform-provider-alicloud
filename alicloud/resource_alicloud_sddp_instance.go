@@ -5,7 +5,6 @@ import (
 	"log"
 	"time"
 
-	util "github.com/alibabacloud-go/tea-utils/service"
 	"github.com/aliyun/terraform-provider-alicloud/alicloud/connectivity"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
@@ -105,6 +104,11 @@ func resourceAlicloudSddpInstance() *schema.Resource {
 				ValidateFunc: validation.StringInSlice([]string{"Upgrade", "Downgrade"}, false),
 				Optional:     true,
 			},
+			"oss_size": {
+				Type:     schema.TypeString,
+				Computed: true,
+				Optional: true,
+			},
 			"authed": {
 				Type:     schema.TypeBool,
 				Computed: true,
@@ -119,10 +123,6 @@ func resourceAlicloudSddpInstance() *schema.Resource {
 			},
 			"oss_bucket_set": {
 				Type:     schema.TypeBool,
-				Computed: true,
-			},
-			"oss_size": {
-				Type:     schema.TypeString,
 				Computed: true,
 			},
 			"rds_set": {
@@ -144,12 +144,10 @@ func resourceAlicloudSddpInstance() *schema.Resource {
 func resourceAlicloudSddpInstanceCreate(d *schema.ResourceData, meta interface{}) error {
 	client := meta.(*connectivity.AliyunClient)
 	var response map[string]interface{}
+	var err error
+	var endpoint string
 	action := "CreateInstance"
 	request := make(map[string]interface{})
-	conn, err := client.NewBssopenapiClient()
-	if err != nil {
-		return WrapError(err)
-	}
 
 	request["ClientToken"] = buildClientToken("CreateInstance")
 	request["ProductCode"] = "sddp"
@@ -214,18 +212,16 @@ func resourceAlicloudSddpInstanceCreate(d *schema.ResourceData, meta interface{}
 		"Value": client.RegionId,
 	})
 	request["Parameter"] = parameterMapList
-	runtime := util.RuntimeOptions{}
-	runtime.SetAutoretry(true)
 	wait := incrementalWait(3*time.Second, 3*time.Second)
 	err = resource.Retry(d.Timeout(schema.TimeoutCreate), func() *resource.RetryError {
-		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2017-12-14"), StringPointer("AK"), nil, request, &runtime)
+		response, err = client.RpcPostWithEndpoint("BssOpenApi", "2017-12-14", action, nil, request, true, endpoint)
 		if err != nil {
 			if NeedRetry(err) {
 				wait()
 				return resource.RetryableError(err)
 			}
 			if IsExpectedErrors(err, []string{"NotApplicable"}) {
-				conn.Endpoint = String(connectivity.BssOpenAPIEndpointInternational)
+				endpoint = connectivity.BssOpenAPIEndpointInternational
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
@@ -273,6 +269,8 @@ func resourceAlicloudSddpInstanceRead(d *schema.ResourceData, meta interface{}) 
 func resourceAlicloudSddpInstanceUpdate(d *schema.ResourceData, meta interface{}) error {
 	client := meta.(*connectivity.AliyunClient)
 	var response map[string]interface{}
+	var err error
+	var endpoint string
 	update := false
 	request := map[string]interface{}{
 		"InstanceId": d.Id(),
@@ -365,22 +363,16 @@ func resourceAlicloudSddpInstanceUpdate(d *schema.ResourceData, meta interface{}
 			request["ModifyType"] = v
 		}
 		action := "ModifyInstance"
-		conn, err := client.NewBssopenapiClient()
-		if err != nil {
-			return WrapError(err)
-		}
-		runtime := util.RuntimeOptions{}
-		runtime.SetAutoretry(true)
 		wait := incrementalWait(3*time.Second, 3*time.Second)
 		err = resource.Retry(d.Timeout(schema.TimeoutUpdate), func() *resource.RetryError {
-			response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2017-12-14"), StringPointer("AK"), nil, request, &runtime)
+			response, err = client.RpcPostWithEndpoint("BssOpenApi", "2017-12-14", action, nil, request, true, endpoint)
 			if err != nil {
 				if NeedRetry(err) {
 					wait()
 					return resource.RetryableError(err)
 				}
 				if IsExpectedErrors(err, []string{"NotApplicable"}) {
-					conn.Endpoint = String(connectivity.BssOpenAPIEndpointInternational)
+					endpoint = connectivity.BssOpenAPIEndpointInternational
 					return resource.RetryableError(err)
 				}
 				return resource.NonRetryableError(err)

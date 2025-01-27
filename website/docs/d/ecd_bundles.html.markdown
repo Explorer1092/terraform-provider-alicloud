@@ -1,10 +1,10 @@
 ---
-subcategory: "Elastic Desktop Service(EDS)"
+subcategory: "Elastic Desktop Service (ECD)"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_ecd_bundles"
 sidebar_current: "docs-alicloud-datasource-ecd-bundles"
 description: |-
-Provides a list of Ecd bundles to the user.
+  Provides a list of Ecd bundles to the user.
 ---
 
 # alicloud\_ecd\_bundles

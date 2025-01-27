@@ -3,14 +3,17 @@ package tablestore
 import (
 	"bytes"
 	"fmt"
-	"github.com/aliyun/aliyun-tablestore-go-sdk/tablestore/otsprotocol"
-	"github.com/golang/protobuf/proto"
 	"io"
-	"io/ioutil"
 	"math"
 	"net/http"
 	"reflect"
 	"sort"
+	"strings"
+	"time"
+
+	"github.com/aliyun/aliyun-tablestore-go-sdk/common"
+	"github.com/aliyun/aliyun-tablestore-go-sdk/tablestore/otsprotocol"
+	"github.com/golang/protobuf/proto"
 )
 
 const (
@@ -23,12 +26,35 @@ const (
 type ColumnType int32
 
 const (
-	ColumnType_STRING  ColumnType = 1
-	ColumnType_INTEGER ColumnType = 2
-	ColumnType_BOOLEAN ColumnType = 3
-	ColumnType_DOUBLE  ColumnType = 4
-	ColumnType_BINARY  ColumnType = 5
+	ColumnType_STRING   ColumnType = 1
+	ColumnType_INTEGER  ColumnType = 2
+	ColumnType_BOOLEAN  ColumnType = 3
+	ColumnType_DOUBLE   ColumnType = 4
+	ColumnType_BINARY   ColumnType = 5
+	ColumnType_DATETIME ColumnType = 6
+	ColumnType_TIME     ColumnType = 7
+	ColumnType_DATE     ColumnType = 8
 )
+
+func (t *ColumnType) String() string {
+	if t == nil {
+		return "UNKNOWN"
+	}
+	switch *t {
+	case ColumnType_STRING:
+		return "STRING"
+	case ColumnType_INTEGER:
+		return "INTEGER"
+	case ColumnType_BOOLEAN:
+		return "BOOLEAN"
+	case ColumnType_DOUBLE:
+		return "DOUBLE"
+	case ColumnType_BINARY:
+		return "BINARY"
+	default:
+		return "UNKNOWN"
+	}
+}
 
 const (
 	Version          = "1.0"
@@ -43,10 +69,17 @@ type ColumnValue struct {
 	Value interface{}
 }
 
+func NewColumnValue(columnType ColumnType, value interface{}) *ColumnValue {
+	return &ColumnValue{
+		Type:  columnType,
+		Value: value,
+	}
+}
+
 func (cv *ColumnValue) writeCellValue(w io.Writer) {
 	writeTag(w, TAG_CELL_VALUE)
 	if cv == nil {
-		writeRawLittleEndian32(w, 1)
+		WriteRawLittleEndian32(w, 1)
 		writeRawByte(w, VT_AUTO_INCREMENT)
 		return
 	}
@@ -55,40 +88,40 @@ func (cv *ColumnValue) writeCellValue(w io.Writer) {
 	case ColumnType_STRING:
 		v := cv.Value.(string)
 
-		writeRawLittleEndian32(w, int32(LITTLE_ENDIAN_32_SIZE+1+len(v))) // length + type + value
+		WriteRawLittleEndian32(w, int32(LITTLE_ENDIAN_32_SIZE+1+len(v))) // length + type + value
 		writeRawByte(w, VT_STRING)
-		writeRawLittleEndian32(w, int32(len(v)))
+		WriteRawLittleEndian32(w, int32(len(v)))
 		writeBytes(w, []byte(v))
 
 	case ColumnType_INTEGER:
 		v := cv.Value.(int64)
-		writeRawLittleEndian32(w, int32(LITTLE_ENDIAN_64_SIZE+1))
+		WriteRawLittleEndian32(w, int32(LITTLE_ENDIAN_64_SIZE+1))
 		writeRawByte(w, VT_INTEGER)
 		writeRawLittleEndian64(w, v)
 	case ColumnType_BOOLEAN:
 		v := cv.Value.(bool)
-		writeRawLittleEndian32(w, 2)
+		WriteRawLittleEndian32(w, 2)
 		writeRawByte(w, VT_BOOLEAN)
 		writeBoolean(w, v)
 
 	case ColumnType_DOUBLE:
 		v := cv.Value.(float64)
 
-		writeRawLittleEndian32(w, LITTLE_ENDIAN_64_SIZE+1)
+		WriteRawLittleEndian32(w, LITTLE_ENDIAN_64_SIZE+1)
 		writeRawByte(w, VT_DOUBLE)
 		writeDouble(w, v)
 
 	case ColumnType_BINARY:
 		v := cv.Value.([]byte)
 
-		writeRawLittleEndian32(w, int32(LITTLE_ENDIAN_32_SIZE+1+len(v))) // length + type + value
+		WriteRawLittleEndian32(w, int32(LITTLE_ENDIAN_32_SIZE+1+len(v))) // length + type + value
 		writeRawByte(w, VT_BLOB)
-		writeRawLittleEndian32(w, int32(len(v)))
+		WriteRawLittleEndian32(w, int32(len(v)))
 		writeBytes(w, v)
 	}
 }
 
-func (cv *ColumnValue) writeCellValueWithoutLengthPrefix() []byte {
+func (cv *ColumnValue) WriteCellValueWithoutLengthPrefix() []byte {
 	var b bytes.Buffer
 	w := &b
 	switch cv.Type {
@@ -96,7 +129,7 @@ func (cv *ColumnValue) writeCellValueWithoutLengthPrefix() []byte {
 		v := cv.Value.(string)
 
 		writeRawByte(w, VT_STRING)
-		writeRawLittleEndian32(w, int32(len(v)))
+		WriteRawLittleEndian32(w, int32(len(v)))
 		writeBytes(w, []byte(v))
 
 	case ColumnType_INTEGER:
@@ -118,7 +151,7 @@ func (cv *ColumnValue) writeCellValueWithoutLengthPrefix() []byte {
 		v := cv.Value.([]byte)
 
 		writeRawByte(w, VT_BLOB)
-		writeRawLittleEndian32(w, int32(len(v)))
+		WriteRawLittleEndian32(w, int32(len(v)))
 		writeBytes(w, v)
 	}
 
@@ -353,19 +386,19 @@ func (pkc *PrimaryKeyColumnInner) writePrimaryKeyColumn(w io.Writer) {
 	writeCellName(w, []byte(pkc.Name))
 	if pkc.isInfMin() {
 		writeTag(w, TAG_CELL_VALUE)
-		writeRawLittleEndian32(w, 1)
+		WriteRawLittleEndian32(w, 1)
 		writeRawByte(w, VT_INF_MIN)
 		return
 	}
 	if pkc.isInfMax() {
 		writeTag(w, TAG_CELL_VALUE)
-		writeRawLittleEndian32(w, 1)
+		WriteRawLittleEndian32(w, 1)
 		writeRawByte(w, VT_INF_MAX)
 		return
 	}
 	if pkc.isAutoInc() {
 		writeTag(w, TAG_CELL_VALUE)
-		writeRawLittleEndian32(w, 1)
+		WriteRawLittleEndian32(w, 1)
 		writeRawByte(w, VT_AUTO_INCREMENT)
 		return
 	}
@@ -483,16 +516,31 @@ func (comparatorType *ComparatorType) ConvertToPbComparatorType() otsprotocol.Co
 
 func (columnType DefinedColumnType) ConvertToPbDefinedColumnType() otsprotocol.DefinedColumnType {
 	switch columnType {
-		case DefinedColumn_INTEGER:
-			return otsprotocol.DefinedColumnType_DCT_INTEGER
-		case DefinedColumn_DOUBLE:
-			return otsprotocol.DefinedColumnType_DCT_DOUBLE
-		case DefinedColumn_BOOLEAN:
-			return otsprotocol.DefinedColumnType_DCT_BOOLEAN
-		case DefinedColumn_STRING:
-			return otsprotocol.DefinedColumnType_DCT_STRING
-		default:
-			return otsprotocol.DefinedColumnType_DCT_BLOB
+	case DefinedColumn_INTEGER:
+		return otsprotocol.DefinedColumnType_DCT_INTEGER
+	case DefinedColumn_DOUBLE:
+		return otsprotocol.DefinedColumnType_DCT_DOUBLE
+	case DefinedColumn_BOOLEAN:
+		return otsprotocol.DefinedColumnType_DCT_BOOLEAN
+	case DefinedColumn_STRING:
+		return otsprotocol.DefinedColumnType_DCT_STRING
+	default:
+		return otsprotocol.DefinedColumnType_DCT_BLOB
+	}
+}
+
+func ConvertPbDefinedColumnType(columnType otsprotocol.DefinedColumnType) DefinedColumnType {
+	switch columnType {
+	case otsprotocol.DefinedColumnType_DCT_INTEGER:
+		return DefinedColumn_INTEGER
+	case otsprotocol.DefinedColumnType_DCT_DOUBLE:
+		return DefinedColumn_DOUBLE
+	case otsprotocol.DefinedColumnType_DCT_BOOLEAN:
+		return DefinedColumn_BOOLEAN
+	case otsprotocol.DefinedColumnType_DCT_STRING:
+		return DefinedColumn_STRING
+	default:
+		return DefinedColumn_BINARY
 	}
 }
 
@@ -509,18 +557,18 @@ func (loType *LogicalOperator) ConvertToPbLoType() otsprotocol.LogicalOperator {
 
 func ConvertToPbCastType(variantType VariantType) *otsprotocol.VariantType {
 	switch variantType {
-		case Variant_INTEGER:
-			return otsprotocol.VariantType_VT_INTEGER.Enum()
-		case Variant_DOUBLE:
-			return otsprotocol.VariantType_VT_DOUBLE.Enum()
-		case Variant_STRING:
-			return otsprotocol.VariantType_VT_STRING.Enum()
-		default:
-			panic("invalid VariantType")
+	case Variant_INTEGER:
+		return otsprotocol.VariantType_VT_INTEGER.Enum()
+	case Variant_DOUBLE:
+		return otsprotocol.VariantType_VT_DOUBLE.Enum()
+	case Variant_STRING:
+		return otsprotocol.VariantType_VT_STRING.Enum()
+	default:
+		panic("invalid VariantType")
 	}
 }
 
-func NewValueTransferRule(regex string, vt VariantType) *ValueTransferRule{
+func NewValueTransferRule(regex string, vt VariantType) *ValueTransferRule {
 	return &ValueTransferRule{Regex: regex, Cast_type: vt}
 }
 
@@ -535,11 +583,11 @@ func NewSingleColumnValueFilter(condition *SingleColumnCondition) *otsprotocol.S
 	filter.Comparator = &comparatorType
 	filter.ColumnName = condition.ColumnName
 	col := NewColumn([]byte(*condition.ColumnName), condition.ColumnValue)
-	filter.ColumnValue = col.toPlainBufferCell(false).cellValue.writeCellValueWithoutLengthPrefix()
+	filter.ColumnValue = col.toPlainBufferCell(false).cellValue.WriteCellValueWithoutLengthPrefix()
 	filter.FilterIfMissing = proto.Bool(condition.FilterIfMissing)
 	filter.LatestVersionOnly = proto.Bool(condition.LatestVersionOnly)
 	if condition.TransferRule != nil {
-		filter.ValueTransRule = &otsprotocol.ValueTransferRule{ Regex: proto.String(condition.TransferRule.Regex), CastType: ConvertToPbCastType(condition.TransferRule.Cast_type) }
+		filter.ValueTransRule = &otsprotocol.ValueTransferRule{Regex: proto.String(condition.TransferRule.Regex), CastType: ConvertToPbCastType(condition.TransferRule.Cast_type)}
 	}
 	return filter
 }
@@ -563,38 +611,10 @@ func NewPaginationFilter(filter *PaginationFilter) *otsprotocol.ColumnPagination
 	return pageFilter
 }
 
-func (otsClient *TableStoreClient) postReq(req *http.Request, url string) ([]byte, error, string) {
-	resp, err := otsClient.httpClient.Do(req)
-	if err != nil {
-		return nil, err, ""
-	}
-	defer resp.Body.Close()
-
-	reqId := getRequestId(resp)
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err, reqId
-	}
-
-	if (resp.StatusCode >= 200 && resp.StatusCode < 300) == false {
-		var retErr *OtsError
-		perr := new(otsprotocol.Error)
-		errUm := proto.Unmarshal(body, perr)
-		if errUm != nil {
-			retErr = rawHttpToOtsError(resp.StatusCode, body, reqId)
-		} else {
-			retErr = pbErrToOtsError(resp.StatusCode, perr, reqId)
-		}
-		return nil, retErr, reqId
-	}
-
-	return body, nil, reqId
-}
-
 func rawHttpToOtsError(code int, body []byte, reqId string) *OtsError {
 	oerr := &OtsError{
-		Message: string(body),
-		RequestId: reqId,
+		Message:        string(body),
+		RequestId:      reqId,
 		HttpStatusCode: code,
 	}
 	if code >= 500 && code < 600 {
@@ -607,10 +627,10 @@ func rawHttpToOtsError(code int, body []byte, reqId string) *OtsError {
 
 func pbErrToOtsError(statusCode int, pbErr *otsprotocol.Error, reqId string) *OtsError {
 	return &OtsError{
-		Code:    pbErr.GetCode(),
-		Message: pbErr.GetMessage(),
-		RequestId: reqId,
-		HttpStatusCode : statusCode,
+		Code:           pbErr.GetCode(),
+		Message:        pbErr.GetMessage(),
+		RequestId:      reqId,
+		HttpStatusCode: statusCode,
 	}
 }
 
@@ -780,6 +800,14 @@ func (rowchange *UpdateRowChange) PutColumn(columnName string, value interface{}
 	rowchange.Columns = append(rowchange.Columns, *column)
 }
 
+// value only support int64,string,bool,float64,[]byte. other type will get panic
+func (rowchange *UpdateRowChange) PutColumnWithTimestamp(columnName string, value interface{}, timestamp int64) {
+	column := &ColumnToUpdate{ColumnName: columnName, Value: value}
+	column.Timestamp = timestamp
+	column.HasTimestamp = true
+	rowchange.Columns = append(rowchange.Columns, *column)
+}
+
 func (rowchange *UpdateRowChange) DeleteColumn(columnName string) {
 	// Todo: validate the input
 	column := &ColumnToUpdate{ColumnName: columnName, Value: nil, Type: DELETE_ALL_VERSION, HasType: true, IgnoreValue: true}
@@ -944,17 +972,43 @@ func (meta *IndexMeta) AddPrimaryKeyColumn(name string) {
 	meta.Primarykey = append(meta.Primarykey, name)
 }
 
+func (meta *IndexMeta) SetAsGlobalIndex() {
+	meta.IndexType = IT_GLOBAL_INDEX
+}
+
+func (meta *IndexMeta) SetAsLocalIndex() {
+	meta.IndexType = IT_LOCAL_INDEX
+}
+
 func (request *CreateTableRequest) AddIndexMeta(meta *IndexMeta) {
 	request.IndexMetas = append(request.IndexMetas, meta)
 }
 
 func (meta *IndexMeta) ConvertToPbIndexMeta() *otsprotocol.IndexMeta {
-	return &otsprotocol.IndexMeta {
-		Name: &meta.IndexName,
-		PrimaryKey:  meta.Primarykey,
-		DefinedColumn:  meta.DefinedColumns,
-		IndexUpdateMode:  otsprotocol.IndexUpdateMode_IUM_ASYNC_INDEX.Enum(),
-		IndexType:        otsprotocol.IndexType_IT_GLOBAL_INDEX.Enum(),
+	return &otsprotocol.IndexMeta{
+		Name:            &meta.IndexName,
+		PrimaryKey:      meta.Primarykey,
+		DefinedColumn:   meta.DefinedColumns,
+		IndexUpdateMode: ConvertIndexTypeToPBIndexUpdateMode(meta.IndexType).Enum(),
+		IndexType:       ConvertIndexTypeToPBIndexType(meta.IndexType).Enum(),
+	}
+}
+
+func ConvertIndexTypeToPBIndexType(indexType IndexType) otsprotocol.IndexType {
+	switch indexType {
+	case IT_LOCAL_INDEX:
+		return otsprotocol.IndexType_IT_LOCAL_INDEX
+	default:
+		return otsprotocol.IndexType_IT_GLOBAL_INDEX
+	}
+}
+
+func ConvertIndexTypeToPBIndexUpdateMode(indexType IndexType) otsprotocol.IndexUpdateMode {
+	switch indexType {
+	case IT_LOCAL_INDEX:
+		return otsprotocol.IndexUpdateMode_IUM_SYNC_INDEX
+	default:
+		return otsprotocol.IndexUpdateMode_IUM_ASYNC_INDEX
 	}
 }
 
@@ -966,10 +1020,12 @@ func ConvertPbIndexTypeToIndexType(indexType *otsprotocol.IndexType) IndexType {
 		return IT_LOCAL_INDEX
 	}
 }
+
 func ConvertPbIndexMetaToIndexMeta(meta *otsprotocol.IndexMeta) *IndexMeta {
-	indexmeta := &IndexMeta {
-		IndexName: *meta.Name,
-		IndexType: ConvertPbIndexTypeToIndexType(meta.IndexType),
+	indexmeta := &IndexMeta{
+		IndexName:      *meta.Name,
+		IndexType:      ConvertPbIndexTypeToIndexType(meta.IndexType),
+		IndexSyncPhase: (*SyncPhase)(meta.IndexSyncPhase),
 	}
 
 	for _, pk := range meta.PrimaryKey {
@@ -981,4 +1037,121 @@ func ConvertPbIndexMetaToIndexMeta(meta *otsprotocol.IndexMeta) *IndexMeta {
 	}
 
 	return indexmeta
+}
+
+func (request *AddDefinedColumnRequest) AddDefinedColumn(name string, definedType DefinedColumnType) {
+	request.DefinedColumns = append(request.DefinedColumns, &DefinedColumnSchema{Name: name, ColumnType: definedType})
+}
+
+// implement sortedMap : map[string]string
+func SortedMapString(Map map[string]string) ([]string, []string) {
+	n := len(Map)
+	keys := make([]string, 0, n)
+	values := make([]string, 0, n)
+	for tag_key, _ := range Map {
+		keys = append(keys, tag_key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		values = append(values, Map[key])
+	}
+
+	return keys, values
+}
+
+// implement sorted map[string]ColumnValue
+func SortedMapColumnValue(Map map[string]*ColumnValue) ([]string, []*ColumnValue) {
+	n := len(Map)
+	keys := make([]string, 0, n)
+	values := make([]*ColumnValue, 0, n)
+
+	for fieldKey, _ := range Map {
+		keys = append(keys, fieldKey)
+	}
+	sort.Strings(keys)
+	for i := 0; i < n; i++ {
+		values = append(values, Map[keys[i]])
+	}
+	return keys, values
+}
+
+func CheckTagKeyOrValue(s string) error {
+	if s == "" {
+		return fmt.Errorf("Tag or attribute key/value is empty")
+	}
+
+	for i := 0; i < len(s); i++ {
+		if s[i] == '"' || s[i] == '=' {
+			return fmt.Errorf("Tag or attribute key/value [%v] include illegal character", s)
+		}
+	}
+	return nil
+}
+
+func BuildTags(tags map[string]string) ([]*otsprotocol.TimeseriesTag, error) {
+	var tagsPB []*otsprotocol.TimeseriesTag
+	for key, value := range tags {
+		err := CheckTagKeyOrValue(key)
+		if err != nil {
+			return nil, err
+		}
+		err = CheckTagKeyOrValue(value)
+		if err != nil {
+			return nil, err
+		}
+		tagsPB = append(tagsPB, &otsprotocol.TimeseriesTag{Name: proto.String(key), Value: proto.String(value)})
+	}
+	sort.Slice(tagsPB, func(i, j int) bool {
+		return tagsPB[i].GetName() < tagsPB[j].GetName()
+	})
+	return tagsPB, nil
+}
+
+func BuildTagString(tags map[string]string) (string, error) {
+	var capacity int = 2
+	n := len(tags)
+	keys := make([]string, 0, n)
+	for key, value := range tags {
+		err := CheckTagKeyOrValue(key)
+		if err != nil {
+			return "", err
+		}
+		err = CheckTagKeyOrValue(value)
+		if err != nil {
+			return "", err
+		}
+		keys = append(keys, key)
+		capacity += len(key) + len(value) + 3
+	}
+
+	sort.Strings(keys)
+
+	sb := strings.Builder{}
+	sb.Grow(capacity)
+	sb.WriteByte('[')
+	for i := 0; i < len(keys); i++ {
+		key, value := keys[i], tags[keys[i]]
+		sb.WriteByte('"')
+		sb.WriteString(key)
+		sb.WriteByte('=')
+		sb.WriteString(value)
+		sb.WriteByte('"')
+
+		if i != len(keys)-1 {
+			sb.WriteByte(',')
+		}
+	}
+	sb.WriteByte(']')
+	return sb.String(), nil
+}
+
+// SetCredentialsProvider sets funciton for get the user's ak
+func SetCredentialsProvider(provider common.CredentialsProvider) ClientOption {
+	return func(client *TableStoreClient) {
+		client.credentialsProvider = provider
+	}
+}
+
+func fromUnixMicrosTimestamp(timestamp int64) time.Time {
+	return time.Unix(timestamp/1e6, (timestamp%1e6)*1e3)
 }

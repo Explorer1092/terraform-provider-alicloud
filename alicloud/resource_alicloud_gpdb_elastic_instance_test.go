@@ -71,21 +71,23 @@ func testSweepGpdbElasticInstances(region string) error {
 		id := v.DBInstanceId
 		description := v.DBInstanceDescription
 		skip := true
-		for _, prefix := range prefixes {
-			if strings.HasPrefix(strings.ToLower(description), strings.ToLower(prefix)) {
-				skip = false
-				break
+		if !sweepAll() {
+			for _, prefix := range prefixes {
+				if strings.HasPrefix(strings.ToLower(description), strings.ToLower(prefix)) {
+					skip = false
+					break
+				}
 			}
-		}
-		// If description is not set successfully, it should be fetched by vpc name and deleted.
-		if skip {
-			if need, err := service.needSweepVpc(v.VpcId, v.VSwitchId); err == nil {
-				skip = !need
+			// If description is not set successfully, it should be fetched by vpc name and deleted.
+			if skip {
+				if need, err := service.needSweepVpc(v.VpcId, v.VSwitchId); err == nil {
+					skip = !need
+				}
 			}
-		}
-		if skip {
-			log.Printf("[INFO] Skipping GPDB instance: %s (%s)\n", description, id)
-			continue
+			if skip {
+				log.Printf("[INFO] Skipping GPDB instance: %s (%s)\n", description, id)
+				continue
+			}
 		}
 
 		// Delete Instance
@@ -304,7 +306,10 @@ func TestAccAlicloudGPDBElasticInstance_basic0(t *testing.T) {
 	})
 }
 
-var AlicloudGpdbElasticInstanceMap0 = map[string]string{}
+var AlicloudGpdbElasticInstanceMap0 = map[string]string{
+	"connection_string": CHECKSET,
+	"port":              CHECKSET,
+}
 
 func AlicloudGpdbElasticInstanceBasicDependence0(name string) string {
 	return fmt.Sprintf(` 
@@ -315,7 +320,7 @@ variable "name" {
 data "alicloud_gpdb_zones" "default" {}
 
 data "alicloud_vpcs" "default" {
-  name_regex = "default-NODELETING"
+    name_regex = "^default-NODELETING$"
 }
 
 data "alicloud_vswitches" "default" {

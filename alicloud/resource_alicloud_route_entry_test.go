@@ -6,40 +6,42 @@ import (
 
 	"github.com/aliyun/terraform-provider-alicloud/alicloud/connectivity"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/acctest"
-	"github.com/hashicorp/terraform-plugin-sdk/terraform"
-
-	"github.com/aliyun/alibaba-cloud-sdk-go/services/vpc"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 )
 
-func TestAccAlicloudVPCRouteEntryInstance(t *testing.T) {
-	var v *vpc.RouteEntry
-	rand := acctest.RandIntRange(1000, 9999)
+func TestAccAliCloudRouteEntry_basic0(t *testing.T) {
+	var v map[string]interface{}
 	resourceId := "alicloud_route_entry.default"
-	ra := resourceAttrInit(resourceId, testAccRouteEntryCheckMap)
-	serviceFunc := func() interface{} {
+	ra := resourceAttrInit(resourceId, AliCloudRouteEntryMap0)
+	rc := resourceCheckInitWithDescribeMethod(resourceId, &v, func() interface{} {
 		return &VpcService{testAccProvider.Meta().(*connectivity.AliyunClient)}
-	}
-	rc := resourceCheckInit(resourceId, &v, serviceFunc)
+	}, "DescribeRouteEntry")
 	rac := resourceAttrCheckInit(rc, ra)
 	testAccCheck := rac.resourceAttrMapUpdateSet()
-
+	rand := acctest.RandIntRange(1000, 9999)
+	name := fmt.Sprintf("tf-testAcc-RouteEntry-%d", rand)
+	testAccConfig := resourceTestAccConfigFunc(resourceId, name, AliCloudRouteEntryBasicDependence0)
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccPreCheck(t)
 		},
-
-		// module name
 		IDRefreshName: resourceId,
 		Providers:     testAccProviders,
-		CheckDestroy:  testAccCheckRouteEntryDestroy,
+		CheckDestroy:  rac.checkResourceDestroy(),
 		Steps: []resource.TestStep{
 			{
-				Config: testAccRouteEntryConfig_instance(rand),
+				Config: testAccConfig(map[string]interface{}{
+					"route_table_id":        "${alicloud_vpc.default.route_table_id}",
+					"destination_cidrblock": "172.11.1.1/32",
+					"nexthop_type":          "Instance",
+					"nexthop_id":            "${alicloud_instance.default.id}",
+				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
-						"nexthop_type": "Instance",
-						"name":         fmt.Sprintf("tf-testAccRouteEntryConfigName%d", rand),
+						"route_table_id":        CHECKSET,
+						"destination_cidrblock": "172.11.1.1/32",
+						"nexthop_type":          "Instance",
+						"nexthop_id":            CHECKSET,
 					}),
 				),
 			},
@@ -52,105 +54,371 @@ func TestAccAlicloudVPCRouteEntryInstance(t *testing.T) {
 	})
 }
 
-func TestAccAlicloudVPCRouteEntryInterface(t *testing.T) {
-	var v *vpc.RouteEntry
-	rand := acctest.RandIntRange(1000, 9999)
+func TestAccAliCloudRouteEntry_basic0_twin(t *testing.T) {
+	var v map[string]interface{}
 	resourceId := "alicloud_route_entry.default"
-	ra := resourceAttrInit(resourceId, testAccRouteEntryCheckMap)
-	serviceFunc := func() interface{} {
+	ra := resourceAttrInit(resourceId, AliCloudRouteEntryMap0)
+	rc := resourceCheckInitWithDescribeMethod(resourceId, &v, func() interface{} {
 		return &VpcService{testAccProvider.Meta().(*connectivity.AliyunClient)}
-	}
-	rc := resourceCheckInit(resourceId, &v, serviceFunc)
+	}, "DescribeRouteEntry")
 	rac := resourceAttrCheckInit(rc, ra)
 	testAccCheck := rac.resourceAttrMapUpdateSet()
-
+	rand := acctest.RandIntRange(1000, 9999)
+	name := fmt.Sprintf("tf-testAcc-RouteEntry-%d", rand)
+	testAccConfig := resourceTestAccConfigFunc(resourceId, name, AliCloudRouteEntryBasicDependence0)
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccPreCheck(t)
 		},
-
-		// module name
 		IDRefreshName: resourceId,
 		Providers:     testAccProviders,
-		CheckDestroy:  testAccCheckRouteEntryDestroy,
+		CheckDestroy:  rac.checkResourceDestroy(),
 		Steps: []resource.TestStep{
 			{
-				Config: testAccRouteEntryConfig_interface(rand),
+				Config: testAccConfig(map[string]interface{}{
+					"route_table_id":        "${alicloud_vpc.default.route_table_id}",
+					"destination_cidrblock": "172.11.1.1/32",
+					"nexthop_type":          "Instance",
+					"nexthop_id":            "${alicloud_instance.default.id}",
+					"name":                  name,
+					"description":           name,
+				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
-						"nexthop_type": "RouterInterface",
-						"name":         fmt.Sprintf("tf-testAccRouteEntryInterfaceConfig%d", rand),
+						"route_table_id":        CHECKSET,
+						"destination_cidrblock": "172.11.1.1/32",
+						"nexthop_type":          "Instance",
+						"nexthop_id":            CHECKSET,
+						"name":                  name,
+						"description":           name,
 					}),
 				),
+			},
+			{
+				ResourceName:      resourceId,
+				ImportState:       true,
+				ImportStateVerify: true,
 			},
 		},
 	})
 }
 
-func TestAccAlicloudVPCRouteEntryNatGateway(t *testing.T) {
-	var v *vpc.RouteEntry
-	rand := acctest.RandIntRange(1000, 9999)
+func TestAccAliCloudRouteEntry_basic1(t *testing.T) {
+	var v map[string]interface{}
 	resourceId := "alicloud_route_entry.default"
-	ra := resourceAttrInit(resourceId, testAccRouteEntryCheckMap)
-	serviceFunc := func() interface{} {
+	ra := resourceAttrInit(resourceId, AliCloudRouteEntryMap0)
+	rc := resourceCheckInitWithDescribeMethod(resourceId, &v, func() interface{} {
 		return &VpcService{testAccProvider.Meta().(*connectivity.AliyunClient)}
-	}
-	rc := resourceCheckInit(resourceId, &v, serviceFunc)
+	}, "DescribeRouteEntry")
 	rac := resourceAttrCheckInit(rc, ra)
 	testAccCheck := rac.resourceAttrMapUpdateSet()
-
+	rand := acctest.RandIntRange(1000, 9999)
+	name := fmt.Sprintf("tf-testAcc-RouteEntry-%d", rand)
+	testAccConfig := resourceTestAccConfigFunc(resourceId, name, AliCloudRouteEntryBasicDependence1)
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccPreCheck(t)
 		},
-
-		// module name
 		IDRefreshName: resourceId,
 		Providers:     testAccProviders,
-		CheckDestroy:  testAccCheckRouteEntryDestroy,
+		CheckDestroy:  rac.checkResourceDestroy(),
 		Steps: []resource.TestStep{
 			{
-				Config: testAccRouteEntryConfig_natGateway(rand),
+				Config: testAccConfig(map[string]interface{}{
+					"route_table_id":        "${alicloud_vpc.default.route_table_id}",
+					"destination_cidrblock": "2001:ffff:ffff:ffff::/64",
+					"nexthop_type":          "Instance",
+					"nexthop_id":            "${alicloud_instance.default.id}",
+				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
-						"nexthop_type": "NatGateway",
-						"name":         fmt.Sprintf("tf-testAccRouteEntryNatGatewayConfig%d", rand),
+						"route_table_id":        CHECKSET,
+						"destination_cidrblock": "2001:ffff:ffff:ffff::/64",
+						"nexthop_type":          "Instance",
+						"nexthop_id":            CHECKSET,
 					}),
 				),
+			},
+			{
+				ResourceName:      resourceId,
+				ImportState:       true,
+				ImportStateVerify: true,
 			},
 		},
 	})
 }
 
-func TestAccAlicloudVPCRouteEntryMulti(t *testing.T) {
-	var v *vpc.RouteEntry
-	rand := acctest.RandIntRange(1000, 9999)
-	resourceId := "alicloud_route_entry.default.4"
-	ra := resourceAttrInit(resourceId, testAccRouteEntryCheckMap)
-	serviceFunc := func() interface{} {
+func TestAccAliCloudRouteEntry_basic1_twin(t *testing.T) {
+	var v map[string]interface{}
+	resourceId := "alicloud_route_entry.default"
+	ra := resourceAttrInit(resourceId, AliCloudRouteEntryMap0)
+	rc := resourceCheckInitWithDescribeMethod(resourceId, &v, func() interface{} {
 		return &VpcService{testAccProvider.Meta().(*connectivity.AliyunClient)}
-	}
-	rc := resourceCheckInit(resourceId, &v, serviceFunc)
+	}, "DescribeRouteEntry")
 	rac := resourceAttrCheckInit(rc, ra)
 	testAccCheck := rac.resourceAttrMapUpdateSet()
-
+	rand := acctest.RandIntRange(1000, 9999)
+	name := fmt.Sprintf("tf-testAcc-RouteEntry-%d", rand)
+	testAccConfig := resourceTestAccConfigFunc(resourceId, name, AliCloudRouteEntryBasicDependence1)
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccPreCheck(t)
 		},
-
-		// module name
 		IDRefreshName: resourceId,
 		Providers:     testAccProviders,
-		CheckDestroy:  testAccCheckRouteEntryDestroy,
+		CheckDestroy:  rac.checkResourceDestroy(),
 		Steps: []resource.TestStep{
 			{
-				Config: testAccRouteEntryConfigMulti(rand),
+				Config: testAccConfig(map[string]interface{}{
+					"route_table_id":        "${alicloud_vpc.default.route_table_id}",
+					"destination_cidrblock": "2001:ffff:ffff:ffff::/64",
+					"nexthop_type":          "Instance",
+					"nexthop_id":            "${alicloud_instance.default.id}",
+					"name":                  name,
+					"description":           name,
+				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
+						"route_table_id":        CHECKSET,
+						"destination_cidrblock": "2001:ffff:ffff:ffff::/64",
+						"nexthop_type":          "Instance",
+						"nexthop_id":            CHECKSET,
+						"name":                  name,
+						"description":           name,
+					}),
+				),
+			},
+			{
+				ResourceName:      resourceId,
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
+		},
+	})
+}
+
+func TestAccAliCloudRouteEntry_basic2(t *testing.T) {
+	var v map[string]interface{}
+	resourceId := "alicloud_route_entry.default"
+	ra := resourceAttrInit(resourceId, AliCloudRouteEntryMap0)
+	rc := resourceCheckInitWithDescribeMethod(resourceId, &v, func() interface{} {
+		return &VpcService{testAccProvider.Meta().(*connectivity.AliyunClient)}
+	}, "DescribeRouteEntry")
+	rac := resourceAttrCheckInit(rc, ra)
+	testAccCheck := rac.resourceAttrMapUpdateSet()
+	rand := acctest.RandIntRange(1000, 9999)
+	name := fmt.Sprintf("tf-testAcc-RouteEntry-%d", rand)
+	testAccConfig := resourceTestAccConfigFunc(resourceId, name, AliCloudRouteEntryBasicDependence2)
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		IDRefreshName: resourceId,
+		Providers:     testAccProviders,
+		CheckDestroy:  rac.checkResourceDestroy(),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"route_table_id":        "${alicloud_vpc.default.route_table_id}",
+					"destination_cidrblock": "172.11.1.1/32",
+					"nexthop_type":          "RouterInterface",
+					"nexthop_id":            "${alicloud_router_interface.default.id}",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"route_table_id":        CHECKSET,
+						"destination_cidrblock": "172.11.1.1/32",
+						"nexthop_type":          "RouterInterface",
+						"nexthop_id":            CHECKSET,
+					}),
+				),
+			},
+			{
+				ResourceName:      resourceId,
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
+		},
+	})
+}
+
+func TestAccAliCloudRouteEntry_basic2_twin(t *testing.T) {
+	var v map[string]interface{}
+	resourceId := "alicloud_route_entry.default"
+	ra := resourceAttrInit(resourceId, AliCloudRouteEntryMap0)
+	rc := resourceCheckInitWithDescribeMethod(resourceId, &v, func() interface{} {
+		return &VpcService{testAccProvider.Meta().(*connectivity.AliyunClient)}
+	}, "DescribeRouteEntry")
+	rac := resourceAttrCheckInit(rc, ra)
+	testAccCheck := rac.resourceAttrMapUpdateSet()
+	rand := acctest.RandIntRange(1000, 9999)
+	name := fmt.Sprintf("tf-testAcc-RouteEntry-%d", rand)
+	testAccConfig := resourceTestAccConfigFunc(resourceId, name, AliCloudRouteEntryBasicDependence2)
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		IDRefreshName: resourceId,
+		Providers:     testAccProviders,
+		CheckDestroy:  rac.checkResourceDestroy(),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"route_table_id":        "${alicloud_vpc.default.route_table_id}",
+					"destination_cidrblock": "172.11.1.1/32",
+					"nexthop_type":          "RouterInterface",
+					"nexthop_id":            "${alicloud_router_interface.default.id}",
+					"name":                  name,
+					"description":           name,
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"route_table_id":        CHECKSET,
+						"destination_cidrblock": "172.11.1.1/32",
+						"nexthop_type":          "RouterInterface",
+						"nexthop_id":            CHECKSET,
+						"name":                  name,
+						"description":           name,
+					}),
+				),
+			},
+			{
+				ResourceName:      resourceId,
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
+		},
+	})
+}
+
+func TestAccAliCloudRouteEntry_basic3(t *testing.T) {
+	var v map[string]interface{}
+	resourceId := "alicloud_route_entry.default"
+	ra := resourceAttrInit(resourceId, AliCloudRouteEntryMap0)
+	rc := resourceCheckInitWithDescribeMethod(resourceId, &v, func() interface{} {
+		return &VpcService{testAccProvider.Meta().(*connectivity.AliyunClient)}
+	}, "DescribeRouteEntry")
+	rac := resourceAttrCheckInit(rc, ra)
+	testAccCheck := rac.resourceAttrMapUpdateSet()
+	rand := acctest.RandIntRange(1000, 9999)
+	name := fmt.Sprintf("tf-testAcc-RouteEntry-%d", rand)
+	testAccConfig := resourceTestAccConfigFunc(resourceId, name, AliCloudRouteEntryBasicDependence3)
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		IDRefreshName: resourceId,
+		Providers:     testAccProviders,
+		CheckDestroy:  rac.checkResourceDestroy(),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"route_table_id":        "${alicloud_vpc.default.route_table_id}",
+					"destination_cidrblock": "172.11.1.1/32",
+					"nexthop_type":          "NatGateway",
+					"nexthop_id":            "${alicloud_nat_gateway.default.id}",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"route_table_id":        CHECKSET,
+						"destination_cidrblock": "172.11.1.1/32",
+						"nexthop_type":          "NatGateway",
+						"nexthop_id":            CHECKSET,
+					}),
+				),
+			},
+			{
+				ResourceName:      resourceId,
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
+		},
+	})
+}
+
+func TestAccAliCloudRouteEntry_basic3_twin(t *testing.T) {
+	var v map[string]interface{}
+	resourceId := "alicloud_route_entry.default"
+	ra := resourceAttrInit(resourceId, AliCloudRouteEntryMap0)
+	rc := resourceCheckInitWithDescribeMethod(resourceId, &v, func() interface{} {
+		return &VpcService{testAccProvider.Meta().(*connectivity.AliyunClient)}
+	}, "DescribeRouteEntry")
+	rac := resourceAttrCheckInit(rc, ra)
+	testAccCheck := rac.resourceAttrMapUpdateSet()
+	rand := acctest.RandIntRange(1000, 9999)
+	name := fmt.Sprintf("tf-testAcc-RouteEntry-%d", rand)
+	testAccConfig := resourceTestAccConfigFunc(resourceId, name, AliCloudRouteEntryBasicDependence3)
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		IDRefreshName: resourceId,
+		Providers:     testAccProviders,
+		CheckDestroy:  rac.checkResourceDestroy(),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"route_table_id":        "${alicloud_vpc.default.route_table_id}",
+					"destination_cidrblock": "172.11.1.1/32",
+					"nexthop_type":          "NatGateway",
+					"nexthop_id":            "${alicloud_nat_gateway.default.id}",
+					"name":                  name,
+					"description":           name,
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"route_table_id":        CHECKSET,
+						"destination_cidrblock": "172.11.1.1/32",
+						"nexthop_type":          "NatGateway",
+						"nexthop_id":            CHECKSET,
+						"name":                  name,
+						"description":           name,
+					}),
+				),
+			},
+			{
+				ResourceName:      resourceId,
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
+		},
+	})
+}
+
+func TestAccAliCloudRouteEntry_Multi(t *testing.T) {
+	var v map[string]interface{}
+	resourceId := "alicloud_route_entry.default.5"
+	ra := resourceAttrInit(resourceId, AliCloudRouteEntryMap0)
+	rc := resourceCheckInitWithDescribeMethod(resourceId, &v, func() interface{} {
+		return &VpcService{testAccProvider.Meta().(*connectivity.AliyunClient)}
+	}, "DescribeRouteEntry")
+	rac := resourceAttrCheckInit(rc, ra)
+	testAccCheck := rac.resourceAttrMapUpdateSet()
+	rand := acctest.RandIntRange(1000, 9999)
+	name := fmt.Sprintf("tf-testAcc-RouteEntry-%d", rand)
+	testAccConfig := resourceTestAccConfigFunc(resourceId, name, AliCloudRouteEntryBasicDependence4)
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		IDRefreshName: resourceId,
+		Providers:     testAccProviders,
+		CheckDestroy:  rac.checkResourceDestroy(),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"count":                 "6",
+					"route_table_id":        "${alicloud_vpc.default.route_table_id}",
+					"destination_cidrblock": "172.16.${count.index}.0/24",
+					"nexthop_type":          "NetworkInterface",
+					"nexthop_id":            "${alicloud_ecs_network_interface.default.id}",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"route_table_id":        CHECKSET,
+						"destination_cidrblock": CHECKSET,
 						"nexthop_type":          "NetworkInterface",
-						"destination_cidrblock": "172.16.4.0/24",
-						"name":                  fmt.Sprintf("tf-testAccRouteEntryConcurrence%d", rand),
+						"nexthop_id":            CHECKSET,
 					}),
 				),
 			},
@@ -158,249 +426,221 @@ func TestAccAlicloudVPCRouteEntryMulti(t *testing.T) {
 	})
 }
 
-func testAccCheckRouteEntryDestroy(s *terraform.State) error {
-	client := testAccProvider.Meta().(*connectivity.AliyunClient)
-	vpcService := VpcService{client}
+var AliCloudRouteEntryMap0 = map[string]string{
+	"router_id": CHECKSET,
+}
 
-	for _, rs := range s.RootModule().Resources {
-		if rs.Type == "alicloud_route_entry" || rs.Type != "alicloud_route_entry" {
-			continue
-		}
-		entry, err := vpcService.DescribeRouteEntry(rs.Primary.ID)
-		if err != nil {
-			if NotFoundError(err) {
-				continue
-			}
-			return WrapError(err)
-		}
-
-		if entry.RouteTableId != "" {
-			return WrapError(Error("Route entry still exist"))
-		}
+func AliCloudRouteEntryBasicDependence0(name string) string {
+	return fmt.Sprintf(`
+	variable "name" {
+  		default = "%s"
 	}
 
-	testAccCheckRouterInterfaceDestroy(s)
+	data "alicloud_zones" "default" {
+  		available_disk_category     = "cloud_efficiency"
+  		available_resource_creation = "VSwitch"
+	}
 
-	return nil
-}
+	data "alicloud_images" "default" {
+  		most_recent = true
+  		owners      = "system"
+	}
 
-func testAccRouteEntryConfig_instance(rand int) string {
-	return fmt.Sprintf(
-		`
-data "alicloud_zones" "default" {
-	available_resource_creation= "VSwitch"
-}
-data "alicloud_instance_types" "default" {
- 	availability_zone = "${data.alicloud_zones.default.zones.0.id}"
-}
-data "alicloud_images" "default" {
-	name_regex = "^ubuntu"
-	most_recent = true
-	owners = "system"
-}
+	data "alicloud_instance_types" "default" {
+  		availability_zone = data.alicloud_zones.default.zones.0.id
+  		image_id          = data.alicloud_images.default.images.0.id
+	}
 
-variable "name" {
-	default = "tf-testAccRouteEntryConfigName%d"
-}
-resource "alicloud_vpc" "default" {
-	vpc_name = "${var.name}"
-	cidr_block = "10.1.0.0/21"
-}
+	resource "alicloud_vpc" "default" {
+  		vpc_name   = var.name
+  		cidr_block = "192.168.0.0/16"
+	}
 
-resource "alicloud_vswitch" "default" {
-	vpc_id = "${alicloud_vpc.default.id}"
-	cidr_block = "10.1.1.0/24"
-	availability_zone = "${data.alicloud_zones.default.zones.0.id}"
-	vswitch_name = "${var.name}"
-}
+	resource "alicloud_vswitch" "default" {
+  		vswitch_name = var.name
+  		vpc_id       = alicloud_vpc.default.id
+  		cidr_block   = "192.168.192.0/24"
+  		zone_id      = data.alicloud_zones.default.zones.0.id
+	}
 
-resource "alicloud_security_group" "default" {
-	name = "${var.name}"
-	description = "default"
-	vpc_id = "${alicloud_vpc.default.id}"
-}
+	resource "alicloud_security_group" "default" {
+  		name   = var.name
+  		vpc_id = alicloud_vpc.default.id
+	}
 
-resource "alicloud_security_group_rule" "default" {
-	type = "ingress"
-	ip_protocol = "tcp"
-	nic_type = "intranet"
-	policy = "accept"
-	port_range = "22/22"
-	priority = 1
-	security_group_id = "${alicloud_security_group.default.id}"
-	cidr_ip = "0.0.0.0/0"
+	resource "alicloud_instance" "default" {
+  		image_id                   = data.alicloud_images.default.images.0.id
+  		instance_type              = data.alicloud_instance_types.default.instance_types.0.id
+  		security_groups            = alicloud_security_group.default.*.id
+  		internet_charge_type       = "PayByTraffic"
+  		internet_max_bandwidth_out = "10"
+  		availability_zone          = data.alicloud_instance_types.default.instance_types.0.availability_zones.0
+  		instance_charge_type       = "PostPaid"
+  		system_disk_category       = "cloud_efficiency"
+  		vswitch_id                 = alicloud_vswitch.default.id
+  		instance_name              = var.name
+	}
+`, name)
 }
 
-resource "alicloud_instance" "default" {
-	security_groups = ["${alicloud_security_group.default.id}"]
-
-	vswitch_id = "${alicloud_vswitch.default.id}"
-	allocate_public_ip = true
-
-	instance_charge_type = "PostPaid"
-	instance_type = "${data.alicloud_instance_types.default.instance_types.0.id}"
-	internet_charge_type = "PayByTraffic"
-	internet_max_bandwidth_out = 5
-
-	system_disk_category = "cloud_efficiency"
-	image_id = "${data.alicloud_images.default.images.0.id}"
-	instance_name = "${var.name}"
-}
-
-resource "alicloud_route_entry" "default" {
-	route_table_id = "${alicloud_vpc.default.route_table_id}"
-	destination_cidrblock = "172.11.1.1/32"
-	nexthop_type = "Instance"
-	nexthop_id = "${alicloud_instance.default.id}"
-	name = "${var.name}"
-}
-`, rand)
-}
-
-func testAccRouteEntryConfig_interface(rand int) string {
-	return fmt.Sprintf(
-		`
-data "alicloud_zones" "default" {
-  available_resource_creation= "VSwitch"
-}
-variable "name" {
-	default = "tf-testAccRouteEntryInterfaceConfig%d"
-}
-resource "alicloud_vpc" "default" {
-  vpc_name = "${var.name}"
-  cidr_block = "10.1.0.0/21"
-}
-
-resource "alicloud_vswitch" "default" {
-  vpc_id = "${alicloud_vpc.default.id}"
-  cidr_block = "10.1.1.0/24"
-  availability_zone = "${data.alicloud_zones.default.zones.0.id}"
-  vswitch_name = "${var.name}"
-}
-
-resource "alicloud_security_group" "default" {
-  name = "${var.name}"
-  description = "${var.name}"
-  vpc_id = "${alicloud_vpc.default.id}"
-}
-
-resource "alicloud_security_group_rule" "default" {
-  type = "ingress"
-  ip_protocol = "tcp"
-  nic_type = "intranet"
-  policy = "accept"
-  port_range = "22/22"
-  priority = 1
-  security_group_id = "${alicloud_security_group.default.id}"
-  cidr_ip = "0.0.0.0/0"
-}
-
-data "alicloud_regions" "default" {
-  current = true
-}
-
-resource "alicloud_router_interface" "default" {
-  opposite_region = "${data.alicloud_regions.default.regions.0.id}"
-  router_type = "VRouter"
-  router_id = "${alicloud_vpc.default.router_id}"
-  role = "InitiatingSide"
-  specification = "Large.2"
-  name = "${var.name}"
-  description = "${var.name}"
-}
-
-resource "alicloud_route_entry" "default" {
-  route_table_id = "${alicloud_vpc.default.route_table_id}"
-  destination_cidrblock = "172.11.1.1/32"
-  nexthop_type = "RouterInterface"
-  nexthop_id = "${alicloud_router_interface.default.id}"
-  name = "${var.name}"
-}
-`, rand)
-}
-
-func testAccRouteEntryConfig_natGateway(rand int) string {
-	return fmt.Sprintf(
-		`
-data "alicloud_zones" "default" {
-  available_resource_creation= "VSwitch"
-}
-variable "name" {
-	default = "tf-testAccRouteEntryNatGatewayConfig%d"
-}
-resource "alicloud_vpc" "default" {
-  vpc_name = "${var.name}"
-  cidr_block = "10.1.0.0/21"
-}
-
-resource "alicloud_vswitch" "default" {
-  vpc_id = "${alicloud_vpc.default.id}"
-  cidr_block = "10.1.1.0/24"
-  availability_zone = "${data.alicloud_zones.default.zones.0.id}"
-  vswitch_name = "${var.name}"
-}
-
-resource "alicloud_nat_gateway" "default" {
-	vpc_id = "${alicloud_vpc.default.id}"
-	nat_type = "Enhanced"
-	vswitch_id = alicloud_vswitch.default.id
-	nat_gateway_name = "${var.name}"
-}
-
-resource "alicloud_route_entry" "default" {
-  route_table_id = "${alicloud_vpc.default.route_table_id}"
-  destination_cidrblock = "172.11.1.1/32"
-  nexthop_type = "NatGateway"
-  nexthop_id = "${alicloud_nat_gateway.default.id}"
-  name = "${var.name}"
-}`, rand)
-}
-
-func testAccRouteEntryConfigMulti(rand int) string {
+func AliCloudRouteEntryBasicDependence1(name string) string {
 	return fmt.Sprintf(`
-data "alicloud_zones" "default" {
-	available_resource_creation= "VSwitch"
+	variable "name" {
+  		default = "%s"
+	}
+
+	data "alicloud_zones" "default" {
+  		available_disk_category     = "cloud_efficiency"
+  		available_resource_creation = "VSwitch"
+	}
+
+	data "alicloud_images" "default" {
+  		most_recent = true
+  		owners      = "system"
+	}
+
+	data "alicloud_instance_types" "default" {
+  		availability_zone                 = data.alicloud_zones.default.zones.0.id
+  		image_id                          = data.alicloud_images.default.images.0.id
+  		minimum_eni_ipv6_address_quantity = 1
+	}
+
+	resource "alicloud_vpc" "default" {
+		vpc_name    = var.name
+		cidr_block  = "192.168.0.0/16"
+		enable_ipv6 = "true"
+	}
+
+	resource "alicloud_vswitch" "default" {
+		vswitch_name         = var.name
+		vpc_id               = alicloud_vpc.default.id
+  		cidr_block           = "192.168.192.0/24"
+  		zone_id              = data.alicloud_zones.default.zones.0.id
+  		ipv6_cidr_block_mask = 64
+	}
+
+	resource "alicloud_security_group" "default" {
+  		name   = var.name
+  		vpc_id = alicloud_vpc.default.id
+	}
+
+	resource "alicloud_instance" "default" {
+  		image_id                   = data.alicloud_images.default.images.0.id
+  		instance_type              = data.alicloud_instance_types.default.instance_types.0.id
+  		security_groups            = alicloud_security_group.default.*.id
+  		internet_charge_type       = "PayByTraffic"
+  		internet_max_bandwidth_out = "10"
+  		availability_zone          = data.alicloud_instance_types.default.instance_types.0.availability_zones.0
+  		instance_charge_type       = "PostPaid"
+  		system_disk_category       = "cloud_efficiency"
+  		vswitch_id                 = alicloud_vswitch.default.id
+  		instance_name              = var.name
+		ipv6_address_count         = 1
+	}
+`, name)
 }
 
-variable "name" {
-	default = "tf-testAccRouteEntryConcurrence%d"
-}
-resource "alicloud_vpc" "default" {
-	vpc_name = "${var.name}"
-	cidr_block = "10.1.0.0/21"
+func AliCloudRouteEntryBasicDependence2(name string) string {
+	return fmt.Sprintf(`
+	variable "name" {
+  		default = "%s"
+	}
+
+	data "alicloud_regions" "default" {
+  		current = true
+	}
+
+	data "alicloud_zones" "default" {
+  		available_resource_creation = "VSwitch"
+	}
+
+	resource "alicloud_vpc" "default" {
+  		vpc_name   = var.name
+  		cidr_block = "192.168.0.0/16"
+	}
+
+	resource "alicloud_vswitch" "default" {
+  		vswitch_name = var.name
+  		vpc_id       = alicloud_vpc.default.id
+  		cidr_block   = "192.168.192.0/24"
+  		zone_id      = data.alicloud_zones.default.zones.0.id
+	}
+
+	resource "alicloud_router_interface" "default" {
+  		opposite_region = data.alicloud_regions.default.regions.0.id
+  		router_type     = "VRouter"
+  		router_id       = alicloud_vpc.default.router_id
+  		role            = "InitiatingSide"
+  		specification   = "Large.2"
+  		name            = var.name
+  		description     = var.name
+	}
+`, name)
 }
 
-resource "alicloud_vswitch" "default" {
-    vswitch_name = "${var.name}"
-    cidr_block = "10.1.1.0/24"
-    availability_zone = "${data.alicloud_zones.default.zones.0.id}"
-    vpc_id = "${alicloud_vpc.default.id}"
+func AliCloudRouteEntryBasicDependence3(name string) string {
+	return fmt.Sprintf(`
+	variable "name" {
+  		default = "%s"
+	}
+
+	data "alicloud_zones" "default" {
+  		available_resource_creation = "VSwitch"
+	}
+
+	resource "alicloud_vpc" "default" {
+  		vpc_name   = var.name
+  		cidr_block = "192.168.0.0/16"
+	}
+
+	resource "alicloud_vswitch" "default" {
+  		vswitch_name = var.name
+  		vpc_id       = alicloud_vpc.default.id
+  		cidr_block   = "192.168.192.0/24"
+  		zone_id      = data.alicloud_zones.default.zones.0.id
+	}
+
+	resource "alicloud_nat_gateway" "default" {
+  		vpc_id           = alicloud_vpc.default.id
+  		nat_type         = "Enhanced"
+  		vswitch_id       = alicloud_vswitch.default.id
+		nat_gateway_name = var.name
+	}
+`, name)
 }
 
-resource "alicloud_security_group" "default" {
-    name = "${var.name}"
-    vpc_id = "${alicloud_vpc.default.id}"
-}
+func AliCloudRouteEntryBasicDependence4(name string) string {
+	return fmt.Sprintf(`
+	variable "name" {
+  		default = "%s"
+	}
 
-resource "alicloud_network_interface" "default" {
-    name = "${var.name}"
-    vswitch_id = "${alicloud_vswitch.default.id}"
-    security_groups = [ "${alicloud_security_group.default.id}" ]
-}
+	data "alicloud_zones" "default" {
+  		available_disk_category     = "cloud_efficiency"
+  		available_resource_creation = "VSwitch"
+	}
 
-resource "alicloud_route_entry" "default" {
-	count = 5
-	route_table_id = "${alicloud_vpc.default.route_table_id}"
-	destination_cidrblock = "172.16.${count.index}.0/24"
-	nexthop_type = "NetworkInterface"
-	nexthop_id = "${alicloud_network_interface.default.id}"
-	name = "${var.name}"
-}
-`, rand)
-}
+	resource "alicloud_vpc" "default" {
+  		vpc_name   = var.name
+  		cidr_block = "192.168.0.0/16"
+	}
 
-var testAccRouteEntryCheckMap = map[string]string{
-	"route_table_id":        CHECKSET,
-	"nexthop_id":            CHECKSET,
-	"destination_cidrblock": "172.11.1.1/32",
+	resource "alicloud_vswitch" "default" {
+  		vswitch_name = var.name
+  		vpc_id       = alicloud_vpc.default.id
+  		cidr_block   = "192.168.192.0/24"
+  		zone_id      = data.alicloud_zones.default.zones.0.id
+	}
+
+	resource "alicloud_security_group" "default" {
+  		name   = var.name
+  		vpc_id = alicloud_vpc.default.id
+	}
+
+	resource "alicloud_ecs_network_interface" "default" {
+		network_interface_name = var.name
+		vswitch_id             = alicloud_vswitch.default.id
+  		security_group_ids     = alicloud_security_group.default.*.id
+	}
+`, name)
 }

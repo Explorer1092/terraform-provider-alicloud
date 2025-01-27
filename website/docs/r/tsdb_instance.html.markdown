@@ -7,13 +7,15 @@ description: |-
   Provides a Alicloud Time Series Database (TSDB) Instance resource.
 ---
 
-# alicloud\_tsdb\_instance
+# alicloud_tsdb_instance
 
 Provides a Time Series Database (TSDB) Instance resource.
 
 For information about Time Series Database (TSDB) Instance and how to use it, see [What is Time Series Database (TSDB)](https://www.alibabacloud.com/help/en/doc-detail/55652.htm).
 
 -> **NOTE:** Available in v1.112.0+.
+
+-> **DEPRECATED:**  This resource has been [deprecated](https://www.alibabacloud.com/en/notice/0313tsdb?_p_lc=1) from version `1.223.1`.
 
 ## Example Usage
 
@@ -99,6 +101,6 @@ The `timeouts` block allows you to specify [timeouts](https://www.terraform.io/d
 
 TSDB Instance can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_tsdb_instance.example <id>
 ```

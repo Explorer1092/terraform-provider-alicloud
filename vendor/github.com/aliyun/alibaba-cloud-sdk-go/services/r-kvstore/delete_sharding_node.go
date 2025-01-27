@@ -78,6 +78,7 @@ type DeleteShardingNodeRequest struct {
 	ResourceOwnerAccount string           `position:"Query" name:"ResourceOwnerAccount"`
 	OwnerAccount         string           `position:"Query" name:"OwnerAccount"`
 	OwnerId              requests.Integer `position:"Query" name:"OwnerId"`
+	ForceTrans           requests.Boolean `position:"Query" name:"ForceTrans"`
 	InstanceId           string           `position:"Query" name:"InstanceId"`
 }
 
@@ -85,6 +86,7 @@ type DeleteShardingNodeRequest struct {
 type DeleteShardingNodeResponse struct {
 	*responses.BaseResponse
 	RequestId string `json:"RequestId" xml:"RequestId"`
+	OrderId   string `json:"OrderId" xml:"OrderId"`
 }
 
 // CreateDeleteShardingNodeRequest creates a request to invoke DeleteShardingNode API

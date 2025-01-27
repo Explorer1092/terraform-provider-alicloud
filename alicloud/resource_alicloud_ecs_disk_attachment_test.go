@@ -10,7 +10,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 )
 
-func TestAccAlicloudECSDiskAttachmentBasic(t *testing.T) {
+func TestAccAliCloudECSDiskAttachmentBasic(t *testing.T) {
 	var v map[string]interface{}
 	resourceId := "alicloud_ecs_disk_attachment.default"
 	ra := resourceAttrInit(resourceId, AlicloudEcsDiskAttachmentMap)
@@ -39,7 +39,7 @@ func TestAccAlicloudECSDiskAttachmentBasic(t *testing.T) {
 	})
 }
 
-func TestAccAlicloudECSDiskAttachmentMulti(t *testing.T) {
+func TestAccAliCloudECSDiskAttachmentMulti(t *testing.T) {
 	var v map[string]interface{}
 	resourceId := "alicloud_ecs_disk_attachment.default.1"
 	ra := resourceAttrInit(resourceId, AlicloudEcsDiskAttachmentMap)
@@ -68,7 +68,7 @@ func TestAccAlicloudECSDiskAttachmentMulti(t *testing.T) {
 	})
 }
 
-func TestAccAlicloudECSDiskAttachmentBasic1(t *testing.T) {
+func TestAccAliCloudECSDiskAttachmentBasic1(t *testing.T) {
 	var v map[string]interface{}
 	resourceId := "alicloud_ecs_disk_attachment.default.1"
 	ra := resourceAttrInit(resourceId, AlicloudEcsDiskAttachmentMap)
@@ -113,13 +113,12 @@ data "alicloud_zones" default {
 }
 
 data "alicloud_instance_types" "default" {
-	availability_zone = "${data.alicloud_zones.default.zones.0.id}"
-  	cpu_core_count    = 1
-	memory_size       = 2
+  availability_zone = "${data.alicloud_zones.default.zones.0.id}"
+  instance_type_family = "ecs.sn1ne"
 }
 
 data "alicloud_vpcs" "default" {
-	name_regex = "default-NODELETING"
+	name_regex = "^default-NODELETING$"
 }
 
 data "alicloud_vswitches" "default" {
@@ -187,13 +186,12 @@ data "alicloud_zones" default {
 }
 
 data "alicloud_instance_types" "default" {
-	availability_zone = "${data.alicloud_zones.default.zones.0.id}"
-  	cpu_core_count    = 1
-	memory_size       = 2
+  availability_zone = "${data.alicloud_zones.default.zones.0.id}"
+  instance_type_family = "ecs.sn1ne"
 }
 
 data "alicloud_vpcs" "default" {
-	name_regex = "default-NODELETING"
+	name_regex = "^default-NODELETING$"
 }
 
 data "alicloud_vswitches" "default" {
@@ -266,13 +264,12 @@ data "alicloud_zones" default {
 }
 
 data "alicloud_instance_types" "default" {
-	availability_zone = "${data.alicloud_zones.default.zones.0.id}"
-  	cpu_core_count    = 1
-	memory_size       = 2
+  availability_zone = "${data.alicloud_zones.default.zones.0.id}"
+  instance_type_family = "ecs.sn1ne"
 }
 
 data "alicloud_vpcs" "default" {
-	name_regex = "default-NODELETING"
+	name_regex = "^default-NODELETING$"
 }
 
 data "alicloud_vswitches" "default" {

@@ -16,9 +16,18 @@ This resouce used to create a dedicated host and store its initial version. For 
 ## Example Usage
 Basic Usage
 
-```
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_ecs_dedicated_host&exampleId=dc59ca38-fd10-4e9a-85c7-290e4853308e82aa96a9&activeTab=example&spm=docs.r.ecs_dedicated_host.0.dc59ca38fd&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
+```terraform
+provider "alicloud" {
+  region = "cn-hangzhou"
+}
 resource "alicloud_ecs_dedicated_host" "default" {
-  dedicated_host_type = "ddh.g5"
+  dedicated_host_type = "ddh.g6"
   tags = {
     Create = "Terraform",
     For    = "DDH",
@@ -30,18 +39,24 @@ resource "alicloud_ecs_dedicated_host" "default" {
 
 Create Prepaid DDH
 
-```
-resource "alicloud_ecs_dedicated_host" "default" {
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_ecs_dedicated_host&exampleId=1289ef43-59c7-4a3f-bbed-976fc2067df23d131e63&activeTab=example&spm=docs.r.ecs_dedicated_host.1.1289ef4359&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
+```terraform
+resource "alicloud_ecs_dedicated_host" "example" {
   dedicated_host_type = "ddh.g5"
   tags = {
     Create = "Terraform",
     For    = "DDH",
   }
-  description = "From_Terraform"
-  dedicated_host_name = "dedicated_host_name"
-  payment_type = "PrePaid"
-  expired_time = 1
-  sale_cycle = "Month"
+  description         = "terraform-example"
+  dedicated_host_name = "terraform-example"
+  payment_type        = "PrePaid"
+  expired_time        = 1
+  sale_cycle          = "Month"
 }
 ```
 ### Deleting alicloud_ecs_dedicated_host or removing it from your configuration
@@ -95,6 +110,6 @@ The `timeouts` block allows you to specify [timeouts](https://www.terraform.io/d
 
 Ecs dedicated host can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_ecs_dedicated_host.default dh-2zedmxxxx
 ```

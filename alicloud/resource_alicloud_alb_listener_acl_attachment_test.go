@@ -19,7 +19,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 )
 
-func TestAccAlicloudALBListenerAclAttachment_basic0(t *testing.T) {
+func TestAccAliCloudALBListenerAclAttachment_basic0(t *testing.T) {
 	var v map[string]interface{}
 	resourceId := "alicloud_alb_listener_acl_attachment.default"
 	checkoutSupportedRegions(t, true, connectivity.AlbSupportRegions)
@@ -84,17 +84,17 @@ resource "alicloud_alb_acl" "default" {
 
 data "alicloud_alb_zones" "default" {}
 
-data "alicloud_vpcs" "default" {
-  name_regex = "default-NODELETING"
-}
-data "alicloud_vswitches" "default_1" {
-  vpc_id  = data.alicloud_vpcs.default.ids.0
-  zone_id = data.alicloud_alb_zones.default.zones.0.id
+resource "alicloud_vpc" "default" {
+  vpc_name   = var.name
+  cidr_block = "10.4.0.0/16"
 }
 
-data "alicloud_vswitches" "default_2" {
-  vpc_id  = data.alicloud_vpcs.default.ids.0
-  zone_id = data.alicloud_alb_zones.default.zones.1.id
+resource "alicloud_vswitch" "default" {
+  count        = 2
+  vpc_id       = alicloud_vpc.default.id
+  cidr_block   = format("10.4.%%d.0/24", count.index + 1)
+  zone_id      = data.alicloud_alb_zones.default.zones[count.index + 3].id
+  vswitch_name = format("${var.name}_%%d", count.index + 1)
 }
 
 resource "alicloud_alb_load_balancer" "default" {
@@ -111,12 +111,12 @@ resource "alicloud_alb_load_balancer" "default" {
     Created = "TF"
   }
   zone_mappings {
-    vswitch_id = data.alicloud_vswitches.default_1.ids[0]
-    zone_id    = data.alicloud_alb_zones.default.zones.0.id
+    vswitch_id = alicloud_vswitch.default.0.id
+    zone_id    = alicloud_vswitch.default.0.zone_id
   }
   zone_mappings {
-    vswitch_id = data.alicloud_vswitches.default_2.ids[0]
-    zone_id    = data.alicloud_alb_zones.default.zones.1.id
+    vswitch_id = alicloud_vswitch.default.1.id
+    zone_id    = alicloud_vswitch.default.1.zone_id
   }
   modification_protection_config {
     status = "NonProtection"
@@ -156,7 +156,7 @@ resource "alicloud_alb_listener" "default" {
 `, name)
 }
 
-func TestAccAlicloudAlbListenerAclAttachment_unit(t *testing.T) {
+func TestUnitAlicloudAlbListenerAclAttachment(t *testing.T) {
 	p := Provider().(*schema.Provider).ResourcesMap
 	dInit, _ := schema.InternalMap(p["alicloud_alb_listener_acl_attachment"].Schema).Data(nil, nil)
 	dExisted, _ := schema.InternalMap(p["alicloud_alb_listener_acl_attachment"].Schema).Data(nil, nil)
@@ -222,7 +222,7 @@ func TestAccAlicloudAlbListenerAclAttachment_unit(t *testing.T) {
 			StatusCode: tea.Int(400),
 		}
 	})
-	err = resourceAlicloudAlbListenerAclAttachmentCreate(dInit, rawClient)
+	err = resourceAliCloudAlbListenerAclAttachmentCreate(dInit, rawClient)
 	patches.Reset()
 	assert.NotNil(t, err)
 	ReadMockResponseDiff := map[string]interface{}{}
@@ -245,7 +245,7 @@ func TestAccAlicloudAlbListenerAclAttachment_unit(t *testing.T) {
 			}
 			return ReadMockResponse, nil
 		})
-		err := resourceAlicloudAlbListenerAclAttachmentCreate(dInit, rawClient)
+		err := resourceAliCloudAlbListenerAclAttachmentCreate(dInit, rawClient)
 		patches.Reset()
 		switch errorCode {
 		case "NonRetryableError":
@@ -290,7 +290,7 @@ func TestAccAlicloudAlbListenerAclAttachment_unit(t *testing.T) {
 			}
 			return ReadMockResponse, nil
 		})
-		err := resourceAlicloudAlbListenerAclAttachmentRead(dExisted, rawClient)
+		err := resourceAliCloudAlbListenerAclAttachmentRead(dExisted, rawClient)
 		patches.Reset()
 		switch errorCode {
 		case "NonRetryableError":
@@ -309,7 +309,7 @@ func TestAccAlicloudAlbListenerAclAttachment_unit(t *testing.T) {
 			StatusCode: tea.Int(400),
 		}
 	})
-	err = resourceAlicloudAlbListenerAclAttachmentDelete(dExisted, rawClient)
+	err = resourceAliCloudAlbListenerAclAttachmentDelete(dExisted, rawClient)
 	patches.Reset()
 	assert.NotNil(t, err)
 	attributesDiff = map[string]interface{}{}
@@ -339,7 +339,7 @@ func TestAccAlicloudAlbListenerAclAttachment_unit(t *testing.T) {
 			}
 			return ReadMockResponse, nil
 		})
-		err := resourceAlicloudAlbListenerAclAttachmentDelete(dExisted, rawClient)
+		err := resourceAliCloudAlbListenerAclAttachmentDelete(dExisted, rawClient)
 		patches.Reset()
 		switch errorCode {
 		case "NonRetryableError":

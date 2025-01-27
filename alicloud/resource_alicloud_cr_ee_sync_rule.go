@@ -1,28 +1,34 @@
+// Package alicloud. This file is generated automatically. Please do not modify it manually, thank you!
 package alicloud
 
 import (
 	"fmt"
+	"log"
+	"time"
 
-	"github.com/aliyun/alibaba-cloud-sdk-go/services/cr_ee"
+	util "github.com/alibabacloud-go/tea-utils/service"
 	"github.com/aliyun/terraform-provider-alicloud/alicloud/connectivity"
+	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
-	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
 )
 
-func resourceAlicloudCrEESyncRule() *schema.Resource {
+func resourceAliCloudCrRepoSyncRule() *schema.Resource {
 	return &schema.Resource{
-		Create: resourceAlicloudCrEESyncRuleCreate,
-		Read:   resourceAlicloudCrEESyncRuleRead,
-		Delete: resourceAlicloudCrEESyncRuleDelete,
+		Create: resourceAliCloudCrRepoSyncRuleCreate,
+		Read:   resourceAliCloudCrRepoSyncRuleRead,
+		Update: resourceAliCloudCrRepoSyncRuleUpdate,
+		Delete: resourceAliCloudCrRepoSyncRuleDelete,
 		Importer: &schema.ResourceImporter{
 			State: schema.ImportStatePassthrough,
 		},
-
+		Timeouts: &schema.ResourceTimeout{
+			Create: schema.DefaultTimeout(5 * time.Minute),
+			Delete: schema.DefaultTimeout(5 * time.Minute),
+		},
 		Schema: map[string]*schema.Schema{
-			"name": {
+			"create_time": {
 				Type:     schema.TypeString,
-				Required: true,
-				ForceNew: true,
+				Computed: true,
 			},
 			"instance_id": {
 				Type:     schema.TypeString,
@@ -30,18 +36,45 @@ func resourceAlicloudCrEESyncRule() *schema.Resource {
 				ForceNew: true,
 			},
 			"namespace_name": {
-				Type:         schema.TypeString,
-				Required:     true,
-				ForceNew:     true,
-				ValidateFunc: validation.StringLenBetween(2, 30),
+				Type:     schema.TypeString,
+				Required: true,
+				ForceNew: true,
+			},
+			"region_id": {
+				Type:     schema.TypeString,
+				Computed: true,
 			},
 			"repo_name": {
+				Type:     schema.TypeString,
+				Optional: true,
+				ForceNew: true,
+			},
+			"repo_sync_rule_id": {
+				Type:     schema.TypeString,
+				Computed: true,
+			},
+			"sync_rule_name": {
 				Type:         schema.TypeString,
 				Optional:     true,
+				ExactlyOneOf: []string{"sync_rule_name", "name"},
+				Computed:     true,
 				ForceNew:     true,
-				ValidateFunc: validation.StringLenBetween(2, 64),
 			},
-			"target_region_id": {
+			"sync_scope": {
+				Type:         schema.TypeString,
+				Optional:     true,
+				Computed:     true,
+				ForceNew:     true,
+				ValidateFunc: StringInSlice([]string{"REPO", "NAMESPACE"}, false),
+			},
+			"sync_trigger": {
+				Type:         schema.TypeString,
+				Optional:     true,
+				Computed:     true,
+				ForceNew:     true,
+				ValidateFunc: StringInSlice([]string{"INITIATIVE", "PASSIVE"}, false),
+			},
+			"tag_filter": {
 				Type:     schema.TypeString,
 				Required: true,
 				ForceNew: true,
@@ -52,154 +85,254 @@ func resourceAlicloudCrEESyncRule() *schema.Resource {
 				ForceNew: true,
 			},
 			"target_namespace_name": {
-				Type:         schema.TypeString,
-				Required:     true,
-				ForceNew:     true,
-				ValidateFunc: validation.StringLenBetween(2, 30),
-			},
-			"target_repo_name": {
-				Type:         schema.TypeString,
-				Optional:     true,
-				ForceNew:     true,
-				ValidateFunc: validation.StringLenBetween(2, 64),
-			},
-			"tag_filter": {
 				Type:     schema.TypeString,
 				Required: true,
 				ForceNew: true,
 			},
-			"rule_id": {
+			"target_region_id": {
 				Type:     schema.TypeString,
-				Computed: true,
+				Required: true,
 				ForceNew: true,
+			},
+			"target_repo_name": {
+				Type:     schema.TypeString,
+				Optional: true,
+				ForceNew: true,
+			},
+			"target_user_id": {
+				Type:     schema.TypeString,
+				Optional: true,
 			},
 			"sync_direction": {
 				Type:     schema.TypeString,
 				Computed: true,
 			},
-			"sync_scope": {
-				Type:     schema.TypeString,
-				Computed: true,
+			"name": {
+				Type:       schema.TypeString,
+				Optional:   true,
+				Computed:   true,
+				Deprecated: "Field `name` has been deprecated from provider version 1.240.0. New field `sync_rule_name` instead.",
+				ForceNew:   true,
+			},
+			"rule_id": {
+				Type:       schema.TypeString,
+				Computed:   true,
+				Deprecated: "Field `rule_id` has been deprecated from provider version 1.240.0. New field `repo_sync_rule_id` instead.",
 			},
 		},
 	}
 }
 
-func resourceAlicloudCrEESyncRuleCreate(d *schema.ResourceData, meta interface{}) error {
+func resourceAliCloudCrRepoSyncRuleCreate(d *schema.ResourceData, meta interface{}) error {
+
 	client := meta.(*connectivity.AliyunClient)
-	crService := &CrService{client}
-	syncRuleName := d.Get("name").(string)
-	instanceId := d.Get("instance_id").(string)
-	namespaceName := d.Get("namespace_name").(string)
-	targetRegionId := d.Get("target_region_id").(string)
-	targetInstanceId := d.Get("target_instance_id").(string)
-	targetNamespaceName := d.Get("target_namespace_name").(string)
-	tagFilter := d.Get("tag_filter").(string)
+
+	action := "CreateRepoSyncRule"
+	var request map[string]interface{}
+	var response map[string]interface{}
+	query := make(map[string]interface{})
+	conn, err := client.NewAcrClient()
+	if err != nil {
+		return WrapError(err)
+	}
+	request = make(map[string]interface{})
+	request["InstanceId"] = d.Get("instance_id")
+	request["RegionId"] = client.RegionId
+
+	request["NamespaceName"] = d.Get("namespace_name")
+	request["TargetRegionId"] = d.Get("target_region_id")
+	request["TargetInstanceId"] = d.Get("target_instance_id")
+	request["TargetNamespaceName"] = d.Get("target_namespace_name")
+	request["TagFilter"] = d.Get("tag_filter")
+
+	if v, ok := d.GetOk("sync_rule_name"); ok {
+		request["SyncRuleName"] = v
+	} else if v, ok := d.GetOk("name"); ok {
+		request["SyncRuleName"] = v
+	} else {
+		return WrapError(Error(`[ERROR] Field "sync_rule_name" or "name" must be set one!`))
+	}
 
 	var repoName, targetRepoName string
+
 	if v, ok := d.GetOk("repo_name"); ok {
 		repoName = v.(string)
+		request["RepoName"] = repoName
 	}
+
 	if v, ok := d.GetOk("target_repo_name"); ok {
 		targetRepoName = v.(string)
+		request["TargetRepoName"] = targetRepoName
 	}
+
 	if (repoName != "" && targetRepoName == "") || (repoName == "" && targetRepoName != "") {
-		return WrapError(Error(DefaultErrorMsg, syncRuleName, "create", "[Params repo_name or target_repo_name is empty]"))
+		return WrapError(Error(`[ERROR] Field "repo_name" and "target_repo_name" must be set at the same time!`))
 	}
 
-	response := &cr_ee.CreateRepoSyncRuleResponse{}
-	request := cr_ee.CreateCreateRepoSyncRuleRequest()
-	request.RegionId = crService.client.RegionId
-	request.SyncRuleName = syncRuleName
-	request.InstanceId = instanceId
-	request.NamespaceName = namespaceName
-	request.TargetRegionId = targetRegionId
-	request.TargetInstanceId = targetInstanceId
-	request.TargetNamespaceName = targetNamespaceName
-	request.TagFilter = tagFilter
-	request.SyncTrigger = "PASSIVE"
-	if repoName != "" && targetRepoName != "" {
-		request.SyncScope = "REPO"
-		request.RepoName = repoName
-		request.TargetRepoName = targetRepoName
+	if v, ok := d.GetOk("sync_scope"); ok {
+		request["SyncScope"] = v
 	} else {
-		request.SyncScope = "NAMESPACE"
+		if repoName != "" && targetRepoName != "" {
+			request["SyncScope"] = "REPO"
+		} else {
+			request["SyncScope"] = "NAMESPACE"
+		}
 	}
 
-	raw, err := crService.client.WithCrEEClient(func(creeClient *cr_ee.Client) (interface{}, error) {
-		return creeClient.CreateRepoSyncRule(request)
+	if v, ok := d.GetOk("sync_trigger"); ok {
+		request["SyncTrigger"] = v
+	} else {
+		request["SyncTrigger"] = "PASSIVE"
+
+	}
+
+	if v, ok := d.GetOk("target_user_id"); ok {
+		request["TargetUserId"] = v
+	}
+	runtime := util.RuntimeOptions{}
+	runtime.SetAutoretry(true)
+	wait := incrementalWait(3*time.Second, 5*time.Second)
+	err = resource.Retry(d.Timeout(schema.TimeoutCreate), func() *resource.RetryError {
+		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2018-12-01"), StringPointer("AK"), query, request, &runtime)
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		return nil
 	})
+	addDebug(action, response, request)
+
 	if err != nil {
-		return WrapErrorf(err, DefaultErrorMsg, "alicloud_cr_ee_sync_rule", request.GetActionName(), AlibabaCloudSdkGoERROR)
-	}
-	addDebug(request.GetActionName(), raw, request.RpcRequest, request)
-
-	response, _ = raw.(*cr_ee.CreateRepoSyncRuleResponse)
-	if !response.CreateRepoSyncRuleIsSuccess {
-		return WrapErrorf(fmt.Errorf("%v", response), DefaultErrorMsg, "alicloud_cr_ee_sync_rule", request.GetActionName(), AlibabaCloudSdkGoERROR)
+		return WrapErrorf(err, DefaultErrorMsg, "alicloud_cr_ee_sync_rule", action, AlibabaCloudSdkGoERROR)
 	}
 
-	d.SetId(fmt.Sprint(instanceId, ":", namespaceName, ":", response.SyncRuleId))
+	d.SetId(fmt.Sprintf("%s:%s:%s", request["InstanceId"], request["NamespaceName"], response["SyncRuleId"]))
 
-	return resourceAlicloudCrEESyncRuleRead(d, meta)
+	return resourceAliCloudCrRepoSyncRuleRead(d, meta)
 }
 
-func resourceAlicloudCrEESyncRuleRead(d *schema.ResourceData, meta interface{}) error {
+func resourceAliCloudCrRepoSyncRuleRead(d *schema.ResourceData, meta interface{}) error {
 	client := meta.(*connectivity.AliyunClient)
-	crService := &CrService{client}
-	resp, err := crService.DescribeCrEESyncRule(d.Id())
+	crServiceV2 := CrServiceV2{client}
+
+	objectRaw, err := crServiceV2.DescribeCrRepoSyncRule(d.Id())
 	if err != nil {
-		if NotFoundError(err) {
+		if !d.IsNewResource() && NotFoundError(err) {
+			log.Printf("[DEBUG] Resource alicloud_cr_ee_sync_rule DescribeCrRepoSyncRule Failed!!! %s", err)
 			d.SetId("")
 			return nil
 		}
 		return WrapError(err)
 	}
 
-	d.Set("name", resp.SyncRuleName)
-	d.Set("rule_id", resp.SyncRuleId)
-	d.Set("instance_id", resp.LocalInstanceId)
-	d.Set("namespace_name", resp.LocalNamespaceName)
-	d.Set("repo_name", resp.LocalRepoName)
-	d.Set("target_region_id", resp.TargetRegionId)
-	d.Set("target_instance_id", resp.TargetInstanceId)
-	d.Set("target_namespace_name", resp.TargetNamespaceName)
-	d.Set("target_repo_name", resp.TargetRepoName)
-	d.Set("tag_filter", resp.TagFilter)
-	d.Set("sync_direction", resp.SyncDirection)
-	d.Set("sync_scope", resp.SyncScope)
+	if objectRaw["CreateTime"] != nil {
+		d.Set("create_time", objectRaw["CreateTime"])
+	}
+	if objectRaw["LocalNamespaceName"] != nil {
+		d.Set("namespace_name", objectRaw["LocalNamespaceName"])
+	}
+	if objectRaw["LocalRegionId"] != nil {
+		d.Set("region_id", objectRaw["LocalRegionId"])
+	}
+	if objectRaw["LocalRepoName"] != nil {
+		d.Set("repo_name", objectRaw["LocalRepoName"])
+	}
+	if objectRaw["SyncRuleName"] != nil {
+		d.Set("sync_rule_name", objectRaw["SyncRuleName"])
+		d.Set("name", objectRaw["SyncRuleName"])
+	}
+	if objectRaw["SyncScope"] != nil {
+		d.Set("sync_scope", objectRaw["SyncScope"])
+	}
+	if objectRaw["SyncTrigger"] != nil {
+		d.Set("sync_trigger", objectRaw["SyncTrigger"])
+	}
+	if objectRaw["TagFilter"] != nil {
+		d.Set("tag_filter", objectRaw["TagFilter"])
+	}
+	if objectRaw["TargetInstanceId"] != nil {
+		d.Set("target_instance_id", objectRaw["TargetInstanceId"])
+	}
+	if objectRaw["TargetNamespaceName"] != nil {
+		d.Set("target_namespace_name", objectRaw["TargetNamespaceName"])
+	}
+	if objectRaw["TargetRegionId"] != nil {
+		d.Set("target_region_id", objectRaw["TargetRegionId"])
+	}
+	if objectRaw["TargetRepoName"] != nil {
+		d.Set("target_repo_name", objectRaw["TargetRepoName"])
+	}
+	if objectRaw["LocalInstanceId"] != nil {
+		d.Set("instance_id", objectRaw["LocalInstanceId"])
+	}
+	if objectRaw["SyncRuleId"] != nil {
+		d.Set("repo_sync_rule_id", objectRaw["SyncRuleId"])
+		d.Set("rule_id", objectRaw["SyncRuleId"])
+	}
+	if objectRaw["SyncDirection"] != nil {
+		d.Set("sync_direction", objectRaw["SyncDirection"])
+	}
 
 	return nil
 }
 
-func resourceAlicloudCrEESyncRuleDelete(d *schema.ResourceData, meta interface{}) error {
+func resourceAliCloudCrRepoSyncRuleUpdate(d *schema.ResourceData, meta interface{}) error {
+	log.Printf("[INFO] Cannot update resource alicloud_cr_ee_sync_rule.")
+	return nil
+}
+
+func resourceAliCloudCrRepoSyncRuleDelete(d *schema.ResourceData, meta interface{}) error {
+
 	client := meta.(*connectivity.AliyunClient)
-	crService := &CrService{client}
+	action := "DeleteRepoSyncRule"
+	var request map[string]interface{}
+	var response map[string]interface{}
+	query := make(map[string]interface{})
+	conn, err := client.NewAcrClient()
+	if err != nil {
+		return WrapError(err)
+	}
+	request = make(map[string]interface{})
+
 	parts, err := ParseResourceId(d.Id(), 3)
 	if err != nil {
 		return WrapError(err)
 	}
+
 	syncDirection := d.Get("sync_direction").(string)
 	if syncDirection != "FROM" {
 		return WrapError(Error(DefaultErrorMsg, d.Id(), "delete", "[Please delete sync rule in the source instance]"))
 	}
 
-	response := &cr_ee.DeleteRepoSyncRuleResponse{}
-	request := cr_ee.CreateDeleteRepoSyncRuleRequest()
-	request.RegionId = crService.client.RegionId
-	request.InstanceId = parts[0]
-	request.SyncRuleId = parts[2]
-	raw, err := crService.client.WithCrEEClient(func(creeClient *cr_ee.Client) (interface{}, error) {
-		return creeClient.DeleteRepoSyncRule(request)
-	})
-	if err != nil {
-		return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
-	}
-	addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+	request["RegionId"] = client.RegionId
+	request["InstanceId"] = parts[0]
+	request["SyncRuleId"] = parts[2]
 
-	response, _ = raw.(*cr_ee.DeleteRepoSyncRuleResponse)
-	if !response.DeleteRepoSyncRuleIsSuccess {
-		return WrapErrorf(fmt.Errorf("%v", response), DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
+	runtime := util.RuntimeOptions{}
+	runtime.SetAutoretry(true)
+	wait := incrementalWait(3*time.Second, 5*time.Second)
+	err = resource.Retry(d.Timeout(schema.TimeoutDelete), func() *resource.RetryError {
+		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2018-12-01"), StringPointer("AK"), query, request, &runtime)
+
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		return nil
+	})
+	addDebug(action, response, request)
+
+	if err != nil {
+		if NotFoundError(err) {
+			return nil
+		}
+		return WrapErrorf(err, DefaultErrorMsg, d.Id(), action, AlibabaCloudSdkGoERROR)
 	}
 
 	return nil

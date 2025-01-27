@@ -19,7 +19,6 @@ import (
 )
 
 func TestAccAlicloudMscSubContact_basic0(t *testing.T) {
-	checkoutSupportedRegions(t, true, connectivity.MSCSupportRegions)
 	var v map[string]interface{}
 	resourceId := "alicloud_msc_sub_contact.default"
 	ra := resourceAttrInit(resourceId, AlicloudMscSubContactMap0)
@@ -118,7 +117,6 @@ variable "name" {
 }
 
 func TestAccAlicloudMscSubContact_basic1(t *testing.T) {
-	checkoutSupportedRegions(t, true, connectivity.MSCSupportRegions)
 	var v map[string]interface{}
 	resourceId := "alicloud_msc_sub_contact.default"
 	ra := resourceAttrInit(resourceId, AlicloudMscSubContactMap1)
@@ -172,7 +170,7 @@ variable "name" {
 `)
 }
 
-func TestAccAlicloudMscSubContact_unit(t *testing.T) {
+func TestUnitAlicloudMscSubContact(t *testing.T) {
 	p := Provider().(*schema.Provider).ResourcesMap
 	dInit, _ := schema.InternalMap(p["alicloud_msc_sub_contact"].Schema).Data(nil, nil)
 	dExisted, _ := schema.InternalMap(p["alicloud_msc_sub_contact"].Schema).Data(nil, nil)

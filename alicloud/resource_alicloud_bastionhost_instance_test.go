@@ -71,17 +71,18 @@ func testSweepBastionhostInstances(region string) error {
 	for _, v := range instances {
 		name := v.Description
 		skip := true
-		for _, prefix := range prefixes {
-			if name != "" && strings.HasPrefix(strings.ToLower(name), strings.ToLower(prefix)) {
-				skip = false
-				break
+		if !sweepAll() {
+			for _, prefix := range prefixes {
+				if name != "" && strings.HasPrefix(strings.ToLower(name), strings.ToLower(prefix)) {
+					skip = false
+					break
+				}
+			}
+			if skip {
+				log.Printf("[INFO] Skipping Bastionhost Instance: %s", name)
+				continue
 			}
 		}
-		if skip {
-			log.Printf("[INFO] Skipping Bastionhost Instance: %s", name)
-			continue
-		}
-
 		log.Printf("[INFO] Deleting Bastionhost Instance %s .", v.InstanceId)
 
 		releaseReq := yundun_bastionhost.CreateRefundInstanceRequest()
@@ -97,23 +98,19 @@ func testSweepBastionhostInstances(region string) error {
 	return nil
 }
 
-func TestAccAlicloudBastionhostInstance_basic(t *testing.T) {
+func TestAccAliCloudBastionhostInstance_basic(t *testing.T) {
 	var v yundun_bastionhost.Instance
 	resourceId := "alicloud_bastionhost_instance.default"
 	ra := resourceAttrInit(resourceId, bastionhostInstanceBasicMap)
-
 	serviceFunc := func() interface{} {
 		return &YundunBastionhostService{testAccProvider.Meta().(*connectivity.AliyunClient)}
 	}
 	rc := resourceCheckInit(resourceId, &v, serviceFunc)
 	rac := resourceAttrCheckInit(rc, ra)
-
 	testAccCheck := rac.resourceAttrMapUpdateSet()
 	rand := acctest.RandIntRange(1000, 9999)
 	name := fmt.Sprintf("tf_testAcc%d", rand)
-
 	testAccConfig := resourceTestAccConfigFunc(resourceId, name, resourceBastionhostInstanceDependence)
-
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccPreCheck(t)
@@ -126,10 +123,13 @@ func TestAccAlicloudBastionhostInstance_basic(t *testing.T) {
 				Config: testAccConfig(map[string]interface{}{
 					"description":        "${var.name}",
 					"license_code":       "bhah_ent_50_asset",
+					"plan_code":          "cloudbastion",
+					"storage":            "5",
+					"bandwidth":          "10",
 					"period":             "1",
 					"vswitch_id":         "${local.vswitch_id}",
 					"security_group_ids": []string{"${alicloud_security_group.default.0.id}", "${alicloud_security_group.default.1.id}"},
-					"resource_group_id":  "${data.alicloud_resource_manager_resource_groups.default.ids.0}",
+					//"resource_group_id":  "${data.alicloud_resource_manager_resource_groups.default.ids.0}",
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
@@ -139,16 +139,17 @@ func TestAccAlicloudBastionhostInstance_basic(t *testing.T) {
 					}),
 				),
 			},
-			{
-				Config: testAccConfig(map[string]interface{}{
-					"resource_group_id": "${data.alicloud_resource_manager_resource_groups.default.ids.1}",
-				}),
-				Check: resource.ComposeTestCheckFunc(
-					testAccCheck(map[string]string{
-						"resource_group_id": CHECKSET,
-					}),
-				),
-			},
+			// currenly, there is a api bug when moving resource group
+			//{
+			//	Config: testAccConfig(map[string]interface{}{
+			//		"resource_group_id": "${data.alicloud_resource_manager_resource_groups.default.ids.1}",
+			//	}),
+			//	Check: resource.ComposeTestCheckFunc(
+			//		testAccCheck(map[string]string{
+			//			"resource_group_id": CHECKSET,
+			//		}),
+			//	),
+			//},
 			{
 				Config: testAccConfig(map[string]interface{}{
 					"description": "${var.name}_update",
@@ -193,14 +194,14 @@ func TestAccAlicloudBastionhostInstance_basic(t *testing.T) {
 				Config: testAccConfig(map[string]interface{}{
 					"tags": map[string]string{
 						"Created": "TF",
-						"For":     "acceptance test",
+						"For":     "acceptance-test",
 					},
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
 						"tags.%":       "2",
 						"tags.Created": "TF",
-						"tags.For":     "acceptance test",
+						"tags.For":     "acceptance-test",
 					}),
 				),
 			},
@@ -208,7 +209,7 @@ func TestAccAlicloudBastionhostInstance_basic(t *testing.T) {
 				Config: testAccConfig(map[string]interface{}{
 					"tags": map[string]string{
 						"Created": "TF",
-						"For":     "acceptance test",
+						"For":     "acceptance-test",
 						"Updated": "TF",
 					},
 				}),
@@ -216,14 +217,110 @@ func TestAccAlicloudBastionhostInstance_basic(t *testing.T) {
 					testAccCheck(map[string]string{
 						"tags.%":       "3",
 						"tags.Created": "TF",
-						"tags.For":     "acceptance test",
+						"tags.For":     "acceptance-test",
 						"tags.Updated": "TF",
 					}),
 				),
 			},
 			{
 				Config: testAccConfig(map[string]interface{}{
-					"resource_group_id":  "${data.alicloud_resource_manager_resource_groups.default.ids.0}",
+					"renew_period":        "2",
+					"renewal_period_unit": "M",
+					"renewal_status":      "AutoRenewal",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"renew_period":        "2",
+						"renewal_period_unit": "M",
+						"renewal_status":      "AutoRenewal",
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"renewal_status": "NotRenewal",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"renewal_status": "NotRenewal",
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"ad_auth_server": []map[string]interface{}{
+						{
+							"server":         "192.168.1.1",
+							"standby_server": "192.168.1.3",
+							"port":           "80",
+							"domain":         "domain",
+							"account":        "cn=Manager,dc=test,dc=com",
+							"password":       "YouPassword123",
+							"filter":         "objectClass=person",
+							"name_mapping":   "nameAttr",
+							"email_mapping":  "emailAttr",
+							"mobile_mapping": "mobileAttr",
+							"is_ssl":         "true",
+							"base_dn":        "dc=test,dc=com",
+						},
+					},
+					"ldap_auth_server": []map[string]interface{}{
+						{
+							"server":             "192.168.1.1",
+							"standby_server":     "192.168.1.3",
+							"port":               "80",
+							"login_name_mapping": "uid",
+							"account":            "cn=Manager,dc=test,dc=com",
+							"password":           "YouPassword123",
+							"filter":             "objectClass=person",
+							"name_mapping":       "nameAttr",
+							"email_mapping":      "emailAttr",
+							"mobile_mapping":     "mobileAttr",
+							"is_ssl":             "true",
+							"base_dn":            "dc=test,dc=com",
+						},
+					},
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"ad_auth_server.#":   "1",
+						"ldap_auth_server.#": "1",
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"ad_auth_server": []map[string]interface{}{
+						{
+							"server":   "192.168.1.1",
+							"port":     "80",
+							"is_ssl":   "false",
+							"domain":   "domain",
+							"account":  "cn=Manager,dc=test,dc=com",
+							"password": "YouPassword123",
+							"base_dn":  "dc=test,dc=com",
+						},
+					},
+					"ldap_auth_server": []map[string]interface{}{
+						{
+							"server":   "192.168.1.1",
+							"port":     "80",
+							"password": "YouPassword123",
+							"account":  "cn=Manager,dc=test,dc=com",
+							"base_dn":  "dc=test,dc=com",
+						},
+					},
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"ad_auth_server.#":   "1",
+						"ldap_auth_server.#": "1",
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					//"resource_group_id":  "${data.alicloud_resource_manager_resource_groups.default.ids.0}",
 					"description":        "${var.name}",
 					"license_code":       "bhah_ent_200_asset",
 					"security_group_ids": []string{"${alicloud_security_group.default.0.id}", "${alicloud_security_group.default.1.id}"},
@@ -231,7 +328,7 @@ func TestAccAlicloudBastionhostInstance_basic(t *testing.T) {
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
-						"resource_group_id":    CHECKSET,
+						//"resource_group_id":    CHECKSET,
 						"description":          name,
 						"license_code":         "bhah_ent_200_asset",
 						"security_group_ids.#": "2",
@@ -251,23 +348,19 @@ func TestAccAlicloudBastionhostInstance_basic(t *testing.T) {
 	})
 }
 
-func TestAccAlicloudBastionhostInstance_PublicAccess(t *testing.T) {
+func TestAccAliCloudBastionhostInstance_PublicAccess(t *testing.T) {
 	var v yundun_bastionhost.Instance
 	resourceId := "alicloud_bastionhost_instance.default"
 	ra := resourceAttrInit(resourceId, bastionhostInstanceBasicMap)
-
 	serviceFunc := func() interface{} {
 		return &YundunBastionhostService{testAccProvider.Meta().(*connectivity.AliyunClient)}
 	}
 	rc := resourceCheckInit(resourceId, &v, serviceFunc)
 	rac := resourceAttrCheckInit(rc, ra)
-
 	testAccCheck := rac.resourceAttrMapUpdateSet()
 	rand := acctest.RandIntRange(1000, 9999)
 	name := fmt.Sprintf("tf_testAcc%d", rand)
-
 	testAccConfig := resourceTestAccConfigFunc(resourceId, name, resourceBastionhostInstanceDependence)
-
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccPreCheck(t)
@@ -280,34 +373,53 @@ func TestAccAlicloudBastionhostInstance_PublicAccess(t *testing.T) {
 				Config: testAccConfig(map[string]interface{}{
 					"license_code":         "bhah_ent_50_asset",
 					"period":               "1",
+					"plan_code":            "cloudbastion",
+					"storage":              "5",
+					"bandwidth":            "10",
 					"description":          "${var.name}",
 					"vswitch_id":           "${local.vswitch_id}",
 					"security_group_ids":   []string{"${alicloud_security_group.default.0.id}"},
-					"enable_public_access": "true",
+					"enable_public_access": "false",
+					"public_white_list":    []string{"192.168.0.0/16"},
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
 						"description":          name,
 						"period":               "1",
+						"plan_code":            "cloudbastion",
 						"security_group_ids.#": "1",
+						"enable_public_access": "false",
+						"public_white_list.#":  "1",
+						"public_white_list.0":  "192.168.0.0/16",
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"enable_public_access": "true",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
 						"enable_public_access": "true",
 					}),
 				),
 			},
 			{
 				Config: testAccConfig(map[string]interface{}{
-					"enable_public_access": "false",
+					"public_white_list": []string{"192.168.0.0/18"},
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
-						"enable_public_access": "false",
+						"public_white_list.#": "1",
+						"public_white_list.0": "192.168.0.0/18",
 					}),
 				),
 			},
 			{
-				ResourceName:      resourceId,
-				ImportState:       true,
-				ImportStateVerify: false,
+				ResourceName:            resourceId,
+				ImportState:             true,
+				ImportStateVerify:       false,
+				ImportStateVerifyIgnore: []string{"period"},
 			},
 		},
 	})
@@ -328,23 +440,15 @@ func resourceBastionhostInstanceDependence(name string) string {
 				}
 
 				data "alicloud_vpcs" "default" {
-					name_regex = "default-NODELETING"
+					name_regex = "^default-NODELETING$"
 				}
 				data "alicloud_vswitches" "default" {
 					vpc_id = data.alicloud_vpcs.default.ids.0
 					zone_id = data.alicloud_zones.default.zones.0.id
 				}
 				
-				resource "alicloud_vswitch" "vswitch" {
-				  count             = length(data.alicloud_vswitches.default.ids) > 0 ? 0 : 1
-				  vpc_id            = data.alicloud_vpcs.default.ids.0
-				  cidr_block        = cidrsubnet(data.alicloud_vpcs.default.vpcs[0].cidr_block, 8, 8)
-				  zone_id           = data.alicloud_zones.default.zones.0.id
-				  vswitch_name      = var.name
-				}
-				
 				locals {
-				  vswitch_id = length(data.alicloud_vswitches.default.ids) > 0 ? data.alicloud_vswitches.default.ids[0] : concat(alicloud_vswitch.vswitch.*.id, [""])[0]
+				  vswitch_id = data.alicloud_vswitches.default.ids[0]
 				}
 				
 				resource "alicloud_security_group" "default" {
@@ -352,12 +456,7 @@ func resourceBastionhostInstanceDependence(name string) string {
 				  name   = "${var.name}"
 				  vpc_id = data.alicloud_vpcs.default.ids.0
 				}
-				
-				provider "alicloud" {
-				  endpoints {
-					bssopenapi = "business.aliyuncs.com"
-				  }
-				}`, name)
+`, name)
 }
 
 var bastionhostInstanceBasicMap = map[string]string{

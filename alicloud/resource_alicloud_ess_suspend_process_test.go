@@ -10,7 +10,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/terraform"
 )
 
-func TestAccAlicloudEssAlbServerGroupSuspendProcess(t *testing.T) {
+func TestAccAliCloudEssAlbServerGroupSuspendProcess(t *testing.T) {
 	rand := acctest.RandIntRange(1000, 999999)
 	resourceId := "alicloud_ess_suspend_process.default"
 	basicMap := map[string]string{
@@ -19,6 +19,8 @@ func TestAccAlicloudEssAlbServerGroupSuspendProcess(t *testing.T) {
 	}
 	ra := resourceAttrInit(resourceId, basicMap)
 	testAccCheck := ra.resourceAttrMapUpdateSet()
+	name := fmt.Sprintf("tf-testAccEssScalingSuspendProcess-%d", rand)
+	testAccConfig := resourceTestAccConfigFunc(resourceId, name, testAccEssScalingGroupSuspendProcess)
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccPreCheck(t)
@@ -30,7 +32,11 @@ func TestAccAlicloudEssAlbServerGroupSuspendProcess(t *testing.T) {
 		CheckDestroy: testAccCheckEssSuspendProcessDestroy,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccEssScalingGroupSuspendProcess(EcsInstanceCommonTestCase, rand),
+				Config: testAccConfig(map[string]interface{}{
+					"depends_on":       []string{"alicloud_ess_scaling_configuration.default"},
+					"scaling_group_id": "${alicloud_ess_scaling_group.default.id}",
+					"process":          "ScaleIn",
+				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
 						"id": CHECKSET,
@@ -65,13 +71,15 @@ func testAccCheckEssSuspendProcessDestroy(s *terraform.State) error {
 	return nil
 }
 
-func testAccEssScalingGroupSuspendProcess(common string, rand int) string {
+func testAccEssScalingGroupSuspendProcess(name string) string {
 	return fmt.Sprintf(`
 	%s
 	variable "name" {
-		default = "tf-testAccEssScalingSuspendProcess-%d"
+		default = "%s"
 	}
-	
+	data "alicloud_instance_types" "default1" {
+	  availability_zone = "${data.alicloud_zones.default.zones.0.id}"
+	}
 	resource "alicloud_ess_scaling_group" "default" {
 	  min_size = "0"
 	  max_size = "2"
@@ -84,18 +92,12 @@ func testAccEssScalingGroupSuspendProcess(common string, rand int) string {
 	resource "alicloud_ess_scaling_configuration" "default" {
 		scaling_group_id = alicloud_ess_scaling_group.default.id
 		image_id = data.alicloud_images.default.images[0].id
-		instance_type = "ecs.f1-c8f1.2xlarge"
+		instance_type = data.alicloud_instance_types.default1.instance_types.0.id
 		security_group_id = alicloud_security_group.default.id
 		force_delete = true
 		active = true
 		enable = true
 	}
 
-	resource "alicloud_ess_suspend_process" "default" {
-		scaling_group_id = "${alicloud_ess_scaling_group.default.id}"
-		process = "ScaleIn"
-		depends_on = ["alicloud_ess_scaling_configuration.default"]
-	}
-
-	`, common, rand)
+	`, EcsInstanceCommonTestCase, name)
 }

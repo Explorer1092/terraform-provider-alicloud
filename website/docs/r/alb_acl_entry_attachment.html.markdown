@@ -7,21 +7,24 @@ description: |-
   Provides a Acl entry attachment resource.
 ---
 
-# alicloud\_alb\_acl\_entry\_attachment
+# alicloud_alb_acl_entry_attachment
 
--> **NOTE:** Available in v1.166.0+.
+For information about acl entry attachment and how to use it, see [Configure an acl entry](https://www.alibabacloud.com/help/en/slb/application-load-balancer/developer-reference/api-alb-2020-06-16-addentriestoacl).
 
-
-For information about acl entry attachment and how to use it, see [Configure an acl entry](https://www.alibabacloud.com/help/en/server-load-balancer/latest/addentriestoacl).
-
+-> **NOTE:** Available since v1.166.0.
 
 ## Example Usage
 
-```
-variable "name" {
-  default = "terraformalbaclconfig"
-}
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_alb_acl_entry_attachment&exampleId=47eecb52-ea5d-fc63-d81b-4856fc336b42987e0db2&activeTab=example&spm=docs.r.alb_acl_entry_attachment.0.47eecb52ea&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
 
+```terraform
+variable "name" {
+  default = "tf_example"
+}
 data "alicloud_resource_manager_resource_groups" "default" {}
 
 resource "alicloud_alb_acl" "default" {
@@ -51,7 +54,7 @@ The following attributes are exported:
 * `id` - The ID of the resource. The value formats as `<acl_id>:<entry>`.
 * `status` - The Status of the resource.
 
-### Timeouts
+## Timeouts
 
 The `timeouts` block allows you to specify [timeouts](https://www.terraform.io/docs/configuration-0-11/resources.html#timeouts) for certain actions:
 
@@ -62,6 +65,6 @@ The `timeouts` block allows you to specify [timeouts](https://www.terraform.io/d
 
 Acl entry attachment can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_alb_acl_entry_attachment.example <acl_id>:<entry>
 ```

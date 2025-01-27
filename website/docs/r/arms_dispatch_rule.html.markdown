@@ -7,17 +7,23 @@ description: |-
   Provides a Alicloud Application Real-Time Monitoring Service (ARMS) Alert Dispatch rule resource.
 ---
 
-# alicloud\_arms\_dispatch\_rule
+# alicloud_arms_dispatch_rule
 
 Provides a Application Real-Time Monitoring Service (ARMS) Alert Dispatch Rule resource.
 
-For information about Application Real-Time Monitoring Service (ARMS) Alert Dispatch Rule and how to use it, see [What is Alert Dispatch_Rule](https://www.alibabacloud.com/help/en/doc-detail/203146.htm).
+For information about Application Real-Time Monitoring Service (ARMS) Alert Dispatch Rule and how to use it, see [What is Alert Dispatch_Rule](https://next.api.alibabacloud.com/document/ARMS/2019-08-08/CreateDispatchRule).
 
--> **NOTE:** Available in v1.136.0+.
+-> **NOTE:** Available since v1.136.0.
 
 ## Example Usage
 
 Basic Usage
+
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_arms_dispatch_rule&exampleId=58f87d10-2d4b-83e1-d859-0c6597ded12110ed076a&activeTab=example&spm=docs.r.arms_dispatch_rule.0.58f87d102d&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
 
 ```terraform
 resource "alicloud_arms_alert_contact" "default" {
@@ -36,8 +42,7 @@ resource "alicloud_arms_dispatch_rule" "default" {
     group_wait_time = 5
     group_interval  = 15
     repeat_interval = 100
-    grouping_fields = [
-    "alertname"]
+    grouping_fields = ["alertname"]
   }
   label_match_expression_grid {
     label_match_expression_groups {
@@ -60,7 +65,21 @@ resource "alicloud_arms_dispatch_rule" "default" {
       notify_type      = "ARMS_CONTACT_GROUP"
       name             = "example_value"
     }
-    notify_channels = ["dingTalk", "wechat"]
+    notify_channels   = ["dingTalk", "wechat"]
+    notify_start_time = "10:00"
+    notify_end_time   = "23:00"
+  }
+
+  notify_template {
+    email_title           = "example_email_title"
+    email_content         = "example_email_content"
+    email_recover_title   = "example_email_recover_title"
+    email_recover_content = "example_email_recover_content"
+    sms_content           = "example_sms_content"
+    sms_recover_content   = "example_sms_recover_content"
+    tts_content           = "example_tts_content"
+    tts_recover_content   = "example_tts_recover_content"
+    robot_content         = "example_robot_content"
   }
 }
 ```
@@ -70,34 +89,36 @@ resource "alicloud_arms_dispatch_rule" "default" {
 The following arguments are supported:
 
 * `dispatch_rule_name` - (Required) The name of the dispatch policy.
-* `dispatch_type` - (Required) The alert handling method. Valid values: CREATE_ALERT: generates an alert. DISCARD_ALERT: discards the alert event and generates no alert.
+* `dispatch_type` - (Optional) The alert handling method. Valid values: CREATE_ALERT: generates an alert. DISCARD_ALERT: discards the alert event and generates no alert.
 * `is_recover` - (Optional) Specifies whether to send the restored alert. Valid values: true: sends the alert. false: does not send the alert.
-* `group_rules` - (Required) Sets the event group. See the following `Block group_rules`. It will be ignored  when `dispatch_type = "DISCARD_ALERT"`.
-* `label_match_expression_grid` - (Required) Sets the dispatch rule. See the following `Block label_match_expression_grid`.
-* `notify_rules` - (Required) Sets the notification rule. See the following `Block notify_rules`. It will be ignored  when `dispatch_type = "DISCARD_ALERT"`.
+* `group_rules` - (Required) Sets the event group. See [`group_rules`](#group_rules) below. It will be ignored  when `dispatch_type = "DISCARD_ALERT"`.
+* `label_match_expression_grid` - (Required) Sets the dispatch rule. See [`label_match_expression_grid`](#label_match_expression_grid) below. 
+* `notify_rules` - (Required) Sets the notification rule. See [`notify_rules`](#notify_rules) below. It will be ignored  when `dispatch_type = "DISCARD_ALERT"`.
+* `notify_template` - (Optional, Available since v1.238.0) Sets the notification template. See [`notify_template`](#notify_template) below.
 
-### Block group_rules
+### `group_rules`
 The group_rules supports the following:
 
 * `group_wait_time` - (Required) The duration for which the system waits after the first alert is sent. After the duration, all alerts are sent in a single notification to the handler.
 * `group_interval` - (Required) The duration for which the system waits after the first alert is sent. After the duration, all alerts are sent in a single notification to the handler.
 * `grouping_fields` - (Required， List<String>) The fields that are used to group events. Events with the same field content are assigned to a group. Alerts with the same specified grouping field are sent to the handler in separate notifications. 
 * `repeat_interval` - (Optional) The silence period of repeated alerts. All alerts are repeatedly sent at specified intervals until the alerts are cleared. The minimum value is 61. Default to 600.
+* `group_id` - (Optional) The ID of the group rule.
 
-### Block label_match_expression_grid
+### `label_match_expression_grid`
 The label_match_expression_grid supports the following:
 
-* `label_match_expression_groups` - (Required) Sets the dispatch rule. See the following `Block label_match_expression_groups`.
+* `label_match_expression_groups` - (Required) Sets the dispatch rule. See [`label_match_expression_groups`](#label_match_expression_grid-label_match_expression_groups) below.
 
-### Block label_match_expression_groups
+### `label_match_expression_grid-label_match_expression_groups`
 The label_match_expression_groups supports the following:
 
-* `label_match_expressions` - (Required) Sets the dispatch rule. See the following `Block label_match_expressions`.
+* `label_match_expressions` - (Required) Sets the dispatch rule. See [`label_match_expressions`](#label_match_expression_grid-label_match_expression_groups-label_match_expressions) below.
 
-### Block label_match_expressions
+### `label_match_expression_grid-label_match_expression_groups-label_match_expressions`
 The label_match_expressions supports the following:
 
-* `key` - (Required) The key of the tag of the dispatch rule. Valud values:
+* `key` - (Required) The key of the tag of the dispatch rule. Valid values:
   * _aliyun_arms_userid: user ID
   * _aliyun_arms_involvedObject_kind: type of the associated object
   * _aliyun_arms_involvedObject_id: ID of the associated object 
@@ -112,18 +133,32 @@ The label_match_expressions supports the following:
   * eq: equals to. 
   * re: matches a regular expression.
 
-### Block notify_rules
+### `notify_rules`
 The notify_rules supports the following:
 
-* `notify_objects` - (Required) Sets the notification object. See the following `Block notify_objects`.
+* `notify_objects` - (Required) Sets the notification object. See [`notify_objects`](#notify_rules-notify_objects) below.
 * `notify_channels` - (Required, List<String>) The notification method. Valid values: dingTalk, sms, webhook, email, and wechat.
+* `notify_start_time` - (Required, Available since v1.237.0) Start time of notification.
+* `notify_end_time` - (Required, Available since v1.237.0) End time of notification.
 
-### Block notify_objects
+### `notify_template`
+The notify_template supports the following:
+* `email_title` - (Required) The title of the email notification.
+* `email_content` - (Required) The content of the email notification.
+* `email_recover_title` - (Required) The title of the email notification for restored alerts.
+* `email_recover_content` - (Required) The content of the email notification for restored alerts.
+* `sms_content` - (Required) The content of the SMS notification.
+* `sms_recover_content` - (Required) The content of the SMS notification for restored alerts.
+* `tts_content` - (Required) The content of the TTS notification.
+* `tts_recover_content` - (Required) The content of the TTS notification for restored alerts.
+* `robot_content` - (Required) The content of the robot notification.
+
+### `notify_rules-notify_objects`
 The notify_objects supports the following:
 
 * `notify_object_id` - (Required) The ID of the contact or contact group.
 * `name` - (Required) The name of the contact or contact group.
-* `notify_type` - (Required) The type of the alert contact. Valid values: ARMS_CONTACT: contact. ARMS_CONTACT_GROUP: contact group.
+* `notify_type` - (Required) The type of the alert contact. Valid values: ARMS_ROBOT: robot. ARMS_CONTACT: contact. ARMS_CONTACT_GROUP: contact group.
 
 ## Attributes Reference
 
@@ -136,6 +171,6 @@ The following attributes are exported:
 
 Application Real-Time Monitoring Service (ARMS) Alert Contact can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_arms_dispatch_rule.example <id>
 ```

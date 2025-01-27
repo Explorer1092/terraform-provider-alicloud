@@ -7,17 +7,23 @@ description: |-
   Provides a Alicloud RAM Security Preference resource.
 ---
 
-# alicloud\_ram\_security\_preference
+# alicloud_ram_security_preference
 
 Provides a RAM Security Preference resource.
 
 For information about RAM Security Preference and how to use it, see [What is Security Preference](https://www.alibabacloud.com/help/en/doc-detail/186694.htm).
 
--> **NOTE:** Available in v1.152.0+.
+-> **NOTE:** Available since v1.152.0.
 
 ## Example Usage
 
 Basic Usage
+
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_ram_security_preference&exampleId=a8427f8a-f030-814f-bcfd-9c52d5811d5d82082bb0&activeTab=example&spm=docs.r.ram_security_preference.0.a8427f8af0&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
 
 ```terraform
 resource "alicloud_ram_security_preference" "example" {
@@ -61,6 +67,6 @@ The following attributes are exported:
 
 RAM Security Preference can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_ram_security_preference.example <id>
 ```

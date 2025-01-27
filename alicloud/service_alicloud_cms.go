@@ -38,45 +38,65 @@ func (s *CmsService) BuildCmsAlarmRequest(id string) *requests.CommonRequest {
 
 func (s *CmsService) DescribeAlarm(id string) (object map[string]interface{}, err error) {
 	var response map[string]interface{}
+	action := "DescribeMetricRuleList"
+
 	conn, err := s.client.NewCmsClient()
 	if err != nil {
 		return nil, WrapError(err)
 	}
-	action := "DescribeMetricRuleList"
+
 	request := map[string]interface{}{
 		"RuleIds": id,
 	}
 
+	idExist := false
 	runtime := util.RuntimeOptions{}
 	runtime.SetAutoretry(true)
 	wait := incrementalWait(3*time.Second, 3*time.Second)
 	err = resource.Retry(6*time.Minute, func() *resource.RetryError {
 		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2019-01-01"), StringPointer("AK"), nil, request, &runtime)
 		if err != nil {
-			if IsExpectedErrors(err, []string{ThrottlingUser}) || NeedRetry(err) {
+			if NeedRetry(err) {
 				wait()
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
 		}
-		addDebug(action, response, request)
 		return nil
 	})
 	addDebug(action, response, request)
+
 	if err != nil {
 		if IsExpectedErrors(err, []string{"InternalError", "ResourceNotFound"}) {
-			return object, WrapErrorf(err, NotFoundMsg, AlibabaCloudSdkGoERROR)
+			return object, WrapErrorf(Error(GetNotFoundMessage("Cms:Alarm", id)), NotFoundMsg, ProviderERROR, fmt.Sprint(response["RequestId"]))
 		}
 		return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
 	}
-	v, _ := jsonpath.Get("$.Alarms.Alarm", response)
-	if v == nil {
-		return object, nil
+
+	if fmt.Sprint(response["Success"]) == "false" {
+		return object, WrapError(fmt.Errorf("%s failed, response: %v", action, response))
 	}
-	if len(v.([]interface{})) < 1 {
-		return object, WrapErrorf(Error(GetNotFoundMessage("ALB", id)), NotFoundWithResponse, response)
+
+	resp, err := jsonpath.Get("$.Alarms.Alarm", response)
+	if err != nil {
+		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$.Alarms.Alarm", response)
 	}
-	object = v.([]interface{})[0].(map[string]interface{})
+
+	if v, ok := resp.([]interface{}); !ok || len(v) < 1 {
+		return object, WrapErrorf(Error(GetNotFoundMessage("Cms:Alarm", id)), NotFoundWithResponse, response)
+	}
+
+	for _, v := range resp.([]interface{}) {
+		if fmt.Sprint(v.(map[string]interface{})["RuleId"]) == id {
+			idExist = true
+			return v.(map[string]interface{}), nil
+		}
+	}
+
+	if !idExist {
+		return object, WrapErrorf(Error(GetNotFoundMessage("Cms:Alarm", id)), NotFoundWithResponse, response)
+	}
+
 	return object, nil
 }
 
@@ -294,55 +314,65 @@ func (s *CmsService) DescribeCmsAlarmContactGroup(id string) (object cms.Contact
 
 func (s *CmsService) DescribeCmsGroupMetricRule(id string) (object map[string]interface{}, err error) {
 	var response map[string]interface{}
+	action := "DescribeMetricRuleList"
+
 	conn, err := s.client.NewCmsClient()
 	if err != nil {
 		return nil, WrapError(err)
 	}
-	action := "DescribeMetricRuleList"
+
 	request := map[string]interface{}{
-		"RegionId": s.client.RegionId,
-		"RuleIds":  id,
+		"RuleIds": id,
 	}
+
+	idExist := false
 	runtime := util.RuntimeOptions{}
 	runtime.SetAutoretry(true)
 	wait := incrementalWait(3*time.Second, 3*time.Second)
 	err = resource.Retry(6*time.Minute, func() *resource.RetryError {
 		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2019-01-01"), StringPointer("AK"), nil, request, &runtime)
 		if err != nil {
-			if IsExpectedErrors(err, []string{"ExceedingQuota", "Throttling.User"}) {
+			if IsExpectedErrors(err, []string{"ExceedingQuota"}) || NeedRetry(err) {
 				wait()
 				return resource.RetryableError(err)
 			}
-			err = WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
 			return resource.NonRetryableError(err)
 		}
-		addDebug(action, response, request)
 		return nil
 	})
-	if IsExpectedErrors(err, []string{"GroupMetricRuleNotExists", "ResourceNotFound", "ResourceNotFoundError"}) {
-		err = WrapErrorf(Error(GetNotFoundMessage("CmsGroupMetricRule", id)), NotFoundMsg, ProviderERROR)
-		return object, err
-	}
-	if fmt.Sprintf(`%v`, response["Code"]) != "200" {
-		if _, ok := response["Message"]; ok {
-			err = Error("DescribeMetricRuleList failed for " + response["Message"].(string))
-		} else {
-			err = WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
+	addDebug(action, response, request)
+
+	if err != nil {
+		if IsExpectedErrors(err, []string{"GroupMetricRuleNotExists", "ResourceNotFound", "ResourceNotFoundError"}) {
+			return object, WrapErrorf(Error(GetNotFoundMessage("Cms:GroupMetricRule", id)), NotFoundMsg, ProviderERROR, fmt.Sprint(response["RequestId"]))
 		}
-		return object, err
+		return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
 	}
-	v, err := jsonpath.Get("$.Alarms.Alarm", response)
+
+	if fmt.Sprint(response["Success"]) == "false" {
+		return object, WrapError(fmt.Errorf("%s failed, response: %v", action, response))
+	}
+
+	resp, err := jsonpath.Get("$.Alarms.Alarm", response)
 	if err != nil {
 		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$.Alarms.Alarm", response)
 	}
-	if len(v.([]interface{})) < 1 {
-		return object, WrapErrorf(Error(GetNotFoundMessage("CloudMonitorService", id)), NotFoundWithResponse, response)
-	} else {
-		if v.([]interface{})[0].(map[string]interface{})["RuleId"].(string) != id {
-			return object, WrapErrorf(Error(GetNotFoundMessage("CloudMonitorService", id)), NotFoundWithResponse, response)
+
+	if v, ok := resp.([]interface{}); !ok || len(v) < 1 {
+		return object, WrapErrorf(Error(GetNotFoundMessage("Cms:GroupMetricRule", id)), NotFoundWithResponse, response)
+	}
+
+	for _, v := range resp.([]interface{}) {
+		if fmt.Sprint(v.(map[string]interface{})["RuleId"]) == id {
+			idExist = true
+			return v.(map[string]interface{}), nil
 		}
 	}
-	object = v.([]interface{})[0].(map[string]interface{})
+
+	if !idExist {
+		return object, WrapErrorf(Error(GetNotFoundMessage("Cms:GroupMetricRule", id)), NotFoundWithResponse, response)
+	}
+
 	return object, nil
 }
 
@@ -532,16 +562,20 @@ func (s *CmsService) DescribeCmsMonitorGroupInstances(id string) (object []map[s
 
 	return object, nil
 }
+
 func (s *CmsService) DescribeCmsMetricRuleTemplate(id string) (object map[string]interface{}, err error) {
 	var response map[string]interface{}
+	action := "DescribeMetricRuleTemplateAttribute"
+
 	conn, err := s.client.NewCmsClient()
 	if err != nil {
 		return nil, WrapError(err)
 	}
-	action := "DescribeMetricRuleTemplateAttribute"
+
 	request := map[string]interface{}{
 		"TemplateId": id,
 	}
+
 	runtime := util.RuntimeOptions{}
 	runtime.SetAutoretry(true)
 	wait := incrementalWait(3*time.Second, 3*time.Second)
@@ -557,35 +591,44 @@ func (s *CmsService) DescribeCmsMetricRuleTemplate(id string) (object map[string
 		return nil
 	})
 	addDebug(action, response, request)
+
 	if err != nil {
 		if IsExpectedErrors(err, []string{"ResourceNotFound"}) {
-			return nil, WrapErrorf(Error(GetNotFoundMessage("CloudMonitorService:MetricRuleTemplate", id)), NotFoundMsg, ProviderERROR)
+			return object, WrapErrorf(Error(GetNotFoundMessage("Cms:MetricRuleTemplate", id)), NotFoundMsg, ProviderERROR, fmt.Sprint(response["RequestId"]))
 		}
 		return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
 	}
+
 	if fmt.Sprint(response["Success"]) == "false" {
 		return object, WrapError(fmt.Errorf("%s failed, response: %v", action, response))
 	}
+
 	v, err := jsonpath.Get("$.Resource", response)
 	if err != nil {
 		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$.Resource", response)
 	}
+
 	object = v.(map[string]interface{})
+
 	return object, nil
 }
 
 func (s *CmsService) DescribeCmsDynamicTagGroup(id string) (object map[string]interface{}, err error) {
 	var response map[string]interface{}
+	action := "DescribeDynamicTagRuleList"
+
 	conn, err := s.client.NewCmsClient()
 	if err != nil {
-		return nil, WrapError(err)
+		return object, WrapError(err)
 	}
-	action := "DescribeDynamicTagRuleList"
+
 	request := map[string]interface{}{
-		"TagRegionId": s.client.RegionId,
-		"PageSize":    PageSizeLarge,
-		"PageNumber":  1,
+		"TagRegionId":      s.client.RegionId,
+		"DynamicTagRuleId": id,
+		"PageSize":         PageSizeLarge,
+		"PageNumber":       1,
 	}
+
 	idExist := false
 	for {
 		runtime := util.RuntimeOptions{}
@@ -603,32 +646,454 @@ func (s *CmsService) DescribeCmsDynamicTagGroup(id string) (object map[string]in
 			return nil
 		})
 		addDebug(action, response, request)
+
 		if err != nil {
 			return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
 		}
+
 		if fmt.Sprint(response["Success"]) == "false" {
 			return object, WrapError(fmt.Errorf("%s failed, response: %v", action, response))
 		}
-		v, err := jsonpath.Get("$.TagGroupList.TagGroup", response)
+
+		resp, err := jsonpath.Get("$.TagGroupList.TagGroup", response)
 		if err != nil {
 			return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$.TagGroupList.TagGroup", response)
 		}
-		if len(v.([]interface{})) < 1 {
-			return object, WrapErrorf(Error(GetNotFoundMessage("CloudMonitorService", id)), NotFoundWithResponse, response)
+
+		if v, ok := resp.([]interface{}); !ok || len(v) < 1 {
+			return object, WrapErrorf(Error(GetNotFoundMessage("Cms:DynamicTagGroup", id)), NotFoundWithResponse, response)
 		}
-		for _, v := range v.([]interface{}) {
+
+		for _, v := range resp.([]interface{}) {
 			if fmt.Sprint(v.(map[string]interface{})["DynamicTagRuleId"]) == id {
 				idExist = true
 				return v.(map[string]interface{}), nil
 			}
 		}
-		if len(v.([]interface{})) < request["PageSize"].(int) {
+
+		if len(resp.([]interface{})) < request["PageSize"].(int) {
 			break
 		}
+
 		request["PageNumber"] = request["PageNumber"].(int) + 1
 	}
+
 	if !idExist {
+		return object, WrapErrorf(Error(GetNotFoundMessage("Cms:DynamicTagGroup", id)), NotFoundWithResponse, response)
+	}
+
+	return object, nil
+}
+
+func (s *CmsService) DescribeCmsNamespace(id string) (object map[string]interface{}, err error) {
+	var response map[string]interface{}
+	action := "DescribeHybridMonitorNamespaceList"
+
+	conn, err := s.client.NewCmsClient()
+	if err != nil {
+		return nil, WrapError(err)
+	}
+
+	request := map[string]interface{}{
+		"Namespace":  id,
+		"PageSize":   PageSizeLarge,
+		"PageNumber": 1,
+	}
+
+	idExist := false
+	for {
+		runtime := util.RuntimeOptions{}
+		runtime.SetAutoretry(true)
+		wait := incrementalWait(3*time.Second, 3*time.Second)
+		err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+			response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2019-01-01"), StringPointer("AK"), nil, request, &runtime)
+			if err != nil {
+				if NeedRetry(err) {
+					wait()
+					return resource.RetryableError(err)
+				}
+				return resource.NonRetryableError(err)
+			}
+			return nil
+		})
+		addDebug(action, response, request)
+
+		if err != nil {
+			return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
+		}
+
+		if fmt.Sprint(response["Success"]) == "false" {
+			return object, WrapError(fmt.Errorf("%s failed, response: %v", action, response))
+		}
+
+		resp, err := jsonpath.Get("$.DescribeHybridMonitorNamespace", response)
+		if err != nil {
+			return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$.DescribeHybridMonitorNamespace", response)
+		}
+
+		if v, ok := resp.([]interface{}); !ok || len(v) < 1 {
+			return object, WrapErrorf(Error(GetNotFoundMessage("CloudMonitorService:Namespace", id)), NotFoundWithResponse, response)
+		}
+
+		for _, v := range resp.([]interface{}) {
+			if fmt.Sprint(v.(map[string]interface{})["Namespace"]) == id {
+				idExist = true
+				return v.(map[string]interface{}), nil
+			}
+		}
+
+		if len(resp.([]interface{})) < request["PageSize"].(int) {
+			break
+		}
+
+		request["PageNumber"] = request["PageNumber"].(int) + 1
+	}
+
+	if !idExist {
+		return object, WrapErrorf(Error(GetNotFoundMessage("CloudMonitorService:Namespace", id)), NotFoundWithResponse, response)
+	}
+
+	return object, nil
+}
+
+func (s *CmsService) DescribeCmsSlsGroup(id string) (object map[string]interface{}, err error) {
+	var response map[string]interface{}
+	conn, err := s.client.NewCmsClient()
+	if err != nil {
+		return nil, WrapError(err)
+	}
+	action := "DescribeHybridMonitorSLSGroup"
+	request := map[string]interface{}{
+		"SLSGroupName": id,
+	}
+	runtime := util.RuntimeOptions{}
+	runtime.SetAutoretry(true)
+	wait := incrementalWait(3*time.Second, 3*time.Second)
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2019-01-01"), StringPointer("AK"), nil, request, &runtime)
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		return nil
+	})
+	addDebug(action, response, request)
+	if err != nil {
+		return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
+	}
+	if IsExpectedErrorCodes(fmt.Sprint(response["Code"]), []string{"400"}) {
+		return object, WrapErrorf(Error(GetNotFoundMessage("CloudMonitorService:SlsGroup", id)), NotFoundMsg, ProviderERROR)
+	}
+	if fmt.Sprint(response["Success"]) == "false" {
+		return object, WrapError(fmt.Errorf("%s failed, response: %v", action, response))
+	}
+	v, err := jsonpath.Get("$.List", response)
+	if err != nil {
+		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$.List", response)
+	}
+	if len(v.([]interface{})) < 1 {
+		return object, WrapErrorf(Error(GetNotFoundMessage("CloudMonitorService", id)), NotFoundWithResponse, response)
+	} else {
+		if fmt.Sprint(v.([]interface{})[0].(map[string]interface{})["SLSGroupName"]) != id {
+			return object, WrapErrorf(Error(GetNotFoundMessage("CloudMonitorService", id)), NotFoundWithResponse, response)
+		}
+	}
+	object = v.([]interface{})[0].(map[string]interface{})
+	return object, nil
+}
+
+func (s *CmsService) DescribeCmsHybridMonitorSlsTask(id string) (object map[string]interface{}, err error) {
+	var response map[string]interface{}
+	conn, err := s.client.NewCmsClient()
+	if err != nil {
+		return nil, WrapError(err)
+	}
+	action := "DescribeHybridMonitorTaskList"
+	request := map[string]interface{}{
+		"TaskId": id,
+	}
+	runtime := util.RuntimeOptions{}
+	runtime.SetAutoretry(true)
+	wait := incrementalWait(3*time.Second, 3*time.Second)
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2019-01-01"), StringPointer("AK"), nil, request, &runtime)
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		return nil
+	})
+	addDebug(action, response, request)
+	if err != nil {
+		return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
+	}
+	if IsExpectedErrorCodes(fmt.Sprint(response["Code"]), []string{"ResourceNotFound"}) {
+		return object, WrapErrorf(Error(GetNotFoundMessage("CloudMonitorService:HybridMonitorSlsTask", id)), NotFoundMsg, ProviderERROR)
+	}
+	if fmt.Sprint(response["Success"]) == "false" {
+		return object, WrapError(fmt.Errorf("%s failed, response: %v", action, response))
+	}
+	v, err := jsonpath.Get("$.TaskList", response)
+	if err != nil {
+		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$.TaskList", response)
+	}
+	if len(v.([]interface{})) < 1 {
+		return object, WrapErrorf(Error(GetNotFoundMessage("CloudMonitorService", id)), NotFoundWithResponse, response)
+	} else {
+		if fmt.Sprint(v.([]interface{})[0].(map[string]interface{})["TaskId"]) != id {
+			return object, WrapErrorf(Error(GetNotFoundMessage("CloudMonitorService", id)), NotFoundWithResponse, response)
+		}
+	}
+	object = v.([]interface{})[0].(map[string]interface{})
+	return object, nil
+}
+
+func (s *CmsService) DescribeCmsHybridMonitorFcTask(id string) (object map[string]interface{}, err error) {
+	var response map[string]interface{}
+	conn, err := s.client.NewCmsClient()
+	if err != nil {
+		return nil, WrapError(err)
+	}
+	action := "DescribeHybridMonitorTaskList"
+	parts, err := ParseResourceId(id, 2)
+	if err != nil {
+		err = WrapError(err)
+		return
+	}
+	request := map[string]interface{}{
+		"TargetUserId": parts[0],
+		"Namespace":    parts[1],
+		"TaskType":     "aliyun_fc",
+	}
+	runtime := util.RuntimeOptions{}
+	runtime.SetAutoretry(true)
+	wait := incrementalWait(3*time.Second, 3*time.Second)
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2019-01-01"), StringPointer("AK"), nil, request, &runtime)
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		return nil
+	})
+	addDebug(action, response, request)
+	if err != nil {
+		return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
+	}
+	if IsExpectedErrorCodes(fmt.Sprint(response["Code"]), []string{"ResourceNotFound"}) {
+		return object, WrapErrorf(Error(GetNotFoundMessage("CloudMonitorService:HybridMonitorFcTask", id)), NotFoundMsg, ProviderERROR)
+	}
+	if fmt.Sprint(response["Success"]) == "false" {
+		return object, WrapError(fmt.Errorf("%s failed, response: %v", action, response))
+	}
+	v, err := jsonpath.Get("$.TaskList", response)
+	if err != nil {
+		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$.TaskList", response)
+	}
+	if len(v.([]interface{})) < 1 {
 		return object, WrapErrorf(Error(GetNotFoundMessage("CloudMonitorService", id)), NotFoundWithResponse, response)
 	}
-	return
+	object = v.([]interface{})[0].(map[string]interface{})
+	return object, nil
+}
+
+func (s *CmsService) DescribeCmsEventRule(id string) (object map[string]interface{}, err error) {
+	var response map[string]interface{}
+	action := "DescribeEventRuleList"
+
+	conn, err := s.client.NewCmsClient()
+	if err != nil {
+		return nil, WrapError(err)
+	}
+
+	request := map[string]interface{}{
+		"NamePrefix": id,
+	}
+
+	idExist := false
+	runtime := util.RuntimeOptions{}
+	runtime.SetAutoretry(true)
+	wait := incrementalWait(3*time.Second, 3*time.Second)
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2019-01-01"), StringPointer("AK"), nil, request, &runtime)
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		return nil
+	})
+	addDebug(action, response, request)
+
+	if err != nil {
+		return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
+	}
+
+	if fmt.Sprint(response["Success"]) == "false" {
+		return object, WrapError(fmt.Errorf("%s failed, response: %v", action, response))
+	}
+
+	resp, err := jsonpath.Get("$.EventRules.EventRule", response)
+	if err != nil {
+		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$.EventRules.EventRule", response)
+	}
+
+	if v, ok := resp.([]interface{}); !ok || len(v) < 1 {
+		return object, WrapErrorf(Error(GetNotFoundMessage("Cms:EventRule", id)), NotFoundWithResponse, response)
+	}
+
+	for _, v := range resp.([]interface{}) {
+		if fmt.Sprint(v.(map[string]interface{})["Name"]) == id {
+			idExist = true
+			return v.(map[string]interface{}), nil
+		}
+	}
+
+	if !idExist {
+		return object, WrapErrorf(Error(GetNotFoundMessage("Cms:EventRule", id)), NotFoundWithResponse, response)
+	}
+
+	return object, nil
+}
+
+func (s *CmsService) DescribeMetricRuleTargets(id string) (objects []interface{}, err error) {
+	var response map[string]interface{}
+	action := "DescribeMetricRuleTargets"
+
+	conn, err := s.client.NewCmsClient()
+	if err != nil {
+		return nil, WrapError(err)
+	}
+
+	request := map[string]interface{}{
+		"RuleId": id,
+	}
+
+	runtime := util.RuntimeOptions{}
+	runtime.SetAutoretry(true)
+	wait := incrementalWait(3*time.Second, 3*time.Second)
+	err = resource.Retry(6*time.Minute, func() *resource.RetryError {
+		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2019-01-01"), StringPointer("AK"), nil, request, &runtime)
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		return nil
+	})
+	addDebug(action, response, request)
+
+	if err != nil {
+		return objects, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
+	}
+
+	if fmt.Sprint(response["Success"]) == "false" {
+		return objects, WrapError(fmt.Errorf("%s failed, response: %v", action, response))
+	}
+
+	resp, err := jsonpath.Get("$.Targets.Target", response)
+	if err != nil {
+		return objects, WrapErrorf(err, FailedGetAttributeMsg, id, "$.Targets.Target", response)
+	}
+
+	if v, ok := resp.([]interface{}); !ok || len(v) < 1 {
+		return objects, WrapErrorf(Error(GetNotFoundMessage("Cms:GroupMetricRule", id)), NotFoundWithResponse, response)
+	}
+
+	objects = resp.([]interface{})
+
+	return objects, nil
+}
+
+func (s *CmsService) DescribeCmsMetricRuleBlackList(id string) (object map[string]interface{}, err error) {
+	conn, err := s.client.NewCmsClient()
+	if err != nil {
+		return object, WrapError(err)
+	}
+
+	request := map[string]interface{}{
+		"Ids.1": id,
+	}
+
+	var response map[string]interface{}
+	action := "DescribeMetricRuleBlackList"
+	runtime := util.RuntimeOptions{}
+	runtime.SetAutoretry(true)
+	wait := incrementalWait(3*time.Second, 3*time.Second)
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		resp, err := conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2019-01-01"), StringPointer("AK"), nil, request, &runtime)
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		response = resp
+		addDebug(action, response, request)
+		return nil
+	})
+	if err != nil {
+		return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
+	}
+	v, err := jsonpath.Get("$.DescribeMetricRuleBlackList[0]", response)
+	totalCount, _ := jsonpath.Get("$.Total", response)
+	total, _ := totalCount.(json.Number).Int64()
+	if err != nil && total == 0 {
+		err = WrapErrorf(Error(GetNotFoundMessage("Cms", id)), NotFoundMsg, ProviderERROR)
+		return object, err
+	}
+	return v.(map[string]interface{}), nil
+}
+
+func (s *CmsService) CmsMetricRuleBlackListStateRefreshFunc(d *schema.ResourceData, failStates []string) resource.StateRefreshFunc {
+	return func() (interface{}, string, error) {
+		object, err := s.DescribeCmsMetricRuleBlackList(d.Id())
+		if err != nil {
+			if NotFoundError(err) {
+				return nil, "", nil
+			}
+			return nil, "", WrapError(err)
+		}
+		for _, failState := range failStates {
+			if fmt.Sprint(object[""]) == failState {
+				return object, fmt.Sprint(object[""]), WrapError(Error(FailedToReachTargetStatus, fmt.Sprint(object[""])))
+			}
+		}
+		return object, fmt.Sprint(object[""]), nil
+	}
+}
+
+func (s *CmsService) CmsDynamicTagGroupStateRefreshFunc(id string, failStates []string) resource.StateRefreshFunc {
+	return func() (interface{}, string, error) {
+		object, err := s.DescribeCmsDynamicTagGroup(id)
+		if err != nil {
+			if NotFoundError(err) {
+				// Set this to nil as if we didn't find anything.
+				return nil, "", nil
+			}
+			return nil, "", WrapError(err)
+		}
+
+		for _, failState := range failStates {
+			if fmt.Sprint(object["Status"]) == failState {
+				return object, fmt.Sprint(object["Status"]), WrapError(Error(FailedToReachTargetStatus, fmt.Sprint(object["Status"])))
+			}
+		}
+
+		return object, fmt.Sprint(object["Status"]), nil
+	}
 }

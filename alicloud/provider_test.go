@@ -1,8 +1,12 @@
 package alicloud
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
+	"net/http"
 	"os"
 	"testing"
 	"time"
@@ -35,6 +39,7 @@ func init() {
 	testAccProviders = map[string]terraform.ResourceProvider{
 		"alicloud": testAccProvider,
 	}
+	setStsCredential()
 }
 
 func TestProvider(t *testing.T) {
@@ -62,12 +67,67 @@ func testAccPreCheck(t *testing.T) {
 	}
 }
 
+func testAccPreCheckForCleanUpInstances(t *testing.T, instanceRegion, productCode, productType, productCodeIntl, productTypeIntl string) {
+	rawClient, err := sharedClientForRegion(defaultRegionToTest)
+	if err != nil {
+		t.Errorf("error getting AliCloud client: %s", err)
+	}
+	client := rawClient.(*connectivity.AliyunClient)
+	bssOpenApiService := BssOpenApiService{client}
+	accountId, err := client.AccountId()
+	if err != nil {
+		t.Errorf("error getting AliCloud client: %s", err)
+	}
+	deadline := time.Now().Add(30 * time.Minute)
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			if time.Now().After(deadline) {
+				fmt.Println("Deadline reached, stopping waiting.")
+				return
+			}
+			instances, err := bssOpenApiService.QueryAvailableInstanceList(instanceRegion, productCode, productType, productCodeIntl, productTypeIntl)
+			if err != nil {
+				t.Errorf("error querying available instances: %s", err)
+				return
+			}
+			instanceId := ""
+			for _, instance := range instances {
+				v := instance.(map[string]interface{})
+				if v["Status"].(string) != "Normal" {
+					continue
+				}
+				instanceId = v["InstanceID"].(string)
+			}
+			if instanceId == "" {
+				return
+			}
+			t.Logf("waiting for cleaning up existed instances %s in region %s...", instanceId, instanceRegion)
+			sendMessage(fmt.Sprintf(`
+[Critical] Please cleaning up instance before running integration test.
+
+AccountId: %s
+ProductCode: %s
+InstanceId: %s
+Time: %s
+`, accountId, productCode, instanceId, time.Now().String()))
+			time.Sleep(3 * time.Minute)
+		}
+	}
+}
+
 // currently not all account site type support create PostPaid resources, PayByBandwidth and other limits.
 // The setting of account site type can skip some unsupported cases automatically.
 
 func testAccPreCheckWithAccountSiteType(t *testing.T, account AccountSite) {
 	defaultAccount := string(DomesticSite)
 	if v := strings.TrimSpace(os.Getenv("ALICLOUD_ACCOUNT_SITE")); v != "" {
+		defaultAccount = v
+	} else if v = strings.TrimSpace(os.Getenv("ALIBABA_CLOUD_ACCOUNT_TYPE")); v != "" {
+		defaultAccount = v
+	} else if v = strings.TrimSpace(os.Getenv("ALICLOUD_ACCOUNT_TYPE")); v != "" {
 		defaultAccount = v
 	}
 	if defaultAccount != string(account) {
@@ -128,7 +188,6 @@ func checkoutSupportedRegions(t *testing.T, supported bool, regions []connectivi
 	for _, r := range regions {
 		if region == string(r) {
 			find = true
-			break
 		}
 		if string(r) == backupRegion {
 			backupRegionFind = true
@@ -292,6 +351,13 @@ func testAccPreCheckWithSmartAccessGatewayAppSetting(t *testing.T) {
 	}
 }
 
+func testAccPreCheckWithExpressConnectUidSetting(t *testing.T) {
+	if v := strings.TrimSpace(os.Getenv("ALICLOUD_EXPRESS_CONNECT_UID")); v == "" {
+		t.Skipf("Skipping the test case with no express connect uid  id setting")
+		t.Skipped()
+	}
+}
+
 func testAccPreCheckWithTime(t *testing.T, days []int) {
 	skipped := true
 	for _, d := range days {
@@ -404,6 +470,76 @@ func testAccPreCheckWithResourceManagerHandshakesSetting(t *testing.T) {
 	if v := strings.TrimSpace(os.Getenv("INVITED_ALICLOUD_ACCOUNT_ID")); v == "" {
 		t.Skipf("Skipping the test case with there is no \"INVITED_ALICLOUD_ACCOUNT_ID\" setting")
 		t.Skipped()
+	}
+}
+
+type DingTalkMessage struct {
+	MsgType string `json:"msgtype"`
+	Text    struct {
+		Content string `json:"content"`
+	} `json:"text"`
+}
+
+func sendMessage(msg string) {
+	// 钉钉机器人的 Webhook 地址
+	webhookURL := "https://oapi.dingtalk.com/robot/send?access_token=" + os.Getenv("DINGTALK_WEBHOOK_ACCESS_TOKEN")
+
+	// 构建消息内容
+	message := DingTalkMessage{
+		MsgType: "text",
+		Text: struct {
+			Content string `json:"content"`
+		}{
+			Content: msg,
+		},
+	}
+
+	// 将消息内容转换为 JSON 格式
+	jsonData, err := json.Marshal(message)
+	if err != nil {
+		fmt.Println("[ERROR] send dingTalk message failed. Error:", err)
+		return
+	}
+
+	// 发送 POST 请求
+	resp, err := http.Post(webhookURL, "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		fmt.Println("[ERROR] send dingTalk message failed. Error:", err)
+		return
+	}
+	defer resp.Body.Close()
+}
+
+func setStsCredential() {
+	// 创建OSSClient实例。
+	client, err := oss.New("https://oss-cn-zhangjiakou.aliyuncs.com", os.Getenv("ALICLOUD_ACCESS_KEY"), os.Getenv("ALICLOUD_SECRET_KEY"))
+	if err != nil {
+		return
+	}
+
+	bucket, err := client.Bucket("terraform-alicloud-provider-ct")
+	if err != nil {
+		return
+	}
+
+	// 下载文件到流。
+	body, err := bucket.GetObject("sts/credential.json")
+	if err != nil {
+		return
+	}
+	// 数据读取完成后，获取的流必须关闭，否则会造成连接泄漏，导致请求无连接可用，程序无法正常工作。
+	defer body.Close()
+
+	data, err := ioutil.ReadAll(body)
+	if err != nil {
+		return
+	}
+	var credential map[string]interface{}
+	err = json.Unmarshal(data, &credential)
+	if credential != nil && len(credential) > 0 {
+		os.Setenv("ALICLOUD_ACCESS_KEY", credential["Credentials"].(map[string]interface{})["AccessKeyId"].(string))
+		os.Setenv("ALICLOUD_SECRET_KEY", credential["Credentials"].(map[string]interface{})["AccessKeySecret"].(string))
+		os.Setenv("ALICLOUD_SECURITY_TOKEN", credential["Credentials"].(map[string]interface{})["SecurityToken"].(string))
 	}
 }
 

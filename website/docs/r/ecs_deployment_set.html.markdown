@@ -7,17 +7,23 @@ description: |-
   Provides a Alicloud ECS Deployment Set resource.
 ---
 
-# alicloud\_ecs\_deployment\_set
+# alicloud_ecs_deployment_set
 
 Provides a ECS Deployment Set resource.
 
 For information about ECS Deployment Set and how to use it, see [What is Deployment Set](https://www.alibabacloud.com/help/en/doc-detail/91269.htm).
 
--> **NOTE:** Available in v1.140.0+.
+-> **NOTE:** Available since v1.140.0.
 
 ## Example Usage
 
 Basic Usage
+
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_ecs_deployment_set&exampleId=53b51b98-dccf-878a-fb01-554a57d62e90fb9bca66&activeTab=example&spm=docs.r.ecs_deployment_set.0.53b51b98dc&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
 
 ```terraform
 resource "alicloud_ecs_deployment_set" "default" {
@@ -40,7 +46,7 @@ The following arguments are supported:
 * `on_unable_to_redeploy_failed_instance` - (Optional) The on unable to redeploy failed instance. Valid values: `CancelMembershipAndStart`, `KeepStopped`.
   * `CancelMembershipAndStart` - Removes the instances from the deployment set and restarts the instances immediately after the failover is complete.
   * `KeepStopped`- Keeps the instances in the abnormal state and restarts them after ECS resources are replenished. 
-* `strategy` - (Optional, ForceNew) The deployment strategy. Valid values: `Availability`.
+* `strategy` - (Optional, ForceNew) The deployment strategy. Valid values: `Availability`(Default), `AvailabilityGroup`, `LowLatency`.
 
 ## Attributes Reference
 
@@ -52,6 +58,6 @@ The following attributes are exported:
 
 ECS Deployment Set can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_ecs_deployment_set.example <id>
 ```

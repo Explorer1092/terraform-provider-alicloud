@@ -19,123 +19,77 @@ which is widely applicable to scenarios such as data regularization, enrichment,
 
 Basic Usage
 
-```
-resource "alicloud_log_project" "example" {
-  name        = "tf-log"
-  description = "created by terraform"
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_log_etl&exampleId=5e28831c-93b5-23d6-9643-1c420cbad89739d36582&activeTab=example&spm=docs.r.log_etl.0.5e28831c93&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
 
+```terraform
+resource "random_integer" "default" {
+  max = 99999
+  min = 10000
 }
+
+resource "alicloud_log_project" "example" {
+  project_name = "terraform-example-${random_integer.default.result}"
+  description  = "terraform-example"
+}
+
 resource "alicloud_log_store" "example" {
-  project               = alicloud_log_project.example.name
-  name                  = "tf-test-logstore"
+  project_name          = alicloud_log_project.example.project_name
+  logstore_name         = "example-store"
   retention_period      = 3650
   shard_count           = 3
   auto_split            = true
   max_split_shard_count = 60
   append_meta           = true
 }
+
 resource "alicloud_log_store" "example2" {
-  project               = alicloud_log_project.example.name
-  name                  = "tf-test-logstore-2"
+  project_name          = alicloud_log_project.example.project_name
+  logstore_name         = "example-store2"
   retention_period      = 3650
   shard_count           = 3
   auto_split            = true
   max_split_shard_count = 60
   append_meta           = true
 }
+
 resource "alicloud_log_store" "example3" {
-  project               = alicloud_log_project.example.name
-  name                  = "tf-test-logstore-3"
+  project_name          = alicloud_log_project.example.project_name
+  logstore_name         = "example-store3"
   retention_period      = 3650
   shard_count           = 3
   auto_split            = true
   max_split_shard_count = 60
   append_meta           = true
 }
+
 resource "alicloud_log_etl" "example" {
-  etl_name          = "etl_name"
-  project           = alicloud_log_project.example.name
-  display_name      = "display_name"
-  description       = "etl_description"
+  etl_name          = "terraform-example"
+  project           = alicloud_log_project.example.project_name
+  display_name      = "terraform-example"
+  description       = "terraform-example"
   access_key_id     = "access_key_id"
   access_key_secret = "access_key_secret"
   script            = "e_set('new','key')"
-  logstore          = alicloud_log_store.example.name
+  logstore          = alicloud_log_store.example.logstore_name
   etl_sinks {
     name              = "target_name"
     access_key_id     = "example2_access_key_id"
     access_key_secret = "example2_access_key_secret"
     endpoint          = "cn-hangzhou.log.aliyuncs.com"
-    project           = alicloud_log_project.example.name
-    logstore          = alicloud_log_store.example2.name
+    project           = alicloud_log_project.example.project_name
+    logstore          = alicloud_log_store.example2.logstore_name
   }
   etl_sinks {
     name              = "target_name2"
     access_key_id     = "example3_access_key_id"
     access_key_secret = "example3_access_key_secret"
     endpoint          = "cn-hangzhou.log.aliyuncs.com"
-    project           = alicloud_log_project.example.name
-    logstore          = alicloud_log_store.example3.name
-  }
-}
-```
-Stop the task in progress
-```
-resource "alicloud_log_etl" "example" {
-  status            = STOPPED
-  etl_name          = "etl_name"
-  project           = alicloud_log_project.example.name
-  display_name      = "display_name"
-  description       = "etl_description"
-  access_key_id     = "access_key_id"
-  access_key_secret = "access_key_secret"
-  script            = "e_set('new','key')"
-  logstore          = alicloud_log_store.example.name
-  etl_sinks {
-    name              = "target_name"
-    access_key_id     = "example2_access_key_id"
-    access_key_secret = "example2_access_key_secret"
-    endpoint          = "cn-hangzhou.log.aliyuncs.com"
-    project           = alicloud_log_project.example.name
-    logstore          = alicloud_log_store.example2.name
-  }
-  etl_sinks {
-    name              = "target_name2"
-    access_key_id     = "example3_access_key_id"
-    access_key_secret = "example3_access_key_secret"
-    endpoint          = "cn-hangzhou.log.aliyuncs.com"
-    project           = alicloud_log_project.example.name
-    logstore          = alicloud_log_store.example3.name
-  }
-}
-```
-ReStart the stopped task
-```
-resource "alicloud_log_etl" "example" {
-  status            = RUNNING
-  etl_name          = "etl_name"
-  project           = alicloud_log_project.example.name
-  display_name      = "display_name"
-  description       = "etl_description"
-  access_key_id     = "access_key_id"
-  access_key_secret = "access_key_secret"
-  script            = "e_set('new','key')"
-  logstore          = alicloud_log_store.example.name
-  etl_sinks {
-    name              = "target_name"
-    access_key_id     = "example2_access_key_id"
-    access_key_secret = "example2_access_key_secret"
-    endpoint          = "cn-hangzhou.log.aliyuncs.com"
-    project           = alicloud_log_project.example.name
-    logstore          = alicloud_log_store.example2.name
-  }
-  etl_sinks {
-    name              = "target_name2"
-    access_key_id     = "example3_access_key_id"
-    access_key_secret = "example3_access_key_secret"
-    endpoint          = "cn-hangzhou.log.aliyuncs.com"
-    project           = alicloud_log_project.example.name
-    logstore          = alicloud_log_store.example3.name
+    project           = alicloud_log_project.example.project_name
+    logstore          = alicloud_log_store.example3.logstore_name
   }
 }
 ```
@@ -200,6 +154,6 @@ The `timeouts` block allows you to specify [timeouts](https://www.terraform.io/d
 
 Log etl can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_log_etl.example tf-log-project:tf-log-etl-name
 ```

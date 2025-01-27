@@ -5,7 +5,6 @@ import (
 	"regexp"
 
 	"github.com/PaesslerAG/jsonpath"
-	util "github.com/alibabacloud-go/tea-utils/service"
 	"github.com/aliyun/terraform-provider-alicloud/alicloud/connectivity"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
@@ -37,7 +36,13 @@ func dataSourceAlicloudGaAccelerators() *schema.Resource {
 				Type:         schema.TypeString,
 				Optional:     true,
 				ForceNew:     true,
-				ValidateFunc: validation.StringInSlice([]string{"active", "binding", "configuring", "deleting", "finacialLocked", "init", "unbinding"}, false),
+				ValidateFunc: StringInSlice([]string{"active", "binding", "configuring", "deleting", "finacialLocked", "init", "unbinding"}, false),
+			},
+			"bandwidth_billing_type": {
+				Type:         schema.TypeString,
+				Optional:     true,
+				ForceNew:     true,
+				ValidateFunc: StringInSlice([]string{"BandwidthPackage", "CDT"}, false),
 			},
 			"output_file": {
 				Type:     schema.TypeString,
@@ -167,15 +172,11 @@ func dataSourceAlicloudGaAcceleratorsRead(d *schema.ResourceData, meta interface
 		}
 	}
 	status, statusOk := d.GetOk("status")
+	bandwidthBillingType, BandwidthBillingTypeOk := d.GetOk("bandwidth_billing_type")
 	var response map[string]interface{}
-	conn, err := client.NewGaplusClient()
-	if err != nil {
-		return WrapError(err)
-	}
+	var err error
 	for {
-		runtime := util.RuntimeOptions{}
-		runtime.SetAutoretry(true)
-		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2019-11-20"), StringPointer("AK"), nil, request, &runtime)
+		response, err = client.RpcPost("Ga", "2019-11-20", action, nil, request, true)
 		if err != nil {
 			return WrapErrorf(err, DataDefaultErrorMsg, "alicloud_ga_accelerators", action, AlibabaCloudSdkGoERROR)
 		}
@@ -199,6 +200,9 @@ func dataSourceAlicloudGaAcceleratorsRead(d *schema.ResourceData, meta interface
 				}
 			}
 			if statusOk && status.(string) != "" && status.(string) != item["State"].(string) {
+				continue
+			}
+			if BandwidthBillingTypeOk && bandwidthBillingType.(string) != "" && bandwidthBillingType.(string) != item["BandwidthBillingType"].(string) {
 				continue
 			}
 			objects = append(objects, item)

@@ -116,30 +116,39 @@ func TestAccAlicloudRdsDBInstancesDataSource(t *testing.T) {
 
 	var existDBInstanceMapFunc = func(rand int) map[string]string {
 		return map[string]string{
-			"ids.#":                                "1",
-			"names.#":                              "1",
-			"instances.#":                          "1",
-			"total_count":                          CHECKSET,
-			"instances.0.id":                       CHECKSET,
-			"instances.0.name":                     fmt.Sprintf("tf-testAccDBInstanceConfig_%d", rand),
-			"instances.0.db_type":                  CHECKSET,
-			"instances.0.region_id":                CHECKSET,
-			"instances.0.create_time":              CHECKSET,
-			"instances.0.status":                   CHECKSET,
-			"instances.0.engine":                   string(MySQL),
-			"instances.0.engine_version":           "8.0",
-			"instances.0.net_type":                 string(Intranet),
-			"instances.0.instance_type":            CHECKSET,
-			"instances.0.connection_mode":          CHECKSET,
-			"instances.0.availability_zone":        CHECKSET,
-			"instances.0.vpc_id":                   CHECKSET,
-			"instances.0.vswitch_id":               CHECKSET,
-			"instances.0.charge_type":              CHECKSET,
-			"instances.0.connection_string":        CHECKSET,
-			"instances.0.port":                     CHECKSET,
-			"instances.0.db_instance_storage_type": CHECKSET,
-			"instances.0.instance_storage":         CHECKSET,
-			"instances.0.deletion_protection":      CHECKSET,
+			"ids.#":                                            "1",
+			"names.#":                                          "1",
+			"instances.#":                                      "1",
+			"total_count":                                      CHECKSET,
+			"instances.0.id":                                   CHECKSET,
+			"instances.0.name":                                 fmt.Sprintf("tf-testAccDBInstanceConfig_%d", rand),
+			"instances.0.db_type":                              CHECKSET,
+			"instances.0.region_id":                            CHECKSET,
+			"instances.0.create_time":                          CHECKSET,
+			"instances.0.status":                               CHECKSET,
+			"instances.0.engine":                               string(MySQL),
+			"instances.0.engine_version":                       "8.0",
+			"instances.0.net_type":                             string(Intranet),
+			"instances.0.instance_type":                        CHECKSET,
+			"instances.0.connection_mode":                      CHECKSET,
+			"instances.0.availability_zone":                    CHECKSET,
+			"instances.0.vpc_id":                               CHECKSET,
+			"instances.0.vswitch_id":                           CHECKSET,
+			"instances.0.charge_type":                          CHECKSET,
+			"instances.0.connection_string":                    CHECKSET,
+			"instances.0.port":                                 CHECKSET,
+			"instances.0.db_instance_storage_type":             CHECKSET,
+			"instances.0.instance_storage":                     CHECKSET,
+			"instances.0.deletion_protection":                  CHECKSET,
+			"instances.0.ha_mode":                              CHECKSET,
+			"instances.0.sync_mode":                            CHECKSET,
+			"instances.0.host_instance_infos.0.log_sync_time":  "",
+			"instances.0.host_instance_infos.0.node_type":      CHECKSET,
+			"instances.0.host_instance_infos.0.zone_id":        CHECKSET,
+			"instances.0.host_instance_infos.0.sync_status":    CHECKSET,
+			"instances.0.host_instance_infos.0.data_sync_time": "",
+			"instances.0.host_instance_infos.0.node_id":        CHECKSET,
+			"instances.0.host_instance_infos.0.region_id":      CHECKSET,
 		}
 	}
 
@@ -356,7 +365,7 @@ data "alicloud_db_instance_classes" "default" {
 }
 
 data "alicloud_vpcs" "default" {
- name_regex = "^default-NODELETING"
+    name_regex = "^default-NODELETING$"
 }
 data "alicloud_vswitches" "default" {
   vpc_id = data.alicloud_vpcs.default.ids.0
@@ -432,7 +441,7 @@ data "alicloud_db_instance_classes" "default" {
 }
 
 data "alicloud_vpcs" "default" {
- name_regex = "^default-NODELETING"
+    name_regex = "^default-NODELETING$"
 }
 data "alicloud_vswitches" "default" {
   vpc_id = data.alicloud_vpcs.default.ids.0

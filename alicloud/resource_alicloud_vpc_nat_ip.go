@@ -39,6 +39,7 @@ func resourceAlicloudVpcNatIp() *schema.Resource {
 				Type:     schema.TypeString,
 				Optional: true,
 				ForceNew: true,
+				Computed: true,
 			},
 			"nat_ip_id": {
 				Type:     schema.TypeString,
@@ -105,7 +106,7 @@ func resourceAlicloudVpcNatIpCreate(d *schema.ResourceData, meta interface{}) er
 		request["ClientToken"] = buildClientToken("CreateNatIp")
 		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2016-04-28"), StringPointer("AK"), nil, request, &runtime)
 		if err != nil {
-			if NeedRetry(err) {
+			if IsExpectedErrors(err, []string{"OperationConflict"}) || NeedRetry(err) {
 				wait()
 				return resource.RetryableError(err)
 			}
@@ -236,7 +237,7 @@ func resourceAlicloudVpcNatIpDelete(d *schema.ResourceData, meta interface{}) er
 		request["ClientToken"] = buildClientToken("DeleteNatIp")
 		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2016-04-28"), StringPointer("AK"), nil, request, &runtime)
 		if err != nil {
-			if NeedRetry(err) {
+			if IsExpectedErrors(err, []string{"OperationConflict"}) || NeedRetry(err) {
 				wait()
 				return resource.RetryableError(err)
 			}

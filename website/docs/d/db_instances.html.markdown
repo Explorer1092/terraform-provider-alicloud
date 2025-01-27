@@ -2,23 +2,24 @@
 subcategory: "RDS"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_db_instances"
-sidebar_current: "docs-alicloud-datasource-db-instances"
 description: |-
     Provides a collection of RDS instances according to the specified filters.
 ---
 
-# alicloud\_db\_instances
+# alicloud_db_instances
 
 The `alicloud_db_instances` data source provides a collection of RDS instances available in Alibaba Cloud account.
 Filters support regular expression for the instance name, searches by tags, and other filters which are listed below.
 
+-> **NOTE:** Available since v1.7.0+
+
 ## Example Usage
 
-```
+```terraform
 data "alicloud_db_instances" "db_instances_ds" {
   name_regex = "data-\\d+"
   status     = "Running"
-  tags       = {
+  tags = {
     "type" = "database",
     "size" = "tiny"
   }
@@ -36,7 +37,7 @@ The following arguments are supported:
 * `enable_details` - (Optional, Available in 1.135.0+) Default to `false`. Set it to `true` can output parameter template about resource attributes.
 * `name_regex` - (Optional) A regex string to filter results by instance name.
 * `ids` - (Optional, Available 1.52.0+) A list of RDS instance IDs. 
-* `engine` - (Optional) Database type. Options are `MySQL`, `SQLServer`, `PostgreSQL` and `PPAS`. If no value is specified, all types are returned.
+* `engine` - (Optional) Database type. Options are `MySQL`, `SQLServer`, `PostgreSQL`, `MariaDB`. If no value is specified, all types are returned.
 * `status` - (Optional) Status of the instance.
 * `db_type` - (Optional) `Primary` for primary instance, `Readonly` for read-only instance, `Guard` for disaster recovery instance, and `Temp` for temporary instance.
 * `vpc_id` - (Optional) Used to retrieve instances belong to specified VPC.
@@ -61,7 +62,7 @@ The following attributes are exported in addition to the arguments listed above:
   * `create_time` - Creation time of the instance.
   * `expire_time` - Expiration time. Pay-As-You-Go instances never expire.
   * `status` - Status of the instance.
-  * `engine` - Database type. Options are `MySQL`, `SQLServer`, `PostgreSQL` and `PPAS`. If no value is specified, all types are returned.
+  * `engine` - Database type. Options are `MySQL`, `SQLServer`, `PostgreSQL`, `MariaDB`. If no value is specified, all types are returned.
   * `engine_version` - Database version.
   * `net_type` - `Internet` for public network or `Intranet` for private network.
   * `connection_mode` - `Standard` for standard access mode and `Safe` for high security access mode.
@@ -72,7 +73,7 @@ The following attributes are exported in addition to the arguments listed above:
   * `temp_instance_id` - If a temporary instance is attached to the current instance, the ID of the temporary instance applies.
   * `readonly_instance_ids` - A list of IDs of read-only instances attached to the primary instance.
   * `vpc_id` - ID of the VPC the instance belongs to.
-  * `vswitch_id` - ID of the VSwitch the instance belongs to.
+  * `vswitch_id` - ID of the vSwitch the instance belongs to.
   * `port` - (Available in 1.70.3+) RDS database connection port.
   * `connection_string` - (Available in 1.70.3+) RDS database connection string.
   * `instance_storage` - (Available in 1.70.3+) User-defined DB instance storage space.
@@ -98,6 +99,7 @@ The following attributes are exported in addition to the arguments listed above:
       - custom: a custom certificate
   * `client_ca_cert` - (Available in 1.124.1+) The public key of the CA that issues client certificates. This parameter is supported only when the instance runs PostgreSQL with standard or enhanced SSDs.
   * `client_cert_revocation_list` - (Available in 1.124.1+) The certificate revocation list (CRL) that contains revoked client certificates. This parameter is supported only when the instance runs PostgreSQL with standard or enhanced SSDs.
+  * `client_ca_cert_expire_time` - (Available in 1.124.1+) The content of the server certificate. This parameter is supported only when the instance runs PostgreSQL with cloud disks. The time follows the ISO 8601 standard in the yyyy-MM-ddTHH:mm:ssZ format. The time is displayed in UTC. This parameter is not supported now.
   * `last_modify_status` - (Available in 1.124.1+) The status of the SSL link. This parameter is supported only when the instance runs PostgreSQL with standard or enhanced SSDs. Valid values:
       - success
       - setting
@@ -119,6 +121,7 @@ The following attributes are exported in addition to the arguments listed above:
   * `server_key` - (Available in 1.124.1+) The private key of the server certificate. This parameter is supported only when the instance runs PostgreSQL with standard or enhanced SSDs.
   * `creator` - (Available in 1.124.3+) The creator of the encryption key.
   * `delete_date` - (Available in 1.124.3+) The estimated time when the encryption key will be deleted. The time follows the ISO 8601 standard in the yyyy-MM-ddTHH:mm:ssZ format. The time is displayed in UTC.
+  * `db_instance_type` - (Available in 1.197.0+) The type of instance.
   * `description` - (Available in 1.124.3+) The description of the encryption key.
   * `encryption_key` - (Available in 1.124.3+) The ID of the encryption key.
   * `encryption_key_status` - (Available in 1.124.3+) The status of the encryption key. Valid values:
@@ -137,3 +140,13 @@ The following attributes are exported in addition to the arguments listed above:
   * `deletion_protection` - (Available in 1.167.0+) Indicates whether the release protection feature is enabled for the instance. Valid values:
       * **true**: The release protection feature is enabled.
       * **false**: The release protection feature is disabled.
+  * `ha_mode` - (Available since v1.209.1) The high availability mode of the instance.
+  * `sync_mode` - (Available since v1.209.1) The data replication mode of the instance.
+  * `host_instance_infos` - (Available since v1.209.1) An array that consists of the information of the primary and secondary instances.
+      * `log_sync_time` - The time when the secondary instance received logs from the primary instance. The time follows the ISO 8601 standard in the yyyy-MM-ddTHH:mm:ssZ format. The time is displayed in UTC.
+      * `node_type` - The type of the node.
+      * `zone_id` - The ID of the zone.
+      * `sync_status` - The synchronization status.
+      * `data_sync_time` - The time when the secondary instance completed the synchronization of data from the primary instance. The time follows the ISO 8601 standard in the yyyy-MM-ddTHH:mm:ssZ format. The time is displayed in UTC.
+      * `node_id` - The ID of the instance.
+      * `region_id` - The region ID of the instance.

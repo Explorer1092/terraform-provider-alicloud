@@ -63,6 +63,7 @@ func testSweepEciImageCache(region string) error {
 
 func TestAccAlicloudEciImageCache_basic(t *testing.T) {
 	var v eci.DescribeImageCachesImageCache0
+	checkoutSupportedRegions(t, true, connectivity.EciContainerGroupRegions)
 	resourceId := "alicloud_eci_image_cache.default"
 	ra := resourceAttrInit(resourceId, EciOpenapiImageCacheMap)
 	rc := resourceCheckInitWithDescribeMethod(resourceId, &v, func() interface{} {
@@ -119,7 +120,7 @@ var EciOpenapiImageCacheMap = map[string]string{
 func EciOpenapiImageCacheBasicdependence(name string) string {
 	return fmt.Sprintf(`
 	data "alicloud_vpcs" "default" {
-	  name_regex = "default-NODELETING"
+	  name_regex = "^default-NODELETING$"
 	}
 	data "alicloud_vswitches" "default" {
 	  ids = [data.alicloud_vpcs.default.vpcs.0.vswitch_ids.0]

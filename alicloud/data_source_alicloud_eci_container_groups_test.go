@@ -5,10 +5,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/aliyun/terraform-provider-alicloud/alicloud/connectivity"
+
 	"github.com/hashicorp/terraform-plugin-sdk/helper/acctest"
 )
 
 func TestAccAlicloudEciContainerGroupsDataSource(t *testing.T) {
+	checkoutSupportedRegions(t, true, connectivity.EciContainerGroupRegions)
 	rand := acctest.RandInt()
 	idsConf := dataSourceTestAccConfig{
 		existConfig: testAccCheckAlicloudEciContainerGroupsDataSourceName(rand, map[string]string{
@@ -141,7 +144,7 @@ variable "name" {
 }
 
 data "alicloud_vpcs" "default" {
-  name_regex = "default-NODELETING"
+  name_regex = "^default-NODELETING$"
 }
 
 resource "alicloud_security_group" "group" {

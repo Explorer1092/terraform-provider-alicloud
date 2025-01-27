@@ -19,76 +19,77 @@ For information about ECS Snapshot Group and how to use it, see [What is Snapsho
 
 Basic Usage
 
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_ecs_snapshot_group&exampleId=08124db5-c36f-814d-6ff3-afadc143e0dc65bfc1ed&activeTab=example&spm=docs.r.ecs_snapshot_group.0.08124db5c3&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
 ```terraform
-data "alicloud_resource_manager_resource_groups" "default" {
-  name_regex = "default"
-}
-data "alicloud_zones" default {
+data "alicloud_zones" "default" {
   available_resource_creation = "Instance"
   available_disk_category     = "cloud_essd"
 }
-
 data "alicloud_instance_types" "default" {
   availability_zone    = data.alicloud_zones.default.zones.0.id
-  cpu_core_count       = 2
-  memory_size          = 4
   system_disk_category = "cloud_essd"
 }
-
-data "alicloud_vpcs" "default" {
-  name_regex = "default-NODELETING"
+data "alicloud_images" "default" {
+  owners      = "system"
+  name_regex  = "^ubuntu_18.*64"
+  most_recent = true
 }
 
-data "alicloud_vswitches" "default" {
-  vpc_id  = data.alicloud_vpcs.default.ids.0
-  zone_id = data.alicloud_zones.default.zones.0.id
+resource "alicloud_vpc" "default" {
+  vpc_name   = "terraform-example"
+  cidr_block = "172.17.3.0/24"
+}
+
+resource "alicloud_vswitch" "default" {
+  vswitch_name = "terraform-example"
+  cidr_block   = "172.17.3.0/24"
+  vpc_id       = alicloud_vpc.default.id
+  zone_id      = data.alicloud_zones.default.zones.0.id
 }
 
 resource "alicloud_security_group" "default" {
-  name        = "${var.name}"
-  description = "New security group"
-  vpc_id      = data.alicloud_vpcs.default.ids.0
-}
-
-resource "alicloud_disk" "default" {
-  count     = 2
-  disk_name = "${var.name}"
-  zone_id   = data.alicloud_instance_types.default.instance_types.0.availability_zones.0
-  category  = "cloud_essd"
-  size      = "20"
-}
-
-data "alicloud_images" "default" {
-  owners = "system"
+  name   = "terraform-example"
+  vpc_id = alicloud_vpc.default.id
 }
 
 resource "alicloud_instance" "default" {
-  availability_zone = data.alicloud_zones.default.zones.0.id
-  instance_name     = "${var.name}"
-  host_name         = "tf-testAcc"
-  image_id          = data.alicloud_images.default.images.0.id
-  instance_type     = data.alicloud_instance_types.default.instance_types.0.id
-  security_groups   = [alicloud_security_group.default.id]
-  vswitch_id        = data.alicloud_vswitches.default.ids.0
+  availability_zone          = data.alicloud_zones.default.zones.0.id
+  instance_name              = "terraform-example"
+  security_groups            = [alicloud_security_group.default.id]
+  vswitch_id                 = alicloud_vswitch.default.id
+  instance_type              = data.alicloud_instance_types.default.instance_types.0.id
+  image_id                   = data.alicloud_images.default.images.0.id
+  internet_max_bandwidth_out = 10
+}
+
+resource "alicloud_ecs_disk" "default" {
+  zone_id     = data.alicloud_zones.default.zones.0.id
+  disk_name   = "terraform-example"
+  description = "terraform-example"
+  category    = "cloud_essd"
+  size        = "30"
 }
 
 resource "alicloud_disk_attachment" "default" {
-  count       = 2
-  disk_id     = element(alicloud_disk.default.*.id, count.index)
+  disk_id     = alicloud_ecs_disk.default.id
   instance_id = alicloud_instance.default.id
 }
 
-resource "alicloud_ecs_snapshot_group" "example" {
-  description                   = "example_value"
-  disk_id                       = [alicloud_disk_attachment.default.0.disk_id, alicloud_disk_attachment.default.1.disk_id]
-  snapshot_group_name           = "example_value"
-  resource_group_id             = data.alicloud_resource_manager_resource_groups.default.groups.0.id
-  instance_id                   = alicloud_disk_attachment.default.0.instance_id
+resource "alicloud_ecs_snapshot_group" "default" {
+  description                   = "terraform-example"
+  disk_id                       = [alicloud_disk_attachment.default.disk_id]
+  snapshot_group_name           = "terraform-example"
+  instance_id                   = alicloud_instance.default.id
   instant_access                = true
   instant_access_retention_days = 1
   tags = {
     Created = "TF"
-    For     = "Acceptance-test"
+    For     = "Acceptance"
   }
 }
 ```
@@ -126,6 +127,6 @@ The `timeouts` block allows you to specify [timeouts](https://www.terraform.io/d
 
 ECS Snapshot Group can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_ecs_snapshot_group.example <id>
 ```

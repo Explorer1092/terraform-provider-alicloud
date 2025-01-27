@@ -309,8 +309,8 @@ func resourceAlicloudLogETLUpdate(d *schema.ResourceData, meta interface{}) erro
 		return WrapError(err)
 	}
 	wait := incrementalWait(3*time.Second, 3*time.Second)
+	logService := LogService{client}
 	if d.HasChange("status") {
-		logService := LogService{client}
 		status := d.Get("status").(string)
 		if status == "STARTING" || status == "RUNNING" {
 			if err := resource.Retry(d.Timeout(schema.TimeoutUpdate), func() *resource.RetryError {
@@ -363,7 +363,18 @@ func resourceAlicloudLogETLUpdate(d *schema.ResourceData, meta interface{}) erro
 			if err != nil {
 				return nil, err
 			}
-			return nil, slsClient.UpdateETL(parts[0], etl)
+			status := d.Get("status").(string)
+			if status == "STOPPING" || status == "STOPPED" {
+				return nil, slsClient.UpdateETL(parts[0], etl)
+			}
+			if err = slsClient.RestartETL(parts[0], etl); err != nil {
+				return nil, err
+			}
+			stateConf := BuildStateConf([]string{}, []string{"RUNNING"}, d.Timeout(schema.TimeoutUpdate), 5*time.Second, logService.LogETLStateRefreshFunc(d.Id(), []string{}, slsClient))
+			if _, err := stateConf.WaitForState(); err != nil {
+				return nil, WrapErrorf(err, IdMsg, d.Id())
+			}
+			return nil, nil
 		})
 		if err != nil {
 			if IsExpectedErrors(err, []string{LogClientTimeout}) {

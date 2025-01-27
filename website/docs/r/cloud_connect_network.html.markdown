@@ -1,5 +1,5 @@
 ---
-subcategory: "Smart Access Gateway"
+subcategory: "Smart Access Gateway (Smartag)"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_cloud_connect_network"
 sidebar_current: "docs-alicloud-resource-cloud-connect-network"
@@ -7,24 +7,36 @@ description: |-
   Provides a Alicloud Cloud Connect Network resource.
 ---
 
-# alicloud\_cloud_connect_network
+# alicloud_cloud_connect_network
 
 Provides a cloud connect network resource. Cloud Connect Network (CCN) is another important component of Smart Access Gateway. It is a device access matrix composed of Alibaba Cloud distributed access gateways. You can add multiple Smart Access Gateway (SAG) devices to a CCN instance and then attach the CCN instance to a Cloud Enterprise Network (CEN) instance to connect the local branches to the Alibaba Cloud.
 
-For information about cloud connect network and how to use it, see [What is Cloud Connect Network](https://www.alibabacloud.com/help/doc-detail/93667.htm).
+For information about cloud connect network and how to use it, see [What is Cloud Connect Network](https://www.alibabacloud.com/help/en/smart-access-gateway/latest/createcloudconnectnetwork).
 
--> **NOTE:** Available in 1.59.0+
+-> **NOTE:** Available since v1.59.0.
 
--> **NOTE:** Only the following regions support create Cloud Connect Network. [`cn-shanghai`, `cn-shanghai-finance-1`, `cn-hongkong`, `ap-southeast-1`, `ap-southeast-2`, `ap-southeast-3`, `ap-southeast-5`, `ap-northeast-1`, `eu-central-1`]
+-> **NOTE:** Only the following regions support create Cloud Connect Network. [`cn-shanghai`, `cn-shanghai-finance-1`, `cn-hongkong`, `ap-southeast-1`, `ap-southeast-3`, `ap-southeast-5`, `ap-northeast-1`, `eu-central-1`]
 
 ## Example Usage
 
 Basic Usage
 
-```
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_cloud_connect_network&exampleId=0d167127-4de5-23ad-4668-fd36ef279ab0a70ff28c&activeTab=example&spm=docs.r.cloud_connect_network.0.0d1671274d&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
+```terraform
+variable "name" {
+  default = "terraform-example"
+}
+provider "alicloud" {
+  region = "cn-shanghai"
+}
 resource "alicloud_cloud_connect_network" "default" {
-  name        = "tf-testAccCloudConnectNetworkName"
-  description = "tf-testAccCloudConnectNetworkDescription"
+  name        = var.name
+  description = var.name
   cidr_block  = "192.168.0.0/24"
   is_default  = true
 }
@@ -49,7 +61,7 @@ The following attributes are exported:
 
 The cloud connect network instance can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_cloud_connect_network.example ccn-abc123456
 ```
 

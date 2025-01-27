@@ -4,75 +4,96 @@ layout: "alicloud"
 page_title: "Alicloud: alicloud_cen_private_zone"
 sidebar_current: "docs-alicloud-resource-cen-private-zone"
 description: |-
-  Provides a Alicloud CEN private zone resource.
+  Provides a Alicloud Cloud Enterprise Network (CEN) Private Zone resource.
 ---
 
-# alicloud\_cen_private_zone
+# alicloud_cen_private_zone
 
-This topic describes how to configure PrivateZone access. 
-PrivateZone is a VPC-based resolution and management service for private domain names. 
-After you set a PrivateZone access, the Cloud Connect Network (CCN) and Virtual Border Router (VBR) attached to a CEN instance can access the PrivateZone service through CEN.
+Provides a Cloud Enterprise Network (CEN) Private Zone resource.
 
-For information about CEN Private Zone and how to use it, see [Manage CEN Private Zone](https://www.alibabacloud.com/help/en/doc-detail/106693.htm).
+For information about Cloud Enterprise Network (CEN) Private Zone and how to use it, see [What is Private Zone](https://www.alibabacloud.com/help/en/cloud-enterprise-network/latest/api-cbn-2017-09-12-routeprivatezoneincentovpc).
 
--> **NOTE:** Available in 1.83.0+
+-> **NOTE:** Available since v1.83.0.
 
 ## Example Usage
 
 Basic Usage
 
-```
-# Create a cen Private Zone resource and use it.
-resource "alicloud_cen_instance" "default" {
-  name = "test_name"
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_cen_private_zone&exampleId=2b1fc921-bfcc-5b75-b8b8-a667c2b265adbd372825&activeTab=example&spm=docs.r.cen_private_zone.0.2b1fc921bf&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
+```terraform
+variable "name" {
+  default = "terraform-example"
+}
+
+provider "alicloud" {
+  region = "cn-hangzhou"
+}
+
+data "alicloud_regions" "default" {
+  current = true
 }
 
 resource "alicloud_vpc" "default" {
-  vpc_name       = "test_name"
-  cidr_block = "172.16.0.0/12"
+  vpc_name   = var.name
+  cidr_block = "172.17.3.0/24"
+}
+
+resource "alicloud_cen_instance" "default" {
+  cen_instance_name = var.name
+  description       = var.name
 }
 
 resource "alicloud_cen_instance_attachment" "default" {
   instance_id              = alicloud_cen_instance.default.id
   child_instance_id        = alicloud_vpc.default.id
   child_instance_type      = "VPC"
-  child_instance_region_id = "cn-hangzhou"
-  depends_on = [
-    alicloud_cen_instance.default,
-    alicloud_vpc.default,
-  ]
+  child_instance_region_id = data.alicloud_regions.default.regions.0.id
 }
 
 resource "alicloud_cen_private_zone" "default" {
-  access_region_id = "cn-hangzhou"
-  cen_id           = alicloud_cen_instance.default.id
-  host_region_id   = "cn-hangzhou"
+  cen_id           = alicloud_cen_instance_attachment.default.instance_id
+  access_region_id = data.alicloud_regions.default.regions.0.id
   host_vpc_id      = alicloud_vpc.default.id
-  depends_on       = [alicloud_cen_instance_attachment.default]
+  host_region_id   = data.alicloud_regions.default.regions.0.id
 }
 ```
+
 ## Argument Reference
 
 The following arguments are supported:
 
 * `cen_id` - (Required, ForceNew) The ID of the CEN instance.
-* `access_region_id` - (Required, ForceNew) The access region. The access region is the region of the cloud resource that accesses the PrivateZone service through CEN.
-* `host_region_id` - (Required, ForceNew) The service region. The service region is the target region of the PrivateZone service to be accessed through CEN. 
-* `host_vpc_id` - (Required, ForceNew) The VPC that belongs to the service region.
+* `access_region_id` - (Required, ForceNew) The ID of the region where PrivateZone is accessed. This region refers to the region in which PrivateZone is accessed by clients.
+* `host_vpc_id` - (Required, ForceNew) The ID of the VPC that is associated with PrivateZone.
+* `host_region_id` - (Required, ForceNew) The ID of the region where PrivateZone is deployed.
 
-->**NOTE:** The "alicloud_cen_private_zone" resource depends on the related "alicloud_cen_instance_attachment" resource.
+->**NOTE:** The resource `alicloud_cen_private_zone` depends on the resource `alicloud_cen_instance_attachment`.
 
 ## Attributes Reference
 
 The following attributes are exported:
 
-* `id` - ID of the resource, formatted as `<cen_id>:<access_region_id>`.
-* `status` - The status of the PrivateZone service. Valid values: ["Creating", "Active", "Deleting"].
+* `id` - The resource ID in terraform of Private Zone. It formats as `<cen_id>:<access_region_id>`.
+* `status` - The status of the Private Zone.
+
+## Timeouts
+
+-> **NOTE:** Available since v1.238.0.
+
+The `timeouts` block allows you to specify [timeouts](https://www.terraform.io/docs/configuration-0-11/resources.html#timeouts) for certain actions:
+
+* `create` - (Defaults to 6 mins) Used when create the Private Zone.
+* `delete` - (Defaults to 5 mins) Used when delete the Private Zone.
 
 ## Import
 
-CEN Private Zone can be imported using the id, e.g.
+Cloud Enterprise Network (CEN) Private Zone can be imported using the id, e.g.
 
-```
-$ terraform import alicloud_cen_private_zone.example cen-abc123456:cn-hangzhou
+```shell
+$ terraform import alicloud_cen_private_zone.example <cen_id>:<access_region_id>
 ```

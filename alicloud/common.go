@@ -2,8 +2,11 @@ package alicloud
 
 import (
 	"bytes"
+	"crypto/md5"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -23,6 +26,8 @@ import (
 
 	"github.com/denverdino/aliyungo/cs"
 
+	openapi "github.com/alibabacloud-go/darabonba-openapi/v2/client"
+	"github.com/alibabacloud-go/tea/tea"
 	"github.com/aliyun/aliyun-datahub-sdk-go/datahub"
 	sls "github.com/aliyun/aliyun-log-go-sdk"
 	"github.com/aliyun/aliyun-oss-go-sdk/oss"
@@ -41,20 +46,14 @@ import (
 	"github.com/mitchellh/go-homedir"
 )
 
-type InstanceNetWork string
-
-const (
-	ClassicNet = InstanceNetWork("classic")
-	VpcNet     = InstanceNetWork("vpc")
-)
-
 type PayType string
 
 const (
-	PrePaid  = PayType("PrePaid")
-	PostPaid = PayType("PostPaid")
-	Prepaid  = PayType("Prepaid")
-	Postpaid = PayType("Postpaid")
+	PrePaid    = PayType("PrePaid")
+	PostPaid   = PayType("PostPaid")
+	Prepaid    = PayType("Prepaid")
+	Postpaid   = PayType("Postpaid")
+	Serverless = PayType("Serverless")
 )
 
 const (
@@ -215,7 +214,6 @@ const (
 	DomesticSite = AccountSite("Domestic")
 	IntlSite     = AccountSite("International")
 )
-
 const (
 	SnapshotCreatingInProcessing = Status("progressing")
 	SnapshotCreatingAccomplished = Status("accomplished")
@@ -243,6 +241,7 @@ const DefaultIntervalMedium = 10
 const DefaultIntervalLong = 20
 
 const (
+	PageNumSmall   = 1
 	PageSizeSmall  = 10
 	PageSizeMedium = 20
 	PageSizeLarge  = 50
@@ -261,6 +260,12 @@ const (
 	All   = Protocol("all")
 	Icmp  = Protocol("icmp")
 	Gre   = Protocol("gre")
+)
+
+const (
+	// HeaderEnableEBTrigger header key for enabling eventbridge trigger
+	// TODO: delete the header after eventbridge trigger is totally exposed to user
+	HeaderEnableEBTrigger = "x-fc-enable-eventbridge-trigger"
 )
 
 // ValidProtocols network protocol list
@@ -353,6 +358,28 @@ func convertJsonStringToStringList(src interface{}) (result []interface{}) {
 	return
 }
 
+func encodeToBase64String(configured []string) string {
+	result := ""
+	for i, v := range configured {
+		result += v
+		if i < len(configured)-1 {
+			result += ","
+		}
+	}
+	return base64.StdEncoding.EncodeToString([]byte(result))
+}
+
+func decodeFromBase64String(configured string) (result []string, err error) {
+
+	decodeString, err := base64.StdEncoding.DecodeString(configured)
+	if err != nil {
+		return result, err
+	}
+
+	result = strings.Split(string(decodeString), ",")
+	return result, nil
+}
+
 func convertJsonStringToMap(configured string) (map[string]interface{}, error) {
 	result := make(map[string]interface{})
 	if err := json.Unmarshal([]byte(configured), &result); err != nil {
@@ -374,6 +401,16 @@ func convertListToCommaSeparate(configured []interface{}) string {
 			rail = ""
 		}
 		result += v.(string) + rail
+	}
+	return result
+}
+
+func filterEmptyStrings(arr []interface{}) []interface{} {
+	var result []interface{}
+	for _, str := range arr {
+		if fmt.Sprint(str) != "" {
+			result = append(result, str)
+		}
 	}
 	return result
 }
@@ -404,12 +441,53 @@ func convertJsonStringToList(configured string) ([]interface{}, error) {
 	return result, nil
 }
 
+func expandArrayToMap(originMap map[string]interface{}, arrayValues []interface{}, arrayKey string) map[string]interface{} {
+	for i, val := range arrayValues {
+		key := fmt.Sprintf("%s.%d", arrayKey, i+1)
+		originMap[key] = fmt.Sprint(val)
+	}
+	return originMap
+}
+
+func convertJsonStringToObject(configured interface{}) map[string]interface{} {
+	result := make(map[string]interface{})
+	if err := json.Unmarshal([]byte(configured.(string)), &result); err != nil {
+		return nil
+	}
+
+	return result
+}
+
+func convertObjectToJsonString(m interface{}) string {
+	if result, err := json.Marshal(m); err != nil {
+		return ""
+	} else {
+		return string(result)
+	}
+}
+
 func convertMaptoJsonString(m map[string]interface{}) (string, error) {
 	//sm := make(map[string]string, len(m))
 	//for k, v := range m {
 	//	sm[k] = v.(string)
 	//}
 
+	if result, err := json.Marshal(m); err != nil {
+		return "", err
+	} else {
+		return string(result), nil
+	}
+}
+
+func convertMapToJsonStringIgnoreError(m map[string]interface{}) string {
+	if result, err := json.Marshal(m); err != nil {
+		return ""
+	} else {
+		return string(result)
+	}
+}
+
+func convertInterfaceToJsonString(m interface{}) (string, error) {
 	if result, err := json.Marshal(m); err != nil {
 		return "", err
 	} else {
@@ -694,6 +772,32 @@ func compareJsonTemplateAreEquivalent(tem1, tem2 string) (bool, error) {
 	return equal, nil
 }
 
+func compareArrayJsonTemplateAreEquivalent(tem1, tem2 string) (bool, error) {
+	obj1 := make([]map[string]interface{}, 0)
+	err := json.Unmarshal([]byte(tem1), &obj1)
+	if err != nil {
+		return false, err
+	}
+
+	canonicalJson1, _ := json.Marshal(obj1)
+
+	obj2 := make([]map[string]interface{}, 0)
+	err = json.Unmarshal([]byte(tem2), &obj2)
+	if err != nil {
+		return false, err
+	}
+
+	canonicalJson2, _ := json.Marshal(obj2)
+
+	equal := bytes.Compare(canonicalJson1, canonicalJson2) == 0
+	if !equal {
+		log.Printf("[DEBUG] Canonical template are not equal.\nFirst: %s\nSecond: %s\n",
+			canonicalJson1, canonicalJson2)
+	}
+
+	return equal, nil
+}
+
 func compareYamlTemplateAreEquivalent(tem1, tem2 string) (bool, error) {
 	var obj1 interface{}
 	err := yaml.Unmarshal([]byte(tem1), &obj1)
@@ -809,7 +913,12 @@ func addDebug(action, content interface{}, requestInfo ...interface{}) {
 
 			requestContent := ""
 			if len(requestInfo) > 1 {
-				requestContent = fmt.Sprintf("%#v", requestInfo[1])
+				switch requestInfo[1].(type) {
+				case *tea.SDKError:
+					requestContent = fmt.Sprintf("%#v", requestInfo[1].(*tea.SDKError).Error())
+				default:
+					requestContent = fmt.Sprintf("%#v", requestInfo[1])
+				}
 			}
 
 			if len(requestInfo) == 1 {
@@ -844,8 +953,22 @@ func GetFunc(level int) string {
 	return strings.TrimPrefix(filepath.Ext(runtime.FuncForPC(pc).Name()), ".")
 }
 
+func ParseResourceIds(id string) (parts []string, err error) {
+	parts = strings.Split(id, ":")
+	return parts, err
+}
+
 func ParseResourceId(id string, length int) (parts []string, err error) {
 	parts = strings.Split(id, ":")
+
+	if len(parts) != length {
+		err = WrapError(fmt.Errorf("Invalid Resource Id %s. Expected parts' length %d, got %d", id, length, len(parts)))
+	}
+	return parts, err
+}
+
+func ParseResourceIdN(id string, length int) (parts []string, err error) {
+	parts = strings.SplitN(id, ":", length)
 
 	if len(parts) != length {
 		err = WrapError(fmt.Errorf("Invalid Resource Id %s. Expected parts' length %d, got %d", id, length, len(parts)))
@@ -901,6 +1024,12 @@ func incrementalWait(firstDuration time.Duration, increaseDuration time.Duration
 // If auto renew, the period computed from computePeriodByUnit will be changed
 // This method used to compute a period accourding to current period and unit
 func computePeriodByUnit(createTime, endTime interface{}, currentPeriod int, periodUnit string) (int, error) {
+	if createTime == nil {
+		return 0, WrapError(fmt.Errorf("createTime should not be nil"))
+	}
+	if endTime == nil {
+		return 0, WrapError(fmt.Errorf("endTime should not be nil"))
+	}
 	var createTimeStr, endTimeStr string
 	switch value := createTime.(type) {
 	case int64:
@@ -994,7 +1123,11 @@ func formatInt(src interface{}) int {
 	case "int":
 		return src.(int)
 	case "string":
-		v, err := strconv.Atoi(src.(string))
+		vv := fmt.Sprint(src)
+		if vv == "" {
+			return 0
+		}
+		v, err := strconv.Atoi(vv)
 		if err != nil {
 			panic(err)
 		}
@@ -1010,11 +1143,72 @@ func formatInt(src interface{}) int {
 	}
 }
 
+func formatBool(src interface{}) bool {
+	if src == nil {
+		return false
+	}
+	attrType := reflect.TypeOf(src)
+	switch attrType.String() {
+	case "bool":
+		return src.(bool)
+	case "string":
+		vv := fmt.Sprint(src)
+		if vv == "" {
+			return false
+		}
+		v, err := strconv.ParseBool(vv)
+		if err != nil {
+			panic(err)
+		}
+		return v
+	default:
+		panic(fmt.Sprintf("Not support type %s", attrType.String()))
+	}
+}
+
+func formatFloat64(src interface{}) float64 {
+	if src == nil {
+		return 0
+	}
+	attrType := reflect.TypeOf(src)
+	switch attrType.String() {
+	case "float64":
+		return src.(float64)
+	case "float32":
+		return float64(src.(float32))
+	case "int64":
+		return float64(src.(int64))
+	case "int32":
+		return float64(src.(int32))
+	case "int":
+		return float64(src.(int))
+	case "string":
+		vv := fmt.Sprint(src)
+		if vv == "" {
+			return 0
+		}
+		v, err := strconv.ParseFloat(vv, 64)
+		if err != nil {
+			panic(err)
+		}
+		return v
+	case "json.Number":
+		v, err := src.(json.Number).Float64()
+		if err != nil {
+			panic(err)
+		}
+		return v
+	default:
+		panic(fmt.Sprintf("Not support type %s", attrType.String()))
+	}
+}
+
 func convertArrayObjectToJsonString(src interface{}) (string, error) {
 	res, err := json.Marshal(&src)
 	if err != nil {
 		return "", err
 	}
+
 	return string(res), nil
 }
 
@@ -1079,6 +1273,9 @@ func isPagingRequest(d *schema.ResourceData) bool {
 }
 
 func setPagingRequest(d *schema.ResourceData, request map[string]interface{}, maxPageSize int) {
+	if maxPageSize == 0 {
+		maxPageSize = PageSizeLarge
+	}
 	if v, ok := d.GetOk("page_number"); ok && v.(int) > 0 {
 		request["PageNumber"] = v.(int)
 	} else {
@@ -1087,7 +1284,7 @@ func setPagingRequest(d *schema.ResourceData, request map[string]interface{}, ma
 	if v, ok := d.GetOk("page_size"); ok && v.(int) > 0 {
 		request["PageSize"] = v.(int)
 	} else {
-		request["PageSize"] = PageSizeLarge
+		request["PageSize"] = maxPageSize
 	}
 	return
 }
@@ -1130,7 +1327,7 @@ func mapMerge(target, merged map[string]interface{}) map[string]interface{} {
 
 func mapSort(target map[string]string) []string {
 	result := make([]string, 0)
-	for key, _ := range target {
+	for key := range target {
 		result = append(result, key)
 	}
 	sort.Strings(result)
@@ -1204,4 +1401,421 @@ func newInstanceDiff(resourceName string, attributes, attributesDiff map[string]
 		}
 	}
 	return diff, nil
+}
+
+func compareMapWithIgnoreEquivalent(tem1, tem2 map[string]interface{}, ignore []string) bool {
+
+	if len(tem1) != len(tem2) {
+		return false
+	}
+
+OuterLoop:
+	for key1, val1 := range tem1 {
+		for _, item := range ignore {
+			if key1 == item {
+				continue OuterLoop
+			}
+		}
+
+		val2 := tem2[key1]
+		if val2 != val1 {
+			return false
+		}
+	}
+
+	return true
+}
+
+func Interface2String(val interface{}) string {
+	if v, ok := val.(string); ok {
+		return v
+	}
+	return fmt.Sprint(val)
+}
+
+func Interface2StrSlice(ii []interface{}) []string {
+	ss := make([]string, 0, len(ii))
+	for _, i := range ii {
+		s := Interface2String(i)
+		ss = append(ss, s)
+	}
+	return ss
+}
+
+func Str2InterfaceSlice(ss []string) []interface{} {
+	ii := make([]interface{}, 0, len(ss))
+	for _, s := range ss {
+		ii = append(ii, s)
+	}
+	return ii
+}
+
+func Interface2Bool(i interface{}) bool {
+	if i == nil {
+		return false
+	}
+	t := reflect.TypeOf(i).Kind()
+	switch t {
+	case reflect.String:
+		return convertStringToBool(i.(string))
+	case reflect.Bool:
+		return i.(bool)
+	default:
+		return false
+	}
+}
+
+func IsEmpty(i interface{}) bool {
+	if i == nil {
+		return true
+	}
+	switch reflect.TypeOf(i).Kind() {
+	case reflect.String:
+		return fmt.Sprint(i) == ""
+	case reflect.Int:
+		return i.(int) <= 0
+	case reflect.Int8:
+		return i.(int8) <= 0
+	case reflect.Int16:
+		return i.(int16) <= 0
+	case reflect.Int32:
+		return i.(int32) <= 0
+	case reflect.Int64:
+		return i.(int64) <= 0
+	case reflect.Float32:
+		return i.(float32) <= 0
+	case reflect.Float64:
+		return i.(float64) <= 0
+	case reflect.Map:
+		return len(i.(map[string]interface{})) <= 0
+	case reflect.Ptr:
+		return reflect.ValueOf(i).IsNil()
+	default:
+		return false
+	}
+}
+
+func IsNil(i interface{}) bool {
+	if i == nil {
+		return true
+	}
+	switch reflect.TypeOf(i).Kind() {
+	case reflect.String:
+		return fmt.Sprint(i) == ""
+	case reflect.Slice:
+		return len(i.([]interface{})) <= 0
+	case reflect.Map:
+		return len(i.(map[string]interface{})) <= 0
+	case reflect.Ptr:
+		return reflect.ValueOf(i).IsNil()
+	default:
+		return false
+	}
+}
+
+func GetDaysBetween2Date(format string, date1Str string, date2Str string) (int, error) {
+	var day int
+	t1, err := time.ParseInLocation(format, date1Str, time.Local)
+	if err != nil {
+		return 0, err
+	}
+	t2, err := time.ParseInLocation(format, date2Str, time.Local)
+	if err != nil {
+		return 0, err
+	}
+
+	swap := false
+	if t1.Unix() > t2.Unix() {
+		t1, t2 = t2, t1
+		swap = true
+	}
+
+	t1_ := t1.Add(time.Duration(t2.Sub(t1).Milliseconds()%86400000) * time.Millisecond)
+	day = int(t2.Sub(t1).Hours() / 24)
+	if t1_.Day() != t1.Day() {
+		day += 1
+	}
+
+	if swap {
+		day = -day
+	}
+
+	return day, nil
+}
+
+func compareCmsHybridMonitorFcTaskYamlConfigAreEquivalent(tem1, tem2 string) (bool, error) {
+	type MetricList struct {
+		MetricList []string `yaml:"metric_list"`
+	}
+	type Product struct {
+		MetricInfo []MetricList `yaml:"metric_info"`
+		Namespace  string       `yaml:"namespace"`
+	}
+	type Products struct {
+		Products []Product
+	}
+
+	var P1 Products
+	err := yaml.Unmarshal([]byte(tem1), &P1)
+	if err != nil {
+		fmt.Sprintln(false)
+	}
+
+	y1 := make([]string, 0)
+	for _, product := range P1.Products {
+		s1, _ := json.Marshal(product)
+		y1 = append(y1, string(s1))
+	}
+
+	var P2 Products
+	err = yaml.Unmarshal([]byte(tem2), &P2)
+	if err != nil {
+		fmt.Sprintln(false)
+	}
+
+	y2 := make([]string, 0)
+	for _, product := range P2.Products {
+		s2, _ := json.Marshal(product)
+		y2 = append(y2, string(s2))
+	}
+
+	sort.Strings(y1)
+	sort.Strings(y2)
+	return reflect.DeepEqual(y1, y2), nil
+}
+
+func getOneStringOrAllStringSlice(stringSli []interface{}) interface{} {
+	if len(stringSli) == 1 {
+		return stringSli[0].(string)
+	}
+	sli := make([]string, len(stringSli))
+	for i, v := range stringSli {
+		sli[i] = v.(string)
+	}
+	return sli
+}
+
+func Unique(strings []string) []string {
+	dict := make(map[string]bool)
+	var ss []string
+	for _, s := range strings {
+		if s == "" {
+			continue
+		}
+		if _, ok := dict[s]; !ok {
+			dict[s] = true
+			ss = append(ss, s)
+		}
+	}
+	return ss
+}
+
+func IsSubCollection(sub []string, full []string) bool {
+	for _, s := range sub {
+		var find bool
+		for _, f := range full {
+			if s == f {
+				find = true
+				break
+			}
+		}
+		if !find {
+			return false
+		}
+	}
+	return true
+}
+
+func MergeMaps(maps ...map[string]interface{}) map[string]interface{} {
+	result := make(map[string]interface{})
+
+	for _, m := range maps {
+		for key, value := range m {
+			item, existed := result[key]
+			if !existed {
+				result[key] = value
+				continue
+			}
+			newValue, ok := value.([]map[string]interface{})
+			if !ok || len(newValue) != 1 {
+				continue
+			}
+			if preValue, ok := item.([]map[string]interface{}); ok && len(preValue) == 1 {
+				result[key] = MergeMaps(preValue[0], newValue[0])
+			}
+		}
+	}
+	return result
+}
+
+func InArray(target string, strArray []string) bool {
+	for _, element := range strArray {
+		if target == element {
+			return true
+		}
+	}
+	return false
+}
+
+func rpcParam(action, method, version string) *openapi.Params {
+	return &openapi.Params{
+		Action:      tea.String(action),
+		Version:     tea.String(version),
+		Protocol:    tea.String("HTTPS"),
+		Pathname:    tea.String("/"),
+		Method:      tea.String(method),
+		AuthType:    tea.String("AK"),
+		Style:       tea.String("RPC"),
+		ReqBodyType: tea.String("formData"),
+		BodyType:    tea.String("json"),
+	}
+}
+
+func genXmlParam(action, method, version, path string) *openapi.Params {
+	return &openapi.Params{
+		Action:      tea.String(action),
+		Version:     tea.String(version),
+		Protocol:    tea.String("HTTPS"),
+		Pathname:    tea.String(path),
+		Method:      tea.String(method),
+		AuthType:    tea.String("AK"),
+		ReqBodyType: tea.String("xml"),
+		BodyType:    tea.String("xml"),
+	}
+}
+
+func genJsonXmlParam(action, method, version, path string) *openapi.Params {
+	return &openapi.Params{
+		Action:      tea.String(action),
+		Version:     tea.String(version),
+		Protocol:    tea.String("HTTPS"),
+		Pathname:    tea.String(path),
+		Method:      tea.String(method),
+		AuthType:    tea.String("AK"),
+		ReqBodyType: tea.String("json"),
+		BodyType:    tea.String("xml"),
+	}
+}
+
+func genXmlJsonParam(action, method, version, path string) *openapi.Params {
+	return &openapi.Params{
+		Action:      tea.String(action),
+		Version:     tea.String(version),
+		Protocol:    tea.String("HTTPS"),
+		Pathname:    tea.String(path),
+		Method:      tea.String(method),
+		AuthType:    tea.String("AK"),
+		ReqBodyType: tea.String("xml"),
+		BodyType:    tea.String("json"),
+	}
+}
+
+type MyMap map[string]interface{}
+
+type xmlMapEntry struct {
+	XMLName xml.Name
+	Value   interface{} `xml:",chardata"`
+}
+
+func (m MyMap) MarshalXML(e *xml.Encoder, start xml.StartElement) error {
+	if len(m) == 0 {
+		return nil
+	}
+
+	err := e.EncodeToken(start)
+	if err != nil {
+		return err
+	}
+
+	for k, v := range m {
+		e.Encode(xmlMapEntry{XMLName: xml.Name{Local: k}, Value: v})
+	}
+
+	return e.EncodeToken(start.End())
+}
+
+func expandSingletonToList(singleton interface{}) []interface{} {
+	vs := make([]interface{}, 0)
+	vs = append(vs, singleton)
+	return vs
+}
+
+func MD5(b []byte) string {
+	ctx := md5.New()
+	ctx.Write(b)
+	return hex.EncodeToString(ctx.Sum(nil))
+}
+
+func ConvertTags(tagsMap map[string]interface{}) []map[string]interface{} {
+	tags := make([]map[string]interface{}, 0)
+	for key, value := range tagsMap {
+		if value != nil {
+			if v, ok := value.(string); ok {
+				tags = append(tags, map[string]interface{}{
+					"Key":   key,
+					"Value": v,
+				})
+			}
+		}
+	}
+
+	return tags
+}
+
+func ConvertTagsForKms(tagsMap map[string]interface{}) []map[string]interface{} {
+	tags := make([]map[string]interface{}, 0)
+	for key, value := range tagsMap {
+		if value != nil {
+			if v, ok := value.(string); ok {
+				tags = append(tags, map[string]interface{}{
+					"TagKey":   key,
+					"TagValue": v,
+				})
+			}
+		}
+	}
+
+	return tags
+}
+
+func expandTagsToMap(originMap map[string]interface{}, tags []map[string]interface{}) map[string]interface{} {
+	for i, tag := range tags {
+		for key, value := range tag {
+			if key == "Key" || key == "Value" {
+				newKey := "Tag" + "." + strconv.Itoa(i+1) + "." + key
+				originMap[newKey] = fmt.Sprintf("%v", value)
+			}
+		}
+	}
+	return originMap
+}
+
+func convertChargeTypeToPaymentType(source interface{}) interface{} {
+	switch source {
+	case "PostPaid", "Postpaid":
+		return "PayAsYouGo"
+	case "PrePaid", "Prepaid":
+		return "Subscription"
+	}
+	return source
+}
+
+func convertPaymentTypeToChargeType(source interface{}) interface{} {
+	switch source {
+	case "PayAsYouGo":
+		return "PostPaid"
+	case "Subscription":
+		return "PrePaid"
+	}
+	return source
+}
+
+func bytesToTB(bytes int64) float64 {
+	const (
+		KiB = 1024
+		MiB = KiB * KiB
+		GiB = MiB * KiB
+		TiB = GiB * KiB
+	)
+	return float64(bytes) / float64(TiB)
 }

@@ -1,24 +1,30 @@
+// Package alicloud. This file is generated automatically. Please do not modify it manually, thank you!
 package alicloud
 
 import (
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
-	util "github.com/alibabacloud-go/tea-utils/service"
 	"github.com/aliyun/terraform-provider-alicloud/alicloud/connectivity"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 )
 
-func resourceAlicloudPrivatelinkVpcEndpointServiceUser() *schema.Resource {
+func resourceAliCloudPrivateLinkVpcEndpointServiceUser() *schema.Resource {
 	return &schema.Resource{
-		Create: resourceAlicloudPrivatelinkVpcEndpointServiceUserCreate,
-		Read:   resourceAlicloudPrivatelinkVpcEndpointServiceUserRead,
-		Update: resourceAlicloudPrivatelinkVpcEndpointServiceUserUpdate,
-		Delete: resourceAlicloudPrivatelinkVpcEndpointServiceUserDelete,
+		Create: resourceAliCloudPrivateLinkVpcEndpointServiceUserCreate,
+		Read:   resourceAliCloudPrivateLinkVpcEndpointServiceUserRead,
+		Update: resourceAliCloudPrivateLinkVpcEndpointServiceUserUpdate,
+		Delete: resourceAliCloudPrivateLinkVpcEndpointServiceUserDelete,
 		Importer: &schema.ResourceImporter{
 			State: schema.ImportStatePassthrough,
+		},
+		Timeouts: &schema.ResourceTimeout{
+			Create: schema.DefaultTimeout(5 * time.Minute),
+			Update: schema.DefaultTimeout(5 * time.Minute),
+			Delete: schema.DefaultTimeout(5 * time.Minute),
 		},
 		Schema: map[string]*schema.Schema{
 			"dry_run": {
@@ -30,6 +36,10 @@ func resourceAlicloudPrivatelinkVpcEndpointServiceUser() *schema.Resource {
 				Required: true,
 				ForceNew: true,
 			},
+			"user_arn": {
+				Type:     schema.TypeString,
+				Optional: true,
+			},
 			"user_id": {
 				Type:     schema.TypeString,
 				Required: true,
@@ -39,110 +49,122 @@ func resourceAlicloudPrivatelinkVpcEndpointServiceUser() *schema.Resource {
 	}
 }
 
-func resourceAlicloudPrivatelinkVpcEndpointServiceUserCreate(d *schema.ResourceData, meta interface{}) error {
+func resourceAliCloudPrivateLinkVpcEndpointServiceUserCreate(d *schema.ResourceData, meta interface{}) error {
+
 	client := meta.(*connectivity.AliyunClient)
-	var response map[string]interface{}
+
 	action := "AddUserToVpcEndpointService"
-	request := make(map[string]interface{})
-	conn, err := client.NewPrivatelinkClient()
-	if err != nil {
-		return WrapError(err)
+	var request map[string]interface{}
+	var response map[string]interface{}
+	var err error
+	query := make(map[string]interface{})
+	request = make(map[string]interface{})
+	request["UserId"] = d.Get("user_id")
+	request["ServiceId"] = d.Get("service_id")
+	request["RegionId"] = client.RegionId
+	request["ClientToken"] = buildClientToken(action)
+
+	if v, ok := d.GetOk("user_arn"); ok {
+		request["UserARN"] = v
 	}
 	if v, ok := d.GetOkExists("dry_run"); ok {
 		request["DryRun"] = v
 	}
-
-	request["RegionId"] = client.RegionId
-	request["ServiceId"] = d.Get("service_id")
-	request["UserId"] = d.Get("user_id")
-	runtime := util.RuntimeOptions{}
-	runtime.SetAutoretry(true)
-	request["ClientToken"] = buildClientToken("AddUserToVpcEndpointService")
-	wait := incrementalWait(3*time.Second, 10*time.Second)
+	wait := incrementalWait(3*time.Second, 5*time.Second)
 	err = resource.Retry(d.Timeout(schema.TimeoutCreate), func() *resource.RetryError {
-		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2020-04-15"), StringPointer("AK"), nil, request, &runtime)
+		response, err = client.RpcPost("Privatelink", "2020-04-15", action, query, request, true)
 		if err != nil {
-			if NeedRetry(err) {
+			if IsExpectedErrors(err, []string{"ConcurrentCallNotSupported"}) || NeedRetry(err) {
 				wait()
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
 		}
-		addDebug(action, response, request)
 		return nil
 	})
+	addDebug(action, response, request)
+
 	if err != nil {
 		return WrapErrorf(err, DefaultErrorMsg, "alicloud_privatelink_vpc_endpoint_service_user", action, AlibabaCloudSdkGoERROR)
 	}
-	addDebug(action, response, request)
 
-	d.SetId(fmt.Sprint(request["ServiceId"], ":", request["UserId"]))
+	d.SetId(fmt.Sprintf("%v:%v", request["ServiceId"], request["UserId"]))
 
-	return resourceAlicloudPrivatelinkVpcEndpointServiceUserRead(d, meta)
+	return resourceAliCloudPrivateLinkVpcEndpointServiceUserRead(d, meta)
 }
-func resourceAlicloudPrivatelinkVpcEndpointServiceUserRead(d *schema.ResourceData, meta interface{}) error {
+
+func resourceAliCloudPrivateLinkVpcEndpointServiceUserRead(d *schema.ResourceData, meta interface{}) error {
 	client := meta.(*connectivity.AliyunClient)
-	privatelinkService := PrivatelinkService{client}
-	_, err := privatelinkService.DescribePrivatelinkVpcEndpointServiceUser(d.Id())
+	privateLinkServiceV2 := PrivateLinkServiceV2{client}
+
+	objectRaw, err := privateLinkServiceV2.DescribePrivateLinkVpcEndpointServiceUser(d.Id())
 	if err != nil {
-		if NotFoundError(err) {
-			log.Printf("[DEBUG] Resource alicloud_privatelink_vpc_endpoint_service_user privatelinkService.DescribePrivatelinkVpcEndpointServiceUser Failed!!! %s", err)
+		if !d.IsNewResource() && NotFoundError(err) {
+			log.Printf("[DEBUG] Resource alicloud_privatelink_vpc_endpoint_service_user DescribePrivateLinkVpcEndpointServiceUser Failed!!! %s", err)
 			d.SetId("")
 			return nil
 		}
 		return WrapError(err)
 	}
-	parts, err := ParseResourceId(d.Id(), 2)
-	if err != nil {
-		return WrapError(err)
-	}
-	d.Set("service_id", parts[0])
-	d.Set("user_id", parts[1])
-	return nil
-}
-func resourceAlicloudPrivatelinkVpcEndpointServiceUserUpdate(d *schema.ResourceData, meta interface{}) error {
-	log.Println(fmt.Sprintf("[WARNING] The resouce has not update operation."))
-	return resourceAlicloudPrivatelinkVpcEndpointServiceUserRead(d, meta)
-}
-func resourceAlicloudPrivatelinkVpcEndpointServiceUserDelete(d *schema.ResourceData, meta interface{}) error {
-	client := meta.(*connectivity.AliyunClient)
-	parts, err := ParseResourceId(d.Id(), 2)
-	if err != nil {
-		return WrapError(err)
-	}
-	action := "RemoveUserFromVpcEndpointService"
-	var response map[string]interface{}
-	conn, err := client.NewPrivatelinkClient()
-	if err != nil {
-		return WrapError(err)
-	}
-	request := map[string]interface{}{
-		"ServiceId": parts[0],
-		"UserId":    parts[1],
+
+	if objectRaw["UserId"] != nil {
+		d.Set("user_id", objectRaw["UserId"])
 	}
 
+	parts := strings.Split(d.Id(), ":")
+	d.Set("service_id", parts[0])
+
+	return nil
+}
+
+func resourceAliCloudPrivateLinkVpcEndpointServiceUserUpdate(d *schema.ResourceData, meta interface{}) error {
+	log.Printf("[INFO] Cannot update resource Alicloud Resource Vpc Endpoint Service User.")
+	return nil
+}
+
+func resourceAliCloudPrivateLinkVpcEndpointServiceUserDelete(d *schema.ResourceData, meta interface{}) error {
+
+	client := meta.(*connectivity.AliyunClient)
+	parts := strings.Split(d.Id(), ":")
+	action := "RemoveUserFromVpcEndpointService"
+	var request map[string]interface{}
+	var response map[string]interface{}
+	var err error
+	query := make(map[string]interface{})
+	request = make(map[string]interface{})
+	request["UserId"] = parts[1]
+	request["ServiceId"] = parts[0]
+	request["RegionId"] = client.RegionId
+	request["ClientToken"] = buildClientToken(action)
+
+	if v, ok := d.GetOk("user_arn"); ok {
+		request["UserARN"] = v
+	}
 	if v, ok := d.GetOkExists("dry_run"); ok {
 		request["DryRun"] = v
 	}
-	request["RegionId"] = client.RegionId
-	wait := incrementalWait(3*time.Second, 3*time.Second)
+	wait := incrementalWait(3*time.Second, 5*time.Second)
 	err = resource.Retry(d.Timeout(schema.TimeoutDelete), func() *resource.RetryError {
-		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2020-04-15"), StringPointer("AK"), nil, request, &util.RuntimeOptions{})
+		response, err = client.RpcPost("Privatelink", "2020-04-15", action, query, request, true)
+		request["ClientToken"] = buildClientToken(action)
+
 		if err != nil {
-			if NeedRetry(err) {
+			if IsExpectedErrors(err, []string{"ConcurrentCallNotSupported"}) || NeedRetry(err) {
 				wait()
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
 		}
-		addDebug(action, response, request)
 		return nil
 	})
+	addDebug(action, response, request)
+
 	if err != nil {
-		if IsExpectedErrors(err, []string{"EndpointServiceNotFound"}) {
+		if NotFoundError(err) {
 			return nil
 		}
 		return WrapErrorf(err, DefaultErrorMsg, d.Id(), action, AlibabaCloudSdkGoERROR)
 	}
+
 	return nil
 }

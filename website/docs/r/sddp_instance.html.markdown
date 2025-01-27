@@ -1,5 +1,5 @@
 ---
-subcategory: "Data Security Center"
+subcategory: "Data Security Center (SDDP)"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_sddp_instance"
 sidebar_current: "docs-alicloud-resource-sddp-instance"
@@ -20,6 +20,12 @@ For information about Data Security Center Instance and how to use it, see [What
 ## Example Usage
 
 Basic Usage
+
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_sddp_instance&exampleId=b9554da9-7cb5-f4b2-94c6-a3f53b08d51fa7740a78&activeTab=example&spm=docs.r.sddp_instance.0.b9554da97c&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
 
 ```terraform
 resource "alicloud_sddp_instance" "default" {
@@ -51,9 +57,8 @@ The following arguments are supported:
 * `ud_cbool` - (Required) Whether to use OSS. Valid values: `yes`,`no`.
 * `sd_cbool` - (Required) Whether to use the database. Valid values:`yes`,`no`.
 * `udc` - (Required) OSS Size.
-* `instance_num` - (Optional) The number of instances.
-* `modify_type` - (Optional) The modify type. Valid values: `Upgrade`, `Downgrade`.  **NOTE:** The `modify_type` is required when you execute a update operation. 
-
+* `modify_type` - (Optional) The modify type. Valid values: `Upgrade`, `Downgrade`.  **NOTE:** The `modify_type` is required when you execute a update operation.
+* `oss_size` - (Optional) The OSS storage capacity.
 
 
 ## Attributes Reference
@@ -66,11 +71,13 @@ The following attributes are exported:
 * `oss_bucket_set` - Whether the authorized oss assets.
 * `rds_set` - Whether the authorized rds assets.
 * `status` - The status of the resource.
+* `instance_num` - The number of instances.
+* `remain_days` -  The remaining days of the protection period of the assets in the current login account.
 
 ## Import
 
 Data Security Center Instance can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_sddp_instance.example <id>
 ```

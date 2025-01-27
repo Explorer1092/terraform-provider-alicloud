@@ -9,7 +9,6 @@ import (
 	"github.com/aliyun/terraform-provider-alicloud/alicloud/connectivity"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
-	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
 )
 
 func resourceAlicloudOosTemplate() *schema.Resource {
@@ -28,13 +27,8 @@ func resourceAlicloudOosTemplate() *schema.Resource {
 				Default:  false,
 			},
 			"content": {
-				Type:         schema.TypeString,
-				Required:     true,
-				ValidateFunc: validation.ValidateJsonString,
-				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
-					equal, _ := compareJsonTemplateAreEquivalent(old, new)
-					return equal
-				},
+				Type:     schema.TypeString,
+				Required: true,
 			},
 			"created_by": {
 				Type:     schema.TypeString,
@@ -90,6 +84,11 @@ func resourceAlicloudOosTemplate() *schema.Resource {
 				Type:     schema.TypeString,
 				Optional: true,
 			},
+			"resource_group_id": {
+				Type:     schema.TypeString,
+				Optional: true,
+				Computed: true,
+			},
 		},
 	}
 }
@@ -116,6 +115,9 @@ func resourceAlicloudOosTemplateCreate(d *schema.ResourceData, meta interface{})
 	if v, ok := d.GetOk("version_name"); ok {
 		request["VersionName"] = v
 	}
+	if v, ok := d.GetOk("resource_group_id"); ok {
+		request["ResourceGroupId"] = v
+	}
 
 	wait := incrementalWait(3*time.Second, 3*time.Second)
 	err = resource.Retry(d.Timeout(schema.TimeoutCreate), func() *resource.RetryError {
@@ -138,6 +140,7 @@ func resourceAlicloudOosTemplateCreate(d *schema.ResourceData, meta interface{})
 
 	return resourceAlicloudOosTemplateRead(d, meta)
 }
+
 func resourceAlicloudOosTemplateRead(d *schema.ResourceData, meta interface{}) error {
 	client := meta.(*connectivity.AliyunClient)
 	oosService := OosService{client}
@@ -166,8 +169,10 @@ func resourceAlicloudOosTemplateRead(d *schema.ResourceData, meta interface{}) e
 	d.Set("template_version", object["TemplateVersion"])
 	d.Set("updated_by", object["UpdatedBy"])
 	d.Set("updated_date", object["UpdatedDate"])
+	d.Set("resource_group_id", object["ResourceGroupId"])
 	return nil
 }
+
 func resourceAlicloudOosTemplateUpdate(d *schema.ResourceData, meta interface{}) error {
 	client := meta.(*connectivity.AliyunClient)
 	conn, err := client.NewOosClient()
@@ -196,6 +201,10 @@ func resourceAlicloudOosTemplateUpdate(d *schema.ResourceData, meta interface{})
 		update = true
 		request["VersionName"] = d.Get("version_name")
 	}
+	if d.HasChange("resource_group_id") {
+		update = true
+		request["ResourceGroupId"] = d.Get("resource_group_id")
+	}
 	if update {
 		action := "UpdateTemplate"
 		wait := incrementalWait(3*time.Second, 3*time.Second)
@@ -217,6 +226,7 @@ func resourceAlicloudOosTemplateUpdate(d *schema.ResourceData, meta interface{})
 	}
 	return resourceAlicloudOosTemplateRead(d, meta)
 }
+
 func resourceAlicloudOosTemplateDelete(d *schema.ResourceData, meta interface{}) error {
 	client := meta.(*connectivity.AliyunClient)
 	action := "DeleteTemplate"

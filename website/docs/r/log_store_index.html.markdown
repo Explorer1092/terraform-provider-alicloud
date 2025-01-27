@@ -16,28 +16,44 @@ You can use this function by enabling the index and field statistics. [Refer to 
 
 Basic Usage
 
-```
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_log_store_index&exampleId=3978de35-af19-ffed-74a1-4574be38b2bbee3727b1&activeTab=example&spm=docs.r.log_store_index.0.3978de35af&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
+```terraform
+resource "random_integer" "default" {
+  max = 99999
+  min = 10000
+}
+
 resource "alicloud_log_project" "example" {
-  name        = "tf-log"
-  description = "created by terraform"
+  project_name = "terraform-example-${random_integer.default.result}"
+  description  = "terraform-example"
 }
 
 resource "alicloud_log_store" "example" {
-  project = alicloud_log_project.example.name
-  name    = "tf-log-store"
-  description = "created by terraform"
+  project_name          = alicloud_log_project.example.project_name
+  logstore_name         = "example-store"
+  shard_count           = 3
+  auto_split            = true
+  max_split_shard_count = 60
+  append_meta           = true
 }
 
 resource "alicloud_log_store_index" "example" {
-  project  = alicloud_log_project.example.name
-  logstore = alicloud_log_store.example.name
+  project  = alicloud_log_project.example.project_name
+  logstore = alicloud_log_store.example.logstore_name
   full_text {
     case_sensitive = true
-    token          = " #$%^*\r\n	"
+    token          = " #$^*\r\n\t"
   }
   field_search {
-    name             = "terraform"
+    name             = "terraform-example"
     enable_analytics = true
+    type             = "text"
+    token            = " #$^*\r\n\t"
   }
 }
 ```
@@ -86,6 +102,6 @@ The following attributes are exported:
 
 Log store index can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_log_store_index.example tf-log:tf-log-store
 ```

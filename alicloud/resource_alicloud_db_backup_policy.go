@@ -31,12 +31,11 @@ func resourceAlicloudDBBackupPolicy() *schema.Resource {
 			},
 
 			"backup_period": {
-				Type:          schema.TypeSet,
-				Elem:          &schema.Schema{Type: schema.TypeString},
-				Optional:      true,
-				Computed:      true,
-				ConflictsWith: []string{"preferred_backup_period"},
-				Deprecated:    "Attribute 'backup_period' has been deprecated from version 1.69.0. Use `preferred_backup_period` instead",
+				Type:       schema.TypeSet,
+				Elem:       &schema.Schema{Type: schema.TypeString},
+				Optional:   true,
+				Computed:   true,
+				Deprecated: "Attribute 'backup_period' has been deprecated from version 1.69.0. Use `preferred_backup_period` instead",
 			},
 
 			"preferred_backup_period": {
@@ -49,12 +48,11 @@ func resourceAlicloudDBBackupPolicy() *schema.Resource {
 			},
 
 			"backup_time": {
-				Type:          schema.TypeString,
-				ValidateFunc:  validation.StringInSlice(BACKUP_TIME, false),
-				Optional:      true,
-				Computed:      true,
-				ConflictsWith: []string{"preferred_backup_time"},
-				Deprecated:    "Attribute 'backup_time' has been deprecated from version 1.69.0. Use `preferred_backup_time` instead",
+				Type:         schema.TypeString,
+				ValidateFunc: validation.StringInSlice(BACKUP_TIME, false),
+				Optional:     true,
+				Computed:     true,
+				Deprecated:   "Attribute 'backup_time' has been deprecated from version 1.69.0. Use `preferred_backup_time` instead",
 			},
 
 			"preferred_backup_time": {
@@ -65,12 +63,10 @@ func resourceAlicloudDBBackupPolicy() *schema.Resource {
 			},
 
 			"retention_period": {
-				Type:          schema.TypeInt,
-				ValidateFunc:  validation.IntBetween(7, 730),
-				Optional:      true,
-				Computed:      true,
-				ConflictsWith: []string{"backup_retention_period"},
-				Deprecated:    "Attribute 'retention_period' has been deprecated from version 1.69.0. Use `backup_retention_period` instead",
+				Type:       schema.TypeInt,
+				Optional:   true,
+				Computed:   true,
+				Deprecated: "Attribute 'retention_period' has been deprecated from version 1.69.0. Use `backup_retention_period` instead",
 			},
 
 			"backup_retention_period": {
@@ -97,7 +93,6 @@ func resourceAlicloudDBBackupPolicy() *schema.Resource {
 				Optional:         true,
 				Computed:         true,
 				DiffSuppressFunc: logRetentionPeriodDiffSuppressFunc,
-				ConflictsWith:    []string{"log_backup_retention_period"},
 				Deprecated:       "Attribute 'log_retention_period' has been deprecated from version 1.69.0. Use `log_backup_retention_period` instead",
 			},
 
@@ -173,6 +168,41 @@ func resourceAlicloudDBBackupPolicy() *schema.Resource {
 				Optional:     true,
 				Computed:     true,
 			},
+			"category": {
+				Type:         schema.TypeString,
+				Optional:     true,
+				Computed:     true,
+				ValidateFunc: validation.StringInSlice([]string{"Flash", "Standard"}, false),
+			},
+			"backup_interval": {
+				Type:         schema.TypeString,
+				Optional:     true,
+				Computed:     true,
+				ValidateFunc: validation.StringInSlice([]string{"-1", "15", "30", "60", "120", "180", "240", "360", "480", "720"}, false),
+			},
+			"backup_priority": {
+				Type:         schema.TypeInt,
+				Optional:     true,
+				ValidateFunc: IntBetween(1, 2),
+			},
+
+			"enable_increment_data_backup": {
+				Type:     schema.TypeBool,
+				Optional: true,
+				Computed: true,
+			},
+			"log_backup_local_retention_number": {
+				Type:         schema.TypeInt,
+				Computed:     true,
+				ValidateFunc: validation.Any(IntBetween(6, 100), IntInSlice([]int{-1})),
+				Optional:     true,
+			},
+			"backup_method": {
+				Type:         schema.TypeString,
+				Optional:     true,
+				Computed:     true,
+				ValidateFunc: StringInSlice([]string{"Physical", "Snapshot"}, false),
+			},
 		},
 	}
 }
@@ -209,6 +239,9 @@ func resourceAlicloudDBBackupPolicyRead(d *schema.ResourceData, meta interface{}
 	d.Set("local_log_retention_hours", formatInt(object["LocalLogRetentionHours"]))
 	d.Set("local_log_retention_space", formatInt(object["LocalLogRetentionSpace"]))
 	d.Set("released_keep_policy", object["ReleasedKeepPolicy"])
+	d.Set("category", object["Category"])
+	d.Set("enable_increment_data_backup", object["EnableIncrementDataBackup"].(bool))
+	d.Set("log_backup_local_retention_number", object["LogBackupLocalRetentionNumber"])
 	instance, err := rdsService.DescribeDBInstance(d.Id())
 	if err != nil {
 		if NotFoundError(err) {
@@ -220,8 +253,13 @@ func resourceAlicloudDBBackupPolicyRead(d *schema.ResourceData, meta interface{}
 	// At present, the sql server database does not support setting high_space_usage_protection and it`s has default value
 	if instance["Engine"] == "SQLServer" {
 		d.Set("high_space_usage_protection", "Enable")
+		d.Set("backup_method", object["BackupMethod"])
 	} else {
 		d.Set("high_space_usage_protection", object["HighSpaceUsageProtection"])
+		d.Set("backup_interval", object["BackupInterval"])
+	}
+	if instance["Engine"] == "SQLServer" && instance["Category"] == "AlwaysOn" {
+		d.Set("backup_priority", formatInt(object["BackupPriority"]))
 	}
 	d.Set("log_backup_frequency", object["LogBackupFrequency"])
 	d.Set("compress_type", object["CompressType"])
@@ -234,21 +272,24 @@ func resourceAlicloudDBBackupPolicyRead(d *schema.ResourceData, meta interface{}
 func resourceAlicloudDBBackupPolicyUpdate(d *schema.ResourceData, meta interface{}) error {
 	client := meta.(*connectivity.AliyunClient)
 	rdsService := RdsService{client}
-
 	updateForData := false
 	updateForLog := false
-	if d.HasChange("backup_period") || d.HasChange("backup_time") || d.HasChange("retention_period") ||
-		d.HasChange("preferred_backup_period") || d.HasChange("preferred_backup_time") || d.HasChange("backup_retention_period") ||
-		d.HasChange("compress_type") || d.HasChange("log_backup_frequency") || d.HasChange("archive_backup_retention_period") ||
-		d.HasChange("archive_backup_keep_count") || d.HasChange("archive_backup_keep_policy") || d.HasChange("released_keep_policy") {
+
+	if d.HasChanges("backup_period", "backup_time", "retention_period", "preferred_backup_period", "preferred_backup_time",
+		"backup_retention_period", "compress_type", "log_backup_frequency", "archive_backup_retention_period", "archive_backup_keep_count",
+		"archive_backup_keep_policy", "released_keep_policy", "category", "backup_interval", "backup_priority", "backup_method",
+		"enable_increment_data_backup") {
 		updateForData = true
 	}
 
-	if d.HasChange("log_backup") || d.HasChange("enable_backup_log") || d.HasChange("log_backup_retention_period") || d.HasChange("log_retention_period") ||
-		d.HasChange("local_log_retention_hours") || d.HasChange("local_log_retention_space") || d.HasChange("high_space_usage_protection") {
+	if d.HasChanges("log_backup", "enable_backup_log", "log_backup_retention_period", "log_retention_period", "local_log_retention_hours",
+		"local_log_retention_space", "high_space_usage_protection", "log_backup_local_retention_number") {
 		updateForLog = true
 	}
 
+	if _, ok := d.GetOkExists("enable_backup_log"); ok {
+		updateForLog = true
+	}
 	if updateForData || updateForLog {
 		// wait instance running before modifying
 		if err := rdsService.WaitForDBInstance(d.Id(), Running, DefaultTimeoutMedium); err != nil {
@@ -308,7 +349,9 @@ func resourceAlicloudDBBackupPolicyDelete(d *schema.ResourceData, meta interface
 		request["ArchiveBackupKeepCount"] = "1"
 		request["ArchiveBackupKeepPolicy"] = "ByMonth"
 	}
-	response, err := conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2014-08-15"), StringPointer("AK"), nil, request, &util.RuntimeOptions{})
+	runtime := util.RuntimeOptions{}
+	runtime.SetAutoretry(true)
+	response, err := conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2014-08-15"), StringPointer("AK"), nil, request, &runtime)
 	if err != nil {
 		return WrapErrorf(err, DefaultErrorMsg, d.Id(), action, AlibabaCloudSdkGoERROR)
 	}

@@ -37,7 +37,6 @@ func resourceAlicloudEdasInstanceClusterAttachment() *schema.Resource {
 					Type: schema.TypeInt,
 				},
 				Computed: true,
-				ForceNew: true,
 			},
 			"ecu_map": {
 				Type: schema.TypeMap,
@@ -45,7 +44,6 @@ func resourceAlicloudEdasInstanceClusterAttachment() *schema.Resource {
 					Type: schema.TypeString,
 				},
 				Computed: true,
-				ForceNew: true,
 			},
 			"cluster_member_ids": {
 				Type: schema.TypeMap,
@@ -53,7 +51,6 @@ func resourceAlicloudEdasInstanceClusterAttachment() *schema.Resource {
 					Type: schema.TypeString,
 				},
 				Computed: true,
-				ForceNew: true,
 			},
 		},
 	}
@@ -168,7 +165,7 @@ func resourceAlicloudEdasInstanceClusterAttachmentRead(d *schema.ResourceData, m
 	return nil
 }
 
-//有问题 单个实例删除失败会影响整个过程
+// 有问题 单个实例删除失败会影响整个过程
 func resourceAlicloudEdasInstanceClusterAttachmentDelete(d *schema.ResourceData, meta interface{}) error {
 	client := meta.(*connectivity.AliyunClient)
 	edasService := EdasService{client}

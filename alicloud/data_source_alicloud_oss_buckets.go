@@ -189,11 +189,11 @@ func dataSourceAlicloudOssBuckets() *schema.Resource {
 											Schema: map[string]*schema.Schema{
 												"date": {
 													Type:     schema.TypeString,
-													Optional: true,
+													Computed: true,
 												},
 												"days": {
 													Type:     schema.TypeInt,
-													Optional: true,
+													Computed: true,
 												},
 											},
 										},
@@ -205,7 +205,7 @@ func dataSourceAlicloudOssBuckets() *schema.Resource {
 
 						"policy": {
 							Type:     schema.TypeString,
-							Optional: true,
+							Computed: true,
 						},
 
 						"server_side_encryption_rule": {
@@ -225,9 +225,10 @@ func dataSourceAlicloudOssBuckets() *schema.Resource {
 							},
 							MaxItems: 1,
 						},
-
-						"tags": tagsSchemaComputed(),
-
+						"tags": {
+							Type:     schema.TypeMap,
+							Computed: true,
+						},
 						"versioning": {
 							Type:     schema.TypeList,
 							Computed: true,
@@ -264,7 +265,7 @@ func dataSourceAlicloudOssBucketsRead(d *schema.ResourceData, meta interface{}) 
 			return ossClient.ListBuckets(options...)
 		})
 		if err != nil {
-			return WrapErrorf(err, DataDefaultErrorMsg, "alicloud_oss_bucket", "CreateBucket", AliyunOssGoSdk)
+			return WrapErrorf(err, DataDefaultErrorMsg, "alicloud_oss_bucket", "ListBuckets", AliyunOssGoSdk)
 		}
 		if debugOn() {
 			addDebug("ListBuckets", raw, requestInfo, map[string]interface{}{"options": options})
@@ -484,17 +485,19 @@ func bucketsDescriptionAttributes(d *schema.ResourceData, buckets []oss.BucketPr
 
 					// Expiration
 					expirationMapping := make(map[string]interface{})
-					if lifecycleRule.Expiration.Date != "" {
-						t, err := time.Parse("2006-01-02T15:04:05.000Z", lifecycleRule.Expiration.Date)
-						if err != nil {
-							return WrapError(err)
+					if lifecycleRule.Expiration != nil {
+						if len(lifecycleRule.Expiration.Date) > 0 {
+							t, err := time.Parse("2006-01-02T15:04:05.000Z", lifecycleRule.Expiration.Date)
+							if err != nil {
+								return WrapError(err)
+							}
+							expirationMapping["date"] = t.Format("2006-01-02")
 						}
-						expirationMapping["date"] = t.Format("2006-01-02")
+						if &lifecycleRule.Expiration.Days != nil {
+							expirationMapping["days"] = int(lifecycleRule.Expiration.Days)
+						}
+						ruleMapping["expiration"] = []map[string]interface{}{expirationMapping}
 					}
-					if &lifecycleRule.Expiration.Days != nil {
-						expirationMapping["days"] = int(lifecycleRule.Expiration.Days)
-					}
-					ruleMapping["expiration"] = []map[string]interface{}{expirationMapping}
 					lifecycleRuleMappings = append(lifecycleRuleMappings, ruleMapping)
 				}
 			}

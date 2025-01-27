@@ -1,8 +1,10 @@
 package alicloud
 
 import (
+	"encoding/json"
 	"log"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
@@ -50,19 +52,19 @@ func (s *VpcService) DescribeEip(id string) (eip vpc.EipAddress, err error) {
 	return
 }
 
-func (s *VpcService) DescribeEipAssociation(id string) (object vpc.EipAddress, err error) {
+func (s *VpcService) DescribeEipAssociation(id string) (object map[string]interface{}, err error) {
 	parts, err := ParseResourceId(id, 2)
 	if err != nil {
-		err = WrapError(err)
-		return
+		return object, WrapError(err)
 	}
-	object, err = s.DescribeEip(parts[0])
+
+	object, err = s.DescribeEipAddress(parts[0])
 	if err != nil {
-		err = WrapError(err)
-		return
+		return object, WrapError(err)
 	}
-	if object.InstanceId != parts[1] {
-		err = WrapErrorf(Error(GetNotFoundMessage("Eip Association", id)), NotFoundMsg, ProviderERROR)
+
+	if object["InstanceId"] != parts[1] {
+		return object, WrapErrorf(Error(GetNotFoundMessage("Eip:Association", id)), NotFoundWithResponse)
 	}
 
 	return
@@ -200,7 +202,7 @@ func (s *VpcService) ListTagResources(id string, resourceType string) (object in
 		err = resource.Retry(5*time.Minute, func() *resource.RetryError {
 			response, err := conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2016-04-28"), StringPointer("AK"), nil, request, &util.RuntimeOptions{})
 			if err != nil {
-				if IsExpectedErrors(err, []string{Throttling}) {
+				if NeedRetry(err) {
 					wait()
 					return resource.RetryableError(err)
 				}
@@ -425,20 +427,23 @@ func (s *VpcService) QueryRouteTableById(routeTableId string) (rt vpc.RouteTable
 	request := vpc.CreateDescribeRouteTablesRequest()
 	request.RegionId = s.client.RegionId
 	request.RouteTableId = routeTableId
-
-	invoker := NewInvoker()
-	err = invoker.Run(func() error {
+	wait := incrementalWait(3*time.Second, 3*time.Second)
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
 		raw, err := s.client.WithVpcClient(func(vpcClient *vpc.Client) (interface{}, error) {
 			return vpcClient.DescribeRouteTables(request)
 		})
 		if err != nil {
-			return WrapErrorf(err, DefaultErrorMsg, routeTableId, request.GetActionName(), AlibabaCloudSdkGoERROR)
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
 		}
 		addDebug(request.GetActionName(), raw, request.RpcRequest, request)
 		response, _ := raw.(*vpc.DescribeRouteTablesResponse)
 		if len(response.RouteTables.RouteTable) == 0 ||
 			response.RouteTables.RouteTable[0].RouteTableId != routeTableId {
-			return WrapErrorf(Error(GetNotFoundMessage("RouteTable", routeTableId)), NotFoundMsg, ProviderERROR)
+			return resource.NonRetryableError(WrapErrorf(Error(GetNotFoundMessage("RouteTable", routeTableId)), NotFoundMsg, ProviderERROR))
 		}
 		rt = response.RouteTables.RouteTable[0]
 		return nil
@@ -448,6 +453,7 @@ func (s *VpcService) QueryRouteTableById(routeTableId string) (rt vpc.RouteTable
 
 func (s *VpcService) DescribeRouteEntry(id string) (*vpc.RouteEntry, error) {
 	v := &vpc.RouteEntry{}
+	var raw interface{}
 	parts, err := ParseResourceId(id, 5)
 	if err != nil {
 		return v, WrapError(err)
@@ -458,22 +464,35 @@ func (s *VpcService) DescribeRouteEntry(id string) (*vpc.RouteEntry, error) {
 	request.RegionId = s.client.RegionId
 	request.RouteTableId = rtId
 
-	invoker := NewInvoker()
+	if strings.Contains(cidr, "_") {
+		cidr = strings.Replace(cidr, "_", ":", -1)
+	}
+
 	for {
-		var raw interface{}
-		if err := invoker.Run(func() error {
+		wait := incrementalWait(3*time.Second, 3*time.Second)
+		err = resource.Retry(5*time.Minute, func() *resource.RetryError {
 			response, err := s.client.WithVpcClient(func(vpcClient *vpc.Client) (interface{}, error) {
 				return vpcClient.DescribeRouteTables(request)
 			})
+			if err != nil {
+				if NeedRetry(err) {
+					wait()
+					return resource.RetryableError(err)
+				}
+				return resource.NonRetryableError(err)
+			}
 			raw = response
-			return err
-		}); err != nil {
+			addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+			return nil
+		})
+
+		if err != nil {
 			return v, WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR)
 		}
-		addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+
 		response, _ := raw.(*vpc.DescribeRouteTablesResponse)
 		if len(response.RouteTables.RouteTable) < 1 {
-			break
+			return v, WrapErrorf(Error(GetNotFoundMessage("RouteEntry", id)), NotFoundWithResponse, response)
 		}
 		for _, table := range response.RouteTables.RouteTable {
 			for _, entry := range table.RouteEntrys.RouteEntry {
@@ -650,31 +669,6 @@ func (s *VpcService) DescribeCommonBandwidthPackage(id string) (object map[strin
 	}
 	object = v.([]interface{})[0].(map[string]interface{})
 	return object, nil
-}
-
-func (s *VpcService) DescribeCommonBandwidthPackageAttachment(id string) (object map[string]interface{}, err error) {
-	parts, err := ParseResourceId(id, 2)
-	if err != nil {
-		return object, WrapError(err)
-	}
-	bandwidthPackageId, ipInstanceId := parts[0], parts[1]
-
-	object, err = s.DescribeCommonBandwidthPackage(bandwidthPackageId)
-	if err != nil {
-		return object, WrapError(err)
-	}
-
-	if val, ok := object["PublicIpAddresses"].(map[string]interface{}); ok {
-		if vs, ok := val["PublicIpAddresse"]; ok {
-			for _, ipAddresse := range vs.([]interface{}) {
-				item := ipAddresse.(map[string]interface{})
-				if fmt.Sprint(item["AllocationId"]) == ipInstanceId {
-					return object, nil
-				}
-			}
-		}
-	}
-	return object, WrapErrorf(Error(GetNotFoundMessage("CommonBandWidthPackageAttachment", id)), NotFoundMsg, ProviderERROR)
 }
 
 func (s *VpcService) DescribeRouteTable(id string) (object map[string]interface{}, err error) {
@@ -886,26 +880,23 @@ func (s *VpcService) WaitForEip(id string, status Status, timeout int) error {
 	}
 }
 
-func (s *VpcService) WaitForEipAssociation(id string, status Status, timeout int) error {
-	deadline := time.Now().Add(time.Duration(timeout) * time.Second)
-	for {
+func (s *VpcService) EipAssociationStateRefreshFunc(id string, failStates []string) resource.StateRefreshFunc {
+	return func() (interface{}, string, error) {
 		object, err := s.DescribeEipAssociation(id)
 		if err != nil {
 			if NotFoundError(err) {
-				if status == Deleted {
-					return nil
-				}
-			} else {
-				return WrapError(err)
+				// Set this to nil as if we didn't find anything.
+				return nil, "", nil
+			}
+			return nil, "", WrapError(err)
+		}
+
+		for _, failState := range failStates {
+			if fmt.Sprint(object["Status"]) == failState {
+				return object, fmt.Sprint(object["Status"]), WrapError(Error(FailedToReachTargetStatus, object["Status"]))
 			}
 		}
-		if object.Status == string(status) {
-			return nil
-		}
-		if time.Now().After(deadline) {
-			return WrapErrorf(err, WaitTimeoutMsg, id, GetFunc(1), timeout, object.Status, string(status), ProviderERROR)
-		}
-		time.Sleep(DefaultIntervalShort * time.Second)
+		return object, fmt.Sprint(object["Status"]), nil
 	}
 }
 
@@ -935,29 +926,6 @@ func (s *VpcService) ActivateRouterInterface(interfaceId string) error {
 	}
 	addDebug(request.GetActionName(), raw, request.RpcRequest, request)
 	return nil
-}
-
-func (s *VpcService) WaitForCommonBandwidthPackageAttachment(id string, status Status, timeout int) error {
-	deadline := time.Now().Add(time.Duration(timeout) * time.Second)
-	for {
-		object, err := s.DescribeCommonBandwidthPackageAttachment(id)
-		if err != nil {
-			if NotFoundError(err) {
-				if status == Deleted {
-					return nil
-				}
-			} else {
-				return WrapError(err)
-			}
-		}
-
-		if fmt.Sprint(object["Status"]) == string(status) {
-			return nil
-		}
-		if time.Now().After(deadline) {
-			return WrapErrorf(err, WaitTimeoutMsg, id, GetFunc(1), timeout, fmt.Sprint(object["Status"]), string(status), ProviderERROR)
-		}
-	}
 }
 
 // Flattens an array of vpc.public_ip_addresses into a []map[string]string
@@ -1279,8 +1247,8 @@ func (s *VpcService) ignoreTag(t vpc.TagResource) bool {
 func (s *VpcService) SetInstanceSecondaryCidrBlocks(d *schema.ResourceData) error {
 	if d.HasChange("secondary_cidr_blocks") {
 		oraw, nraw := d.GetChange("secondary_cidr_blocks")
-		removed := oraw.([]interface{})
-		added := nraw.([]interface{})
+		removed := oraw.(*schema.Set).Difference(nraw.(*schema.Set)).List()
+		added := nraw.(*schema.Set).Difference(oraw.(*schema.Set)).List()
 		conn, err := s.client.NewVpcClient()
 		if err != nil {
 			return WrapError(err)
@@ -1549,7 +1517,7 @@ func (s *VpcService) DescribeVswitch(id string) (object map[string]interface{}, 
 	response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2016-04-28"), StringPointer("AK"), nil, request, &runtime)
 	if err != nil {
 		if IsExpectedErrors(err, []string{"InvalidVSwitchId.NotFound", "InvalidVswitchID.NotFound"}) {
-			err = WrapErrorf(Error(GetNotFoundMessage("Vswitch", id)), NotFoundMsg, ProviderERROR)
+			err = WrapErrorf(Error(GetNotFoundMessage("Vswitch", id)), NotFoundWithError, err)
 			return object, err
 		}
 		err = WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
@@ -1562,7 +1530,7 @@ func (s *VpcService) DescribeVswitch(id string) (object map[string]interface{}, 
 	}
 	object = v.(map[string]interface{})
 	if fmt.Sprint(object["VSwitchId"]) != id {
-		return object, WrapErrorf(Error(GetNotFoundMessage("vswitch", id)), NotFoundMsg, ProviderERROR)
+		return object, WrapErrorf(Error(GetNotFoundMessage("vswitch", id)), NotFoundWithResponse, response)
 	}
 	return object, nil
 }
@@ -1853,10 +1821,17 @@ func (s *VpcService) DeleteAclResources(id string) (object map[string]interface{
 	}
 	for _, val := range resources {
 		item, _ := val.(map[string]interface{})
+		if item["Status"] == "UNBINDING" {
+			continue
+		}
+
 		deleteResources = append(deleteResources, map[string]interface{}{
 			"ResourceId":   item["ResourceId"],
 			"ResourceType": item["ResourceType"],
 		})
+	}
+	if len(deleteResources) == 0 {
+		return nil, nil
 	}
 
 	var response map[string]interface{}
@@ -1877,7 +1852,7 @@ func (s *VpcService) DeleteAclResources(id string) (object map[string]interface{
 	err = resource.Retry(10*time.Minute, func() *resource.RetryError {
 		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2016-04-28"), StringPointer("AK"), nil, request, &runtime)
 		if err != nil {
-			if NeedRetry(err) {
+			if IsExpectedErrors(err, []string{"IncorrectStatus.Vpc", "OperationConflict", "IncorrectStatus", "ServiceUnavailable", "LastTokenProcessing", "SystemBusy", "ResourceStatus.Error"}) || NeedRetry(err) {
 				wait()
 				return resource.RetryableError(err)
 			}
@@ -1887,6 +1862,9 @@ func (s *VpcService) DeleteAclResources(id string) (object map[string]interface{
 	})
 	addDebug(action, response, request)
 	if err != nil {
+		if IsExpectedErrors(err, []string{"InvalidResource.NotBinding"}) {
+			return object, nil
+		}
 		return response, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
 	}
 	stateConf := BuildStateConf([]string{}, []string{"Available"}, 10*time.Minute, 5*time.Second, s.NetworkAclStateRefreshFunc(id, []string{}))
@@ -1962,50 +1940,75 @@ func (s *VpcService) EipAddressStateRefreshFunc(id string, failStates []string) 
 
 func (s *VpcService) DescribeExpressConnectPhysicalConnection(id string) (object map[string]interface{}, err error) {
 	var response map[string]interface{}
+	action := "DescribePhysicalConnections"
+
 	conn, err := s.client.NewVpcClient()
 	if err != nil {
 		return nil, WrapError(err)
 	}
-	action := "DescribePhysicalConnections"
+
 	request := map[string]interface{}{
-		"RegionId": s.client.RegionId,
+		"RegionId":   s.client.RegionId,
+		"PageSize":   PageSizeLarge,
+		"PageNumber": 1,
 	}
+
 	filterMapList := make([]map[string]interface{}, 0)
 	filterMapList = append(filterMapList, map[string]interface{}{
 		"Key":   "PhysicalConnectionId",
 		"Value": []string{id},
 	})
 	request["Filter"] = filterMapList
-	runtime := util.RuntimeOptions{}
-	runtime.SetAutoretry(true)
-	wait := incrementalWait(3*time.Second, 3*time.Second)
-	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
-		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2016-04-28"), StringPointer("AK"), nil, request, &runtime)
-		if err != nil {
-			if NeedRetry(err) {
-				wait()
-				return resource.RetryableError(err)
+
+	idExist := false
+	for {
+		runtime := util.RuntimeOptions{}
+		runtime.SetAutoretry(true)
+		wait := incrementalWait(3*time.Second, 3*time.Second)
+		err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+			response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2016-04-28"), StringPointer("AK"), nil, request, &runtime)
+			if err != nil {
+				if NeedRetry(err) {
+					wait()
+					return resource.RetryableError(err)
+				}
+				return resource.NonRetryableError(err)
 			}
-			return resource.NonRetryableError(err)
+			return nil
+		})
+		addDebug(action, response, request)
+
+		if err != nil {
+			return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
 		}
-		return nil
-	})
-	addDebug(action, response, request)
-	if err != nil {
-		return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
-	}
-	v, err := jsonpath.Get("$.PhysicalConnectionSet.PhysicalConnectionType", response)
-	if err != nil {
-		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$.PhysicalConnectionSet.PhysicalConnectionType", response)
-	}
-	if len(v.([]interface{})) < 1 {
-		return object, WrapErrorf(Error(GetNotFoundMessage("ExpressConnect", id)), NotFoundWithResponse, response)
-	} else {
-		if fmt.Sprint(v.([]interface{})[0].(map[string]interface{})["PhysicalConnectionId"]) != id {
-			return object, WrapErrorf(Error(GetNotFoundMessage("ExpressConnect", id)), NotFoundWithResponse, response)
+
+		resp, err := jsonpath.Get("$.PhysicalConnectionSet.PhysicalConnectionType", response)
+		if err != nil {
+			return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$.PhysicalConnectionSet.PhysicalConnectionType", response)
 		}
+
+		if v, ok := resp.([]interface{}); !ok || len(v) < 1 {
+			return object, WrapErrorf(Error(GetNotFoundMessage("ExpressConnect:PhysicalConnection", id)), NotFoundWithResponse, response)
+		}
+
+		for _, v := range resp.([]interface{}) {
+			if fmt.Sprint(v.(map[string]interface{})["PhysicalConnectionId"]) == id {
+				idExist = true
+				return v.(map[string]interface{}), nil
+			}
+		}
+
+		if len(resp.([]interface{})) < request["PageSize"].(int) {
+			break
+		}
+
+		request["PageNumber"] = request["PageNumber"].(int) + 1
 	}
-	object = v.([]interface{})[0].(map[string]interface{})
+
+	if !idExist {
+		return object, WrapErrorf(Error(GetNotFoundMessage("ExpressConnect:PhysicalConnection", id)), NotFoundWithResponse, response)
+	}
+
 	return object, nil
 }
 
@@ -2025,11 +2028,12 @@ func (s *VpcService) ExpressConnectPhysicalConnectionStateRefreshFunc(id string,
 				return object, fmt.Sprint(object["Status"]), WrapError(Error(FailedToReachTargetStatus, fmt.Sprint(object["Status"])))
 			}
 		}
+
 		return object, fmt.Sprint(object["Status"]), nil
 	}
 }
 
-func (s *VpcService) DescribeExpressConnectVirtualBorderRouter(id string) (object map[string]interface{}, err error) {
+func (s *VpcService) DescribeExpressConnectVirtualBorderRouter(id string, includeCrossAccountVbr bool) (object map[string]interface{}, err error) {
 	var response map[string]interface{}
 	conn, err := s.client.NewVpcClient()
 	if err != nil {
@@ -2037,9 +2041,10 @@ func (s *VpcService) DescribeExpressConnectVirtualBorderRouter(id string) (objec
 	}
 	action := "DescribeVirtualBorderRouters"
 	request := map[string]interface{}{
-		"RegionId":   s.client.RegionId,
-		"PageNumber": 1,
-		"PageSize":   50,
+		"RegionId":               s.client.RegionId,
+		"PageNumber":             1,
+		"PageSize":               50,
+		"IncludeCrossAccountVbr": includeCrossAccountVbr,
 	}
 	idExist := false
 	for {
@@ -2085,9 +2090,9 @@ func (s *VpcService) DescribeExpressConnectVirtualBorderRouter(id string) (objec
 	return
 }
 
-func (s *VpcService) ExpressConnectVirtualBorderRouterStateRefreshFunc(id string, failStates []string) resource.StateRefreshFunc {
+func (s *VpcService) ExpressConnectVirtualBorderRouterStateRefreshFunc(id string, includeCrossAccountVbr bool, failStates []string) resource.StateRefreshFunc {
 	return func() (interface{}, string, error) {
-		object, err := s.DescribeExpressConnectVirtualBorderRouter(id)
+		object, err := s.DescribeExpressConnectVirtualBorderRouter(id, includeCrossAccountVbr)
 		if err != nil {
 			if NotFoundError(err) {
 				// Set this to nil as if we didn't find anything.
@@ -3006,6 +3011,7 @@ func (s *VpcService) VpcBgpPeerStateRefreshFunc(id string, failStates []string) 
 		return object, fmt.Sprint(object["Status"]), nil
 	}
 }
+
 func (s *VpcService) DescribeVpcBgpNetwork(id string) (object map[string]interface{}, err error) {
 	var response map[string]interface{}
 	conn, err := s.client.NewVpcClient()
@@ -3112,6 +3118,49 @@ func (s *VpcService) DescribeVpnGateway(id string) (object map[string]interface{
 
 	addDebug(action, response, request)
 	v, err := jsonpath.Get("$", response)
+	if err != nil {
+		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$", response)
+	}
+
+	object = v.(map[string]interface{})
+	return object, nil
+}
+
+func (s *VpcService) DescribeVpnGateways(id string) (object map[string]interface{}, err error) {
+	var response map[string]interface{}
+	conn, err := s.client.NewVpcClient()
+	if err != nil {
+		return nil, WrapError(err)
+	}
+	action := "DescribeVpnGateways"
+	request := map[string]interface{}{
+		"RegionId":     s.client.RegionId,
+		"VpnGatewayId": id,
+	}
+	runtime := util.RuntimeOptions{}
+	runtime.SetAutoretry(true)
+	response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2016-04-28"), StringPointer("AK"), nil, request, &runtime)
+	if err != nil {
+		if IsExpectedErrors(err, []string{"InvalidCustomerGatewayInstanceId"}) {
+			return object, WrapErrorf(Error(GetNotFoundMessage("VpnCustomerGateway", id)), NotFoundWithResponse, response)
+		}
+		err = WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
+		return object, err
+	}
+	totalCount, err := jsonpath.Get("$.TotalCount", response)
+	if err != nil {
+		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$.TotalCount", response)
+	}
+	totalCountInt, err := totalCount.(json.Number).Int64()
+	if err != nil {
+		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$.TotalCount", response)
+	}
+	if totalCountInt == 0 {
+		return object, WrapErrorf(Error(GetNotFoundMessage("VpnCustomerGateway", id)), NotFoundWithResponse, response)
+	}
+
+	addDebug(action, response, request)
+	v, err := jsonpath.Get("$.VpnGateways.VpnGateway[0]", response)
 	if err != nil {
 		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$", response)
 	}
@@ -3246,7 +3295,7 @@ func (s *VpcService) VpnRouteEntryStateRefreshFunc(id string, failStates []strin
 
 		for _, failState := range failStates {
 			if object["State"].(string) == failState {
-				return object, object["State"].(string), WrapError(Error(FailedToReachTargetStatus, object["Status"].(string)))
+				return object, object["State"].(string), WrapError(Error(FailedToReachTargetStatus, object["State"].(string)))
 			}
 		}
 		return object, object["State"].(string), nil
@@ -3423,9 +3472,1074 @@ func (s *VpcService) VpnPbrRouteEntryStateRefreshFunc(id string, failStates []st
 
 		for _, failState := range failStates {
 			if object["State"].(string) == failState {
-				return object, object["State"].(string), WrapError(Error(FailedToReachTargetStatus, object["Status"].(string)))
+				return object, object["State"].(string), WrapError(Error(FailedToReachTargetStatus, object["State"].(string)))
 			}
 		}
 		return object, object["State"].(string), nil
 	}
+}
+
+func (s *VpcService) DescribeVpnGatewayVpnAttachment(id string) (object map[string]interface{}, err error) {
+	var response map[string]interface{}
+	conn, err := s.client.NewVpcClient()
+	if err != nil {
+		return nil, WrapError(err)
+	}
+	action := "DescribeVpnConnection"
+	request := map[string]interface{}{
+		"RegionId":        s.client.RegionId,
+		"VpnConnectionId": id,
+	}
+	runtime := util.RuntimeOptions{}
+	runtime.SetAutoretry(true)
+	wait := incrementalWait(3*time.Second, 3*time.Second)
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2016-04-28"), StringPointer("AK"), nil, request, &runtime)
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		return nil
+	})
+	addDebug(action, response, request)
+	if err != nil {
+		if IsExpectedErrors(err, []string{"InvalidVpnConnectionInstanceId.NotFound"}) {
+			return object, WrapErrorf(Error(GetNotFoundMessage("VpnConnection", id)), NotFoundMsg, ProviderERROR, fmt.Sprint(response["RequestId"]))
+		}
+		return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
+	}
+	v, err := jsonpath.Get("$", response)
+	if err != nil {
+		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$", response)
+	}
+	object = v.(map[string]interface{})
+	return object, nil
+}
+
+func (s *VpcService) VpnGatewayVpnAttachmentStateRefreshFunc(id string, failStates []string) resource.StateRefreshFunc {
+	return func() (interface{}, string, error) {
+		object, err := s.DescribeVpnGatewayVpnAttachment(id)
+		if err != nil {
+			if NotFoundError(err) {
+				// Set this to nil as if we didn't find anything.
+				return nil, "", nil
+			}
+			return nil, "", WrapError(err)
+		}
+
+		for _, failState := range failStates {
+			if object["State"].(string) == failState {
+				return object, object["State"].(string), WrapError(Error(FailedToReachTargetStatus, object["State"].(string)))
+			}
+		}
+		return object, object["State"].(string), nil
+	}
+}
+
+func (s *VpcService) DescribeVpcIpv4Gateway(id string) (object map[string]interface{}, err error) {
+	var response map[string]interface{}
+	conn, err := s.client.NewVpcClient()
+	if err != nil {
+		return nil, WrapError(err)
+	}
+	action := "GetIpv4GatewayAttribute"
+	request := map[string]interface{}{
+		"RegionId":      s.client.RegionId,
+		"Ipv4GatewayId": id,
+	}
+	runtime := util.RuntimeOptions{}
+	runtime.SetAutoretry(true)
+	wait := incrementalWait(3*time.Second, 3*time.Second)
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2016-04-28"), StringPointer("AK"), nil, request, &runtime)
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		return nil
+	})
+	addDebug(action, response, request)
+	if err != nil {
+		if IsExpectedErrors(err, []string{"ResourceNotFound.Ipv4Gateway"}) {
+			return object, WrapErrorf(Error(GetNotFoundMessage("VPC:Ipv4Gateway", id)), NotFoundMsg, ProviderERROR, fmt.Sprint(response["RequestId"]))
+		}
+		return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
+	}
+	v, err := jsonpath.Get("$", response)
+	if err != nil {
+		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$", response)
+	}
+	object = v.(map[string]interface{})
+	return object, nil
+}
+
+func (s *VpcService) VpcIpv4GatewayStateRefreshFunc(id string, failStates []string) resource.StateRefreshFunc {
+	return func() (interface{}, string, error) {
+		object, err := s.DescribeVpcIpv4Gateway(id)
+		if err != nil {
+			if NotFoundError(err) {
+				// Set this to nil as if we didn't find anything.
+				return nil, "", nil
+			}
+			return nil, "", WrapError(err)
+		}
+
+		for _, failState := range failStates {
+			if fmt.Sprint(object["Status"]) == failState {
+				return object, fmt.Sprint(object["Status"]), WrapError(Error(FailedToReachTargetStatus, fmt.Sprint(object["Status"])))
+			}
+		}
+		return object, fmt.Sprint(object["Status"]), nil
+	}
+}
+
+func (s *VpcService) GetVpcPrefixListEntries(id string) (objects []map[string]interface{}, err error) {
+	var response map[string]interface{}
+	conn, err := s.client.NewVpcClient()
+	if err != nil {
+		return nil, WrapError(err)
+	}
+	action := "GetVpcPrefixListEntries"
+	request := map[string]interface{}{
+		"RegionId":     s.client.RegionId,
+		"PrefixListId": id,
+	}
+	for {
+		runtime := util.RuntimeOptions{}
+		runtime.SetAutoretry(true)
+		wait := incrementalWait(3*time.Second, 3*time.Second)
+		err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+			response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2016-04-28"), StringPointer("AK"), nil, request, &runtime)
+			if err != nil {
+				if NeedRetry(err) {
+					wait()
+					return resource.RetryableError(err)
+				}
+				return resource.NonRetryableError(err)
+			}
+			return nil
+		})
+		addDebug(action, response, request)
+		if err != nil {
+			return objects, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
+		}
+		if formatInt(response["TotalCount"]) == 0 {
+			return objects, nil
+		}
+		resp, err := jsonpath.Get("$.PrefixListEntry", response)
+		if err != nil {
+			return objects, WrapErrorf(err, FailedGetAttributeMsg, id, "$", response)
+		}
+		result, _ := resp.([]interface{})
+		for _, v := range result {
+			item := v.(map[string]interface{})
+			objects = append(objects, item)
+		}
+
+		if nextToken, ok := response["NextToken"].(string); ok && nextToken != "" {
+			request["NextToken"] = nextToken
+		} else {
+			break
+		}
+	}
+	return objects, nil
+}
+
+func (s *VpcService) DescribeVpcPrefixList(id string) (object map[string]interface{}, err error) {
+	var response map[string]interface{}
+	conn, err := s.client.NewVpcClient()
+	if err != nil {
+		return nil, WrapError(err)
+	}
+	action := "ListPrefixLists"
+	request := map[string]interface{}{
+		"RegionId":      s.client.RegionId,
+		"PrefixListIds": []string{id},
+	}
+	runtime := util.RuntimeOptions{}
+	runtime.SetAutoretry(true)
+	wait := incrementalWait(3*time.Second, 3*time.Second)
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2016-04-28"), StringPointer("AK"), nil, request, &runtime)
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		return nil
+	})
+	addDebug(action, response, request)
+	if err != nil {
+		return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
+	}
+	resp, err := jsonpath.Get("$.PrefixLists", response)
+	if formatInt(response["TotalCount"]) != 0 && err != nil {
+		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$.PrefixLists", response)
+	}
+
+	if v, ok := resp.([]interface{}); !ok || len(v) < 1 {
+		return object, WrapErrorf(Error(GetNotFoundMessage("VPC", id)), NotFoundWithResponse, response)
+	} else {
+		if fmt.Sprint(resp.([]interface{})[0].(map[string]interface{})["PrefixListId"]) != id {
+			return object, WrapErrorf(Error(GetNotFoundMessage("VPC", id)), NotFoundWithResponse, response)
+		}
+	}
+	object = resp.([]interface{})[0].(map[string]interface{})
+	return object, nil
+}
+
+func (s *VpcService) VpcPrefixListStateRefreshFunc(id string, failStates []string) resource.StateRefreshFunc {
+	return func() (interface{}, string, error) {
+		object, err := s.DescribeVpcPrefixList(id)
+		if err != nil {
+			if NotFoundError(err) {
+				// Set this to nil as if we didn't find anything.
+				return nil, "", nil
+			}
+			return nil, "", WrapError(err)
+		}
+
+		for _, failState := range failStates {
+			if fmt.Sprint(object["Status"]) == failState {
+				return object, fmt.Sprint(object["Status"]), WrapError(Error(FailedToReachTargetStatus, fmt.Sprint(object["Status"])))
+			}
+		}
+
+		return object, fmt.Sprint(object["Status"]), nil
+	}
+}
+
+func (s *VpcService) DescribeVpnGatewayVcoRoute(id string) (object map[string]interface{}, err error) {
+	var response map[string]interface{}
+	conn, err := s.client.NewVpcClient()
+	if err != nil {
+		return nil, WrapError(err)
+	}
+	action := "DescribeVcoRouteEntries"
+	parts, err := ParseResourceId(id, 4)
+	if err != nil {
+		err = WrapError(err)
+		return
+	}
+	request := map[string]interface{}{
+		"RegionId":        s.client.RegionId,
+		"VpnConnectionId": parts[0],
+		"PageNumber":      1,
+		"PageSize":        PageSizeMedium,
+	}
+	idExist := false
+	for {
+		runtime := util.RuntimeOptions{}
+		runtime.SetAutoretry(true)
+		wait := incrementalWait(3*time.Second, 3*time.Second)
+		err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+			response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2016-04-28"), StringPointer("AK"), nil, request, &runtime)
+			if err != nil {
+				if NeedRetry(err) {
+					wait()
+					return resource.RetryableError(err)
+				}
+				return resource.NonRetryableError(err)
+			}
+			return nil
+		})
+		addDebug(action, response, request)
+		if err != nil {
+			if IsExpectedErrors(err, []string{"UnknownError"}) {
+				return object, WrapErrorf(Error(GetNotFoundMessage("VPC:VPNGateway", id)), NotFoundMsg, ProviderERROR, fmt.Sprint(response["RequestId"]))
+			}
+			return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
+		}
+		v, err := jsonpath.Get("$.VcoRouteEntries", response)
+		if err != nil {
+			return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$.VcoRouteEntries", response)
+		}
+		if len(v.([]interface{})) < 1 {
+			return object, WrapErrorf(Error(GetNotFoundMessage("VPNGateway", id)), NotFoundWithResponse, response)
+		}
+		for _, v := range v.([]interface{}) {
+			item := v.(map[string]interface{})
+			if fmt.Sprint(item["RouteDest"]) == parts[1] && fmt.Sprint(item["NextHop"]) == parts[2] && fmt.Sprint(item["Weight"]) == parts[3] {
+				idExist = true
+				return item, nil
+			}
+		}
+		if len(v.([]interface{})) < request["PageSize"].(int) {
+			break
+		}
+		request["PageNumber"] = request["PageNumber"].(int) + 1
+	}
+	if !idExist {
+		return object, WrapErrorf(Error(GetNotFoundMessage("VPNGateway", id)), NotFoundWithResponse, response)
+	}
+	return object, nil
+}
+
+func (s *VpcService) DescribeVpcIpv4CidrBlock(id string) (object map[string]interface{}, err error) {
+	var response map[string]interface{}
+	conn, err := s.client.NewVpcClient()
+	if err != nil {
+		return nil, WrapError(err)
+	}
+	action := "DescribeVpcs"
+	parts, err := ParseResourceId(id, 2)
+	if err != nil {
+		err = WrapError(err)
+		return
+	}
+	request := map[string]interface{}{
+		"RegionId":   s.client.RegionId,
+		"VpcId":      parts[0],
+		"PageNumber": 1,
+		"PageSize":   PageSizeLarge,
+	}
+	idExist := false
+	runtime := util.RuntimeOptions{}
+	runtime.SetAutoretry(true)
+	wait := incrementalWait(3*time.Second, 3*time.Second)
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2016-04-28"), StringPointer("AK"), nil, request, &runtime)
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		return nil
+	})
+	addDebug(action, response, request)
+	if err != nil {
+		return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
+	}
+	v, err := jsonpath.Get("$.Vpcs.Vpc", response)
+	if err != nil {
+		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$.Vpcs.Vpc", response)
+	}
+	if len(v.([]interface{})) < 1 {
+		return object, WrapErrorf(Error(GetNotFoundMessage("VpcIpv4CidrBlock", id)), NotFoundWithResponse, response)
+	}
+
+	vpcObject := v.([]interface{})[0].(map[string]interface{})
+
+	v, err = jsonpath.Get("$.SecondaryCidrBlocks.SecondaryCidrBlock", vpcObject)
+	if err != nil {
+		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$.SecondaryCidrBlocks.SecondaryCidrBlock", response)
+	}
+	if len(v.([]interface{})) < 1 {
+		return object, WrapErrorf(Error(GetNotFoundMessage("VpcIpv4CidrBlock", id)), NotFoundWithResponse, response)
+	}
+	for _, v := range v.([]interface{}) {
+		if v.(string) == parts[1] {
+			idExist = true
+			return object, nil
+		}
+	}
+
+	if !idExist {
+		return object, WrapErrorf(Error(GetNotFoundMessage("VpcIpv4CidrBlock", id)), NotFoundWithResponse, response)
+	}
+	return
+}
+
+func (s *VpcService) DescribeVpcPublicIpAddressPool(id string) (object map[string]interface{}, err error) {
+	var response map[string]interface{}
+	conn, err := s.client.NewVpcClient()
+	if err != nil {
+		return nil, WrapError(err)
+	}
+	action := "ListPublicIpAddressPools"
+	request := map[string]interface{}{
+		"RegionId":               s.client.RegionId,
+		"PublicIpAddressPoolIds": []string{id},
+	}
+	runtime := util.RuntimeOptions{}
+	runtime.SetAutoretry(true)
+	wait := incrementalWait(3*time.Second, 3*time.Second)
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2016-04-28"), StringPointer("AK"), nil, request, &runtime)
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		return nil
+	})
+	addDebug(action, response, request)
+	if err != nil {
+		return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
+	}
+	resp, err := jsonpath.Get("$.PublicIpAddressPoolList", response)
+	if formatInt(response["TotalCount"]) != 0 && err != nil {
+		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$.PublicIpAddressPoolList", response)
+	}
+
+	if v, ok := resp.([]interface{}); !ok || len(v) < 1 {
+		return object, WrapErrorf(Error(GetNotFoundMessage("VPC", id)), NotFoundWithResponse, response)
+	} else {
+		if fmt.Sprint(resp.([]interface{})[0].(map[string]interface{})["PublicIpAddressPoolId"]) != id {
+			return object, WrapErrorf(Error(GetNotFoundMessage("VPC", id)), NotFoundWithResponse, response)
+		}
+	}
+	object = resp.([]interface{})[0].(map[string]interface{})
+
+	return object, nil
+}
+
+func (s *VpcService) VpcPublicIpAddressPoolStateRefreshFunc(id string, failStates []string) resource.StateRefreshFunc {
+	return func() (interface{}, string, error) {
+		object, err := s.DescribeVpcPublicIpAddressPool(id)
+		if err != nil {
+			if NotFoundError(err) {
+				// Set this to nil as if we didn't find anything.
+				return nil, "", nil
+			}
+			return nil, "", WrapError(err)
+		}
+
+		for _, failState := range failStates {
+			if fmt.Sprint(object["Status"]) == failState {
+				return object, fmt.Sprint(object["Status"]), WrapError(Error(FailedToReachTargetStatus, fmt.Sprint(object["Status"])))
+			}
+		}
+		return object, fmt.Sprint(object["Status"]), nil
+	}
+}
+
+func (s *VpcService) DescribeVpcPublicIpAddressPoolCidrBlock(id string) (object map[string]interface{}, err error) {
+	var response map[string]interface{}
+	conn, err := s.client.NewVpcClient()
+	if err != nil {
+		return nil, WrapError(err)
+	}
+	parts, err := ParseResourceId(id, 2)
+	if err != nil {
+		return object, WrapError(err)
+	}
+	action := "ListPublicIpAddressPoolCidrBlocks"
+	request := map[string]interface{}{
+		"RegionId":              s.client.RegionId,
+		"PublicIpAddressPoolId": parts[0],
+		"CidrBlock":             parts[1],
+	}
+	runtime := util.RuntimeOptions{}
+	runtime.SetAutoretry(true)
+	wait := incrementalWait(3*time.Second, 3*time.Second)
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2016-04-28"), StringPointer("AK"), nil, request, &runtime)
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		return nil
+	})
+	addDebug(action, response, request)
+	if err != nil {
+		return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
+	}
+	resp, err := jsonpath.Get("$.PublicIpPoolCidrBlockList", response)
+	if formatInt(response["TotalCount"]) != 0 && err != nil {
+		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$.PublicIpPoolCidrBlockList", response)
+	}
+
+	if v, ok := resp.([]interface{}); !ok || len(v) < 1 {
+		return object, WrapErrorf(Error(GetNotFoundMessage("VPC", id)), NotFoundWithResponse, response)
+	} else {
+		if fmt.Sprint(resp.([]interface{})[0].(map[string]interface{})["CidrBlock"]) != parts[1] {
+			return object, WrapErrorf(Error(GetNotFoundMessage("VPC", id)), NotFoundWithResponse, response)
+		}
+	}
+	object = resp.([]interface{})[0].(map[string]interface{})
+
+	return object, nil
+}
+
+func (s *VpcService) VpcPublicIpAddressPoolCidrBlockStateRefreshFunc(id string, failStates []string) resource.StateRefreshFunc {
+	return func() (interface{}, string, error) {
+		object, err := s.DescribeVpcPublicIpAddressPoolCidrBlock(id)
+		if err != nil {
+			if NotFoundError(err) {
+				// Set this to nil as if we didn't find anything.
+				return nil, "", nil
+			}
+			return nil, "", WrapError(err)
+		}
+
+		for _, failState := range failStates {
+			if fmt.Sprint(object["Status"]) == failState {
+				return object, fmt.Sprint(object["Status"]), WrapError(Error(FailedToReachTargetStatus, fmt.Sprint(object["Status"])))
+			}
+		}
+		return object, fmt.Sprint(object["Status"]), nil
+	}
+}
+
+func (s *VpcService) DescribeVpcNetworkAclAttachment(id string) (object map[string]interface{}, err error) {
+	var response map[string]interface{}
+	action := "DescribeNetworkAcls"
+
+	conn, err := s.client.NewVpcClient()
+	if err != nil {
+		return nil, WrapError(err)
+	}
+
+	parts, err := ParseResourceId(id, 2)
+	if err != nil {
+		return nil, WrapError(err)
+	}
+
+	request := map[string]interface{}{
+		"RegionId":     s.client.RegionId,
+		"ClientToken":  buildClientToken("DescribeNetworkAcls"),
+		"NetworkAclId": parts[0],
+		"ResourceId":   parts[1],
+	}
+
+	idExist := false
+	runtime := util.RuntimeOptions{}
+	runtime.SetAutoretry(true)
+	wait := incrementalWait(3*time.Second, 3*time.Second)
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2016-04-28"), StringPointer("AK"), nil, request, &runtime)
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		return nil
+	})
+	addDebug(action, response, request)
+	if err != nil {
+		return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
+	}
+
+	resp, err := jsonpath.Get("$.NetworkAcls.NetworkAcl", response)
+	if formatInt(response["TotalCount"]) != 0 && err != nil {
+		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$.NetworkAcls.NetworkAcl", response)
+	}
+
+	if v, ok := resp.([]interface{}); !ok || len(v) < 1 {
+		return object, WrapErrorf(Error(GetNotFoundMessage("VPC:NetworkAclAttachment", id)), NotFoundWithResponse, response)
+	}
+
+	for _, networkAcls := range resp.([]interface{}) {
+		ruleActionArg := networkAcls.(map[string]interface{})
+		if networkAclId, ok := ruleActionArg["NetworkAclId"]; ok && fmt.Sprint(networkAclId) == parts[0] {
+			if resources, ok := ruleActionArg["Resources"]; ok {
+				resourcesArg := resources.(map[string]interface{})
+				if resourcesArgs, ok := resourcesArg["Resource"].([]interface{}); ok {
+					for _, networkAclResource := range resourcesArgs {
+						resourceArg := networkAclResource.(map[string]interface{})
+						if resourceId, ok := resourceArg["ResourceId"]; ok && fmt.Sprint(resourceId) == parts[1] {
+							idExist = true
+							return resourceArg, nil
+						}
+					}
+				}
+			}
+		}
+	}
+
+	if !idExist {
+		return object, WrapErrorf(Error(GetNotFoundMessage("VPC:NetworkAclAttachment", id)), NotFoundWithResponse, response)
+	}
+
+	return object, nil
+}
+
+func (s *VpcService) VpcNetworkAclAttachmentStateRefreshFunc(id string, failStates []string) resource.StateRefreshFunc {
+	return func() (interface{}, string, error) {
+		object, err := s.DescribeVpcNetworkAclAttachment(id)
+		if err != nil {
+			if NotFoundError(err) {
+				// Set this to nil as if we didn't find anything.
+				return nil, "", nil
+			}
+			return nil, "", WrapError(err)
+		}
+
+		for _, failState := range failStates {
+			if fmt.Sprint(object["Status"]) == failState {
+				return object, fmt.Sprint(object["Status"]), WrapError(Error(FailedToReachTargetStatus, fmt.Sprint(object["Status"])))
+			}
+		}
+		return object, fmt.Sprint(object["Status"]), nil
+	}
+}
+
+func (s *VpcService) DescribeVpcGatewayRouteTableAttachment(id string) (object map[string]interface{}, err error) {
+	var response map[string]interface{}
+	conn, err := s.client.NewVpcClient()
+	if err != nil {
+		return nil, WrapError(err)
+	}
+	action := "GetIpv4GatewayAttribute"
+	parts, err := ParseResourceId(id, 2)
+	if err != nil {
+		err = WrapError(err)
+		return
+	}
+	request := map[string]interface{}{
+		"RegionId":      s.client.RegionId,
+		"Ipv4GatewayId": parts[1],
+	}
+	runtime := util.RuntimeOptions{}
+	runtime.SetAutoretry(true)
+	wait := incrementalWait(3*time.Second, 3*time.Second)
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2016-04-28"), StringPointer("AK"), nil, request, &runtime)
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		return nil
+	})
+	addDebug(action, response, request)
+	if err != nil {
+		if IsExpectedErrors(err, []string{"ResourceNotFound.Ipv4Gateway"}) {
+			return object, WrapErrorf(Error(GetNotFoundMessage("VPC:Ipv4Gateway", id)), NotFoundMsg, ProviderERROR, fmt.Sprint(response["RequestId"]))
+		}
+		return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
+	}
+	v, err := jsonpath.Get("$", response)
+	if err != nil {
+		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$", response)
+	}
+	object = v.(map[string]interface{})
+	return object, nil
+}
+
+func (s *VpcService) VpcGatewayRouteTableAttachmentStateRefreshFunc(id string, failStates []string) resource.StateRefreshFunc {
+	return func() (interface{}, string, error) {
+		object, err := s.DescribeVpcGatewayRouteTableAttachment(id)
+		if err != nil {
+			if NotFoundError(err) {
+				// Set this to nil as if we didn't find anything.
+				return nil, "", nil
+			}
+			return nil, "", WrapError(err)
+		}
+
+		for _, failState := range failStates {
+			if fmt.Sprint(object["Status"]) == failState {
+				return object, fmt.Sprint(object["Status"]), WrapError(Error(FailedToReachTargetStatus, fmt.Sprint(object["Status"])))
+			}
+		}
+		return object, fmt.Sprint(object["Status"]), nil
+	}
+}
+
+func (s *VpcService) DescribeExpressConnectGrantRuleToCen(id string) (object map[string]interface{}, err error) {
+	var response map[string]interface{}
+	action := "DescribeGrantRulesToCen"
+
+	conn, err := s.client.NewVpcClient()
+	if err != nil {
+		return nil, WrapError(err)
+	}
+
+	parts, err := ParseResourceId(id, 3)
+	if err != nil {
+		return nil, WrapError(err)
+	}
+
+	request := map[string]interface{}{
+		"RegionId":     s.client.RegionId,
+		"ClientToken":  buildClientToken("DescribeGrantRulesToCen"),
+		"InstanceId":   parts[2],
+		"InstanceType": "VBR",
+	}
+
+	idExist := false
+	runtime := util.RuntimeOptions{}
+	runtime.SetAutoretry(true)
+	wait := incrementalWait(3*time.Second, 3*time.Second)
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2016-04-28"), StringPointer("AK"), nil, request, &runtime)
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		return nil
+	})
+	addDebug(action, response, request)
+
+	if err != nil {
+		return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
+	}
+
+	resp, err := jsonpath.Get("$.CenGrantRules.CbnGrantRule", response)
+	if err != nil {
+		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$.CenGrantRules.CbnGrantRule", response)
+	}
+
+	if v, ok := resp.([]interface{}); !ok || len(v) < 1 {
+		return object, WrapErrorf(Error(GetNotFoundMessage("ExpressConnect:GrantRuleToCen", id)), NotFoundWithResponse, response)
+	}
+
+	for _, v := range resp.([]interface{}) {
+		if fmt.Sprint(v.(map[string]interface{})["CenInstanceId"]) == parts[0] {
+			idExist = true
+			return v.(map[string]interface{}), nil
+		}
+	}
+
+	if !idExist {
+		return object, WrapErrorf(Error(GetNotFoundMessage("ExpressConnect:GrantRuleToCen", id)), NotFoundWithResponse, response)
+	}
+
+	return object, nil
+}
+
+func (s *VpcService) DescribeExpressConnectRouterInterface(id string) (object map[string]interface{}, err error) {
+	conn, err := s.client.NewVpcClient()
+	if err != nil {
+		return object, WrapError(err)
+	}
+
+	request := map[string]interface{}{
+		"Filter.1.Key":   "RouterInterfaceId",
+		"Filter.1.Value": []string{id},
+		"RegionId":       s.client.RegionId,
+	}
+
+	var response map[string]interface{}
+	action := "DescribeRouterInterfaces"
+	runtime := util.RuntimeOptions{}
+	runtime.SetAutoretry(true)
+	wait := incrementalWait(3*time.Second, 3*time.Second)
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		resp, err := conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2016-04-28"), StringPointer("AK"), nil, request, &runtime)
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		response = resp
+		addDebug(action, response, request)
+		return nil
+	})
+	if err != nil {
+		return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
+	}
+	v, err := jsonpath.Get("$.RouterInterfaceSet.RouterInterfaceType", response)
+	if err != nil {
+		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$.RouterInterfaceSet.RouterInterfaceType", response)
+	}
+	if len(v.([]interface{})) < 1 {
+		return object, WrapErrorf(Error(GetNotFoundMessage("RouterInterface", id)), NotFoundWithResponse, response)
+	}
+	return v.([]interface{})[0].(map[string]interface{}), nil
+}
+
+func (s *VpcService) ExpressConnectRouterInterfaceStateRefreshFunc(id string, failStates []string) resource.StateRefreshFunc {
+	return func() (interface{}, string, error) {
+		object, err := s.DescribeExpressConnectRouterInterface(id)
+		if err != nil {
+			if NotFoundError(err) {
+				return nil, "", nil
+			}
+			return nil, "", WrapError(err)
+		}
+		for _, failState := range failStates {
+			if fmt.Sprint(object["Status"]) == failState {
+				return object, fmt.Sprint(object["Status"]), WrapError(Error(FailedToReachTargetStatus, fmt.Sprint(object["Status"])))
+			}
+		}
+		return object, fmt.Sprint(object["Status"]), nil
+	}
+}
+
+func (s *VpcService) DescribeHighDefinitionMonitorLogAttribute(id string) (object map[string]interface{}, err error) {
+	var response map[string]interface{}
+	conn, err := s.client.NewVpcClient()
+	if err != nil {
+		return nil, WrapError(err)
+	}
+	action := "DescribeHighDefinitionMonitorLogAttribute"
+	request := map[string]interface{}{
+		"RegionId":   s.client.RegionId,
+		"InstanceId": id,
+	}
+	runtime := util.RuntimeOptions{}
+	runtime.SetAutoretry(true)
+	wait := incrementalWait(3*time.Second, 3*time.Second)
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2016-04-28"), StringPointer("AK"), nil, request, &runtime)
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		return nil
+	})
+	addDebug(action, response, request)
+	if err != nil {
+		return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
+	}
+	v, err := jsonpath.Get("$", response)
+	if err != nil {
+		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$.EipAddresses.EipAddress", response)
+	}
+	object = v.(map[string]interface{})
+	return object, nil
+}
+
+func (s *VpcService) DescribeVpcHaVipAttachment(id string) (object map[string]interface{}, err error) {
+	conn, err := s.client.NewVpcClient()
+	if err != nil {
+		return object, WrapError(err)
+	}
+	parts, err := ParseResourceId(id, 2)
+	if err != nil {
+		return object, WrapError(err)
+	}
+
+	request := map[string]interface{}{
+		"Filter.1.Key":     "HaVipId",
+		"Filter.1.Value.1": parts[0],
+		"RegionId":         s.client.RegionId,
+	}
+
+	var response map[string]interface{}
+	action := "DescribeHaVips"
+	runtime := util.RuntimeOptions{}
+	runtime.SetAutoretry(true)
+	wait := incrementalWait(3*time.Second, 3*time.Second)
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		resp, err := conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2016-04-28"), StringPointer("AK"), nil, request, &runtime)
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		response = resp
+		addDebug(action, response, request)
+		return nil
+	})
+	if err != nil {
+		return object, WrapErrorf(err, DefaultErrorMsg, id, action, AlibabaCloudSdkGoERROR)
+	}
+	v, err := jsonpath.Get("$.HaVips.HaVip", response)
+	if err != nil {
+		return object, WrapErrorf(err, FailedGetAttributeMsg, id, "$.HaVips.HaVip", response)
+	}
+	if len(v.([]interface{})) < 1 {
+		return object, WrapErrorf(Error(GetNotFoundMessage("HaVipAttachment", id)), NotFoundWithResponse, response)
+	} else {
+		if fmt.Sprint(v.([]interface{})[0].(map[string]interface{})["HaVipId"]) != parts[0] {
+			return object, WrapErrorf(Error(GetNotFoundMessage("VPC", id)), NotFoundWithResponse, response)
+		}
+	}
+	object = v.([]interface{})[0].(map[string]interface{})
+	return object, nil
+}
+
+func (s *VpcService) VpcHaVipAttachmentStateRefreshFunc(id string, failStates []string) resource.StateRefreshFunc {
+	return func() (interface{}, string, error) {
+		object, err := s.DescribeVpcHaVipAttachment(id)
+		if err != nil {
+			if NotFoundError(err) {
+				return nil, "", nil
+			}
+			return nil, "", WrapError(err)
+		}
+
+		status84 := object["Status"]
+		for _, failState := range failStates {
+			if fmt.Sprint(status84) == failState {
+				return object, fmt.Sprint(status84), WrapError(Error(FailedToReachTargetStatus, fmt.Sprint(status84)))
+			}
+		}
+		return object, fmt.Sprint(status84), nil
+	}
+}
+
+func (s *VpcService) ModifyExpressConnectPhysicalConnectionStatus(d *schema.ResourceData, status string) (err error) {
+	var response map[string]interface{}
+	conn, err := s.client.NewVpcClient()
+	if err != nil {
+		return WrapError(err)
+	}
+
+	switch status {
+	case "Confirmed":
+		action := "ConfirmPhysicalConnection"
+
+		confirmedReq := map[string]interface{}{
+			"RegionId":             s.client.RegionId,
+			"ClientToken":          buildClientToken("ConfirmPhysicalConnection"),
+			"PhysicalConnectionId": d.Id(),
+		}
+
+		runtime := util.RuntimeOptions{}
+		runtime.SetAutoretry(true)
+		wait := incrementalWait(3*time.Second, 3*time.Second)
+		err = resource.Retry(20*time.Minute, func() *resource.RetryError {
+			response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2016-04-28"), StringPointer("AK"), nil, confirmedReq, &runtime)
+			if err != nil {
+				if NeedRetry(err) {
+					wait()
+					return resource.RetryableError(err)
+				}
+				return resource.NonRetryableError(err)
+			}
+			return nil
+		})
+		addDebug(action, response, confirmedReq)
+
+		if err != nil {
+			return WrapErrorf(err, DefaultErrorMsg, d.Id(), action, AlibabaCloudSdkGoERROR)
+		}
+
+		stateConf := BuildStateConf([]string{}, []string{"Confirmed"}, d.Timeout(schema.TimeoutUpdate), 5*time.Second, s.ExpressConnectPhysicalConnectionStateRefreshFunc(d.Id(), []string{}))
+		if _, err := stateConf.WaitForState(); err != nil {
+			return WrapErrorf(err, IdMsg, d.Id())
+		}
+	case "Enabled":
+		action := "CreatePhysicalConnectionOccupancyOrder"
+
+		createPhysicalConnectionOccupancyOrderReq := map[string]interface{}{
+			"RegionId":             s.client.RegionId,
+			"ClientToken":          buildClientToken("CreatePhysicalConnectionOccupancyOrder"),
+			"PhysicalConnectionId": d.Id(),
+			"InstanceChargeType":   "PrePaid",
+			"AutoPay":              true,
+		}
+
+		if v, ok := d.GetOkExists("period"); ok {
+			createPhysicalConnectionOccupancyOrderReq["Period"] = v
+		}
+
+		if v, ok := d.GetOk("pricing_cycle"); ok {
+			createPhysicalConnectionOccupancyOrderReq["PricingCycle"] = v
+		}
+
+		runtime := util.RuntimeOptions{}
+		runtime.SetAutoretry(true)
+		wait := incrementalWait(3*time.Second, 3*time.Second)
+		err = resource.Retry(20*time.Minute, func() *resource.RetryError {
+			response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2016-04-28"), StringPointer("AK"), nil, createPhysicalConnectionOccupancyOrderReq, &runtime)
+			if err != nil {
+				if NeedRetry(err) {
+					wait()
+					return resource.RetryableError(err)
+				}
+				return resource.NonRetryableError(err)
+			}
+			return nil
+		})
+		addDebug(action, response, createPhysicalConnectionOccupancyOrderReq)
+
+		if err != nil {
+			return WrapErrorf(err, DefaultErrorMsg, d.Id(), action, AlibabaCloudSdkGoERROR)
+		}
+
+		if resp, err := jsonpath.Get("$.Data", response); err != nil || resp == nil {
+			return WrapErrorf(err, FailedGetAttributeMsg, d.Id(), "$.Data", response)
+		} else {
+			orderId := resp.(map[string]interface{})["OrderId"]
+			d.Set("order_id", orderId)
+		}
+
+		stateConf := BuildStateConf([]string{}, []string{"Enabled"}, d.Timeout(schema.TimeoutUpdate), 5*time.Second, s.ExpressConnectPhysicalConnectionStateRefreshFunc(d.Id(), []string{}))
+		if _, err := stateConf.WaitForState(); err != nil {
+			return WrapErrorf(err, IdMsg, d.Id())
+		}
+	case "Canceled":
+		action := "CancelPhysicalConnection"
+
+		canceledReq := map[string]interface{}{
+			"RegionId":             s.client.RegionId,
+			"ClientToken":          buildClientToken("CancelPhysicalConnection"),
+			"PhysicalConnectionId": d.Id(),
+		}
+
+		runtime := util.RuntimeOptions{}
+		runtime.SetAutoretry(true)
+		wait := incrementalWait(3*time.Second, 3*time.Second)
+		err = resource.Retry(20*time.Minute, func() *resource.RetryError {
+			response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2016-04-28"), StringPointer("AK"), nil, canceledReq, &runtime)
+			if err != nil {
+				if NeedRetry(err) {
+					wait()
+					return resource.RetryableError(err)
+				}
+				return resource.NonRetryableError(err)
+			}
+			return nil
+		})
+		addDebug(action, response, canceledReq)
+
+		if err != nil {
+			return WrapErrorf(err, DefaultErrorMsg, d.Id(), action, AlibabaCloudSdkGoERROR)
+		}
+
+		stateConf := BuildStateConf([]string{}, []string{"Canceled"}, d.Timeout(schema.TimeoutUpdate), 5*time.Second, s.ExpressConnectPhysicalConnectionStateRefreshFunc(d.Id(), []string{}))
+		if _, err := stateConf.WaitForState(); err != nil {
+			return WrapErrorf(err, IdMsg, d.Id())
+		}
+	case "Terminated":
+		action := "TerminatePhysicalConnection"
+
+		terminatedReq := map[string]interface{}{
+			"RegionId":             s.client.RegionId,
+			"ClientToken":          buildClientToken("TerminatePhysicalConnection"),
+			"PhysicalConnectionId": d.Id(),
+		}
+
+		runtime := util.RuntimeOptions{}
+		runtime.SetAutoretry(true)
+		wait := incrementalWait(3*time.Second, 3*time.Second)
+		err = resource.Retry(20*time.Minute, func() *resource.RetryError {
+			response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2016-04-28"), StringPointer("AK"), nil, terminatedReq, &runtime)
+			if err != nil {
+				if NeedRetry(err) {
+					wait()
+					return resource.RetryableError(err)
+				}
+				return resource.NonRetryableError(err)
+			}
+			return nil
+		})
+		addDebug(action, response, terminatedReq)
+
+		if err != nil {
+			return WrapErrorf(err, DefaultErrorMsg, d.Id(), action, AlibabaCloudSdkGoERROR)
+		}
+
+		stateConf := BuildStateConf([]string{}, []string{"Terminated"}, d.Timeout(schema.TimeoutUpdate), 5*time.Second, s.ExpressConnectPhysicalConnectionStateRefreshFunc(d.Id(), []string{}))
+		if _, err := stateConf.WaitForState(); err != nil {
+			return WrapErrorf(err, IdMsg, d.Id())
+		}
+	}
+
+	return nil
 }

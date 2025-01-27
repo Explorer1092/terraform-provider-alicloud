@@ -1,186 +1,279 @@
+// Package alicloud. This file is generated automatically. Please do not modify it manually, thank you!
 package alicloud
 
 import (
+	"fmt"
 	"log"
 	"strings"
 	"time"
 
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
-
-	"github.com/aliyun/alibaba-cloud-sdk-go/services/vpc"
+	util "github.com/alibabacloud-go/tea-utils/service"
 	"github.com/aliyun/terraform-provider-alicloud/alicloud/connectivity"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 )
 
-func resourceAliyunEipAssociation() *schema.Resource {
+func resourceAliCloudEipAssociation() *schema.Resource {
 	return &schema.Resource{
-		Create: resourceAliyunEipAssociationCreate,
-		Read:   resourceAliyunEipAssociationRead,
-		Update: resourceAliyunEipAssociationUpdate,
-		Delete: resourceAliyunEipAssociationDelete,
+		Create: resourceAliCloudEipAssociationCreate,
+		Read:   resourceAliCloudEipAssociationRead,
+		Update: resourceAliCloudEipAssociationUpdate,
+		Delete: resourceAliCloudEipAssociationDelete,
 		Importer: &schema.ResourceImporter{
 			State: schema.ImportStatePassthrough,
 		},
-
+		Timeouts: &schema.ResourceTimeout{
+			Create: schema.DefaultTimeout(5 * time.Minute),
+			Update: schema.DefaultTimeout(5 * time.Minute),
+			Delete: schema.DefaultTimeout(5 * time.Minute),
+		},
 		Schema: map[string]*schema.Schema{
 			"allocation_id": {
 				Type:     schema.TypeString,
 				Required: true,
 				ForceNew: true,
 			},
-
+			"force": {
+				Type:     schema.TypeBool,
+				Optional: true,
+			},
 			"instance_id": {
 				Type:     schema.TypeString,
 				Required: true,
 				ForceNew: true,
 			},
-
 			"instance_type": {
 				Type:     schema.TypeString,
 				Optional: true,
-				ForceNew: true,
 				Computed: true,
+				ForceNew: true,
 			},
-
-			"force": {
-				Type:     schema.TypeBool,
-				Optional: true,
-				Default:  false,
+			"mode": {
+				Type:         schema.TypeString,
+				Optional:     true,
+				Computed:     true,
+				ValidateFunc: StringInSlice([]string{"NAT", "MULTI_BINDED", "BINDED"}, false),
 			},
-
 			"private_ip_address": {
 				Type:     schema.TypeString,
 				Optional: true,
 				ForceNew: true,
-				Computed: true,
+			},
+			"vpc_id": {
+				Type:     schema.TypeString,
+				Optional: true,
+				ForceNew: true,
 			},
 		},
 	}
 }
 
-func resourceAliyunEipAssociationCreate(d *schema.ResourceData, meta interface{}) error {
+func resourceAliCloudEipAssociationCreate(d *schema.ResourceData, meta interface{}) error {
+
 	client := meta.(*connectivity.AliyunClient)
-	vpcService := VpcService{client}
 
-	request := vpc.CreateAssociateEipAddressRequest()
-	request.RegionId = client.RegionId
-	request.AllocationId = Trim(d.Get("allocation_id").(string))
-	request.InstanceId = Trim(d.Get("instance_id").(string))
-	request.InstanceType = EcsInstance
-	// There is a product api bug about clientToken and after fixed , the clientToken will be opened again.
-	//request.ClientToken = buildClientToken(request.GetActionName())
+	action := "AssociateEipAddress"
+	var request map[string]interface{}
+	var response map[string]interface{}
+	query := make(map[string]interface{})
+	conn, err := client.NewEipClient()
+	if err != nil {
+		return WrapError(err)
+	}
+	request = make(map[string]interface{})
+	query["InstanceId"] = d.Get("instance_id")
+	query["AllocationId"] = d.Get("allocation_id")
+	request["RegionId"] = client.RegionId
+	request["ClientToken"] = buildClientToken(action)
 
-	if strings.HasPrefix(request.InstanceId, "lb-") {
-		request.InstanceType = SlbInstance
+	request["InstanceType"] = EcsInstance
+	if strings.HasPrefix(query["InstanceId"].(string), "lb-") {
+		request["InstanceType"] = SlbInstance
 	}
-	if strings.HasPrefix(request.InstanceId, "ngw-") {
-		request.InstanceType = Nat
+	if strings.HasPrefix(query["InstanceId"].(string), "ngw-") {
+		request["InstanceType"] = Nat
 	}
-	if instanceType, ok := d.GetOk("instance_type"); ok {
-		request.InstanceType = instanceType.(string)
+	if v, ok := d.GetOk("instance_type"); ok {
+		request["InstanceType"] = v
 	}
-	if privateIPAddress, ok := d.GetOk("private_ip_address"); ok {
-		request.PrivateIpAddress = privateIPAddress.(string)
+	if v, ok := d.GetOk("private_ip_address"); ok {
+		request["PrivateIpAddress"] = v
 	}
-	if err := resource.Retry(5*time.Minute, func() *resource.RetryError {
-		raw, err := client.WithVpcClient(func(vpcClient *vpc.Client) (interface{}, error) {
-			return vpcClient.AssociateEipAddress(request)
-		})
+	if v, ok := d.GetOk("mode"); ok {
+		request["Mode"] = v
+	}
+	if v, ok := d.GetOk("vpc_id"); ok {
+		request["VpcId"] = v
+	}
+	runtime := util.RuntimeOptions{}
+	runtime.SetAutoretry(true)
+	wait := incrementalWait(3*time.Second, 5*time.Second)
+	err = resource.Retry(d.Timeout(schema.TimeoutCreate), func() *resource.RetryError {
+		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2016-04-28"), StringPointer("AK"), query, request, &runtime)
 		if err != nil {
-			if IsExpectedErrors(err, []string{"TaskConflict"}) {
+			if IsExpectedErrors(err, []string{"TaskConflict", "OperationConflict", "IncorrectStatus", "ServiceUnavailable", "SystemBusy", "LastTokenProcessing", "IncorrectEipStatus", "InvalidBindingStatus", "IncorrectInstanceStatus", "IncorrectStatus.NatGateway", "InvalidStatus.EcsStatusNotSupport", "InvalidStatus.InstanceHasBandWidth", "InvalidStatus.EniStatusNotSupport", "OperationFailed.EcsMigrating"}) || NeedRetry(err) {
+				wait()
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
 		}
-		addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+		addDebug(action, response, request)
 		return nil
-	}); err != nil {
-		return WrapErrorf(err, DefaultErrorMsg, "alicloud_eip_association", request.GetActionName(), AlibabaCloudSdkGoERROR)
+	})
+
+	if err != nil {
+		return WrapErrorf(err, DefaultErrorMsg, "alicloud_eip_association", action, AlibabaCloudSdkGoERROR)
 	}
 
-	if err := vpcService.WaitForEip(request.AllocationId, InUse, 60); err != nil {
-		return WrapError(err)
-	}
-	// There is at least 30 seconds delay for ecs instance
-	if request.InstanceType == EcsInstance {
-		time.Sleep(30 * time.Second)
-	}
+	d.SetId(fmt.Sprintf("%v:%v", query["AllocationId"], query["InstanceId"]))
 
-	d.SetId(request.AllocationId + ":" + request.InstanceId)
-
-	return resourceAliyunEipAssociationRead(d, meta)
+	return resourceAliCloudEipAssociationRead(d, meta)
 }
 
-func resourceAliyunEipAssociationRead(d *schema.ResourceData, meta interface{}) error {
+func resourceAliCloudEipAssociationRead(d *schema.ResourceData, meta interface{}) error {
 	client := meta.(*connectivity.AliyunClient)
-	vpcService := VpcService{client}
+	eipServiceV2 := EipServiceV2{client}
 
-	object, err := vpcService.DescribeEipAssociation(d.Id())
+	objectRaw, err := eipServiceV2.DescribeEipAssociation(d.Id())
 	if err != nil {
-		if NotFoundError(err) {
+		if !d.IsNewResource() && NotFoundError(err) {
+			log.Printf("[DEBUG] Resource alicloud_eip_association DescribeEipAssociation Failed!!! %s", err)
 			d.SetId("")
 			return nil
 		}
 		return WrapError(err)
 	}
-	d.Set("instance_id", object.InstanceId)
-	d.Set("allocation_id", object.AllocationId)
-	d.Set("instance_type", object.InstanceType)
-	d.Set("force", d.Get("force").(bool))
+
+	if objectRaw["InstanceType"] != nil {
+		d.Set("instance_type", objectRaw["InstanceType"])
+	}
+	if objectRaw["Mode"] != nil {
+		d.Set("mode", objectRaw["Mode"])
+	}
+	if objectRaw["PrivateIpAddress"] != nil {
+		d.Set("private_ip_address", objectRaw["PrivateIpAddress"])
+	}
+	if objectRaw["VpcId"] != nil {
+		d.Set("vpc_id", objectRaw["VpcId"])
+	}
+	if objectRaw["InstanceId"] != nil {
+		d.Set("instance_id", objectRaw["InstanceId"])
+	}
+
+	parts := strings.Split(d.Id(), ":")
+	d.Set("allocation_id", parts[0])
+	d.Set("instance_id", parts[1])
+
 	return nil
 }
 
-func resourceAliyunEipAssociationUpdate(d *schema.ResourceData, meta interface{}) error {
-	log.Printf("[WARN] The update method is used to ensure that the force parameter does not need to add forcenew.")
-	return nil
-}
-
-func resourceAliyunEipAssociationDelete(d *schema.ResourceData, meta interface{}) error {
+func resourceAliCloudEipAssociationUpdate(d *schema.ResourceData, meta interface{}) error {
 	client := meta.(*connectivity.AliyunClient)
-	vpcService := VpcService{client}
-	parts, err := ParseResourceId(d.Id(), 2)
+	var request map[string]interface{}
+	var response map[string]interface{}
+	var query map[string]interface{}
+	update := false
+	parts := strings.Split(d.Id(), ":")
+	action := "ModifyEipForwardMode"
+	conn, err := client.NewEipClient()
 	if err != nil {
 		return WrapError(err)
 	}
-	allocationId, instanceId := parts[0], parts[1]
-	if err != nil {
-		return WrapError(err)
+	request = make(map[string]interface{})
+	query = make(map[string]interface{})
+	query["InstanceId"] = parts[0]
+	request["RegionId"] = client.RegionId
+	request["ClientToken"] = buildClientToken(action)
+	if d.HasChange("mode") {
+		update = true
+		request["Mode"] = d.Get("mode")
 	}
 
-	request := vpc.CreateUnassociateEipAddressRequest()
-	request.RegionId = client.RegionId
-	request.AllocationId = allocationId
-	request.InstanceId = instanceId
-	request.InstanceType = EcsInstance
-	request.Force = requests.NewBoolean(d.Get("force").(bool))
-	request.ClientToken = buildClientToken(request.GetActionName())
-
-	if strings.HasPrefix(instanceId, "lb-") {
-		request.InstanceType = SlbInstance
-	}
-	if strings.HasPrefix(instanceId, "ngw-") {
-		request.InstanceType = Nat
-	}
-	if instanceType, ok := d.GetOk("instance_type"); ok {
-		request.InstanceType = instanceType.(string)
-	}
-	err = resource.Retry(10*time.Minute, func() *resource.RetryError {
-		raw, err := client.WithVpcClient(func(vpcClient *vpc.Client) (interface{}, error) {
-			return vpcClient.UnassociateEipAddress(request)
+	if update {
+		runtime := util.RuntimeOptions{}
+		runtime.SetAutoretry(true)
+		wait := incrementalWait(3*time.Second, 5*time.Second)
+		err = resource.Retry(d.Timeout(schema.TimeoutUpdate), func() *resource.RetryError {
+			response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2016-04-28"), StringPointer("AK"), query, request, &runtime)
+			if err != nil {
+				if NeedRetry(err) {
+					wait()
+					return resource.RetryableError(err)
+				}
+				return resource.NonRetryableError(err)
+			}
+			addDebug(action, response, request)
+			return nil
 		})
 		if err != nil {
-			if IsExpectedErrors(err, []string{"IncorrectInstanceStatus", "IncorrectHaVipStatus", "TaskConflict",
-				"InvalidIpStatus.HasBeenUsedBySnatTable", "InvalidIpStatus.HasBeenUsedByForwardEntry", "InvalidStatus.EniStatusNotSupport"}) {
+			return WrapErrorf(err, DefaultErrorMsg, d.Id(), action, AlibabaCloudSdkGoERROR)
+		}
+	}
+
+	return resourceAliCloudEipAssociationRead(d, meta)
+}
+
+func resourceAliCloudEipAssociationDelete(d *schema.ResourceData, meta interface{}) error {
+
+	client := meta.(*connectivity.AliyunClient)
+	parts := strings.Split(d.Id(), ":")
+	action := "UnassociateEipAddress"
+	var request map[string]interface{}
+	var response map[string]interface{}
+	query := make(map[string]interface{})
+	conn, err := client.NewEipClient()
+	if err != nil {
+		return WrapError(err)
+	}
+	request = make(map[string]interface{})
+	query["AllocationId"] = parts[0]
+	query["InstanceId"] = parts[1]
+	request["RegionId"] = client.RegionId
+
+	request["ClientToken"] = buildClientToken(action)
+
+	request["InstanceType"] = EcsInstance
+	if strings.HasPrefix(parts[1], "lb-") {
+		request["InstanceType"] = SlbInstance
+	}
+	if strings.HasPrefix(parts[1], "ngw-") {
+		request["InstanceType"] = Nat
+	}
+	if v, ok := d.GetOk("instance_type"); ok {
+		request["InstanceType"] = v
+	}
+	if v, ok := d.GetOk("private_ip_address"); ok {
+		request["PrivateIpAddress"] = v
+	}
+	if v, ok := d.GetOkExists("force"); ok {
+		request["Force"] = v
+	}
+	runtime := util.RuntimeOptions{}
+	runtime.SetAutoretry(true)
+	wait := incrementalWait(3*time.Second, 5*time.Second)
+	err = resource.Retry(d.Timeout(schema.TimeoutDelete), func() *resource.RetryError {
+		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2016-04-28"), StringPointer("AK"), query, request, &runtime)
+		request["ClientToken"] = buildClientToken(action)
+
+		if err != nil {
+			if IsExpectedErrors(err, []string{"OperationConflict", "IncorrectStatus", "ServiceUnavailable", "SystemBusy", "LastTokenProcessing", "OperationFailed.LastTokenProcessing", "IncorrectEipStatus", "InvalidBindingStatus", "IncorrectInstanceStatus", "IncorrectHaVipStatus", "TaskConflict", "InvalidIpStatus.HasBeenUsedBySnatTable", "InvalidIpStatus.HasBeenUsedByForwardEntry", "InvalidStatus.EniStatusNotSupport", "InvalidStatus.EcsStatusNotSupport", "InvalidStatus.NotAllow", "InvalidStatus.SnatOrDnat"}) || NeedRetry(err) {
+				wait()
 				return resource.RetryableError(err)
 			}
 			return resource.NonRetryableError(err)
 		}
-		addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+		addDebug(action, response, request)
 		return nil
 	})
+
 	if err != nil {
-		return WrapErrorf(err, DefaultErrorMsg, d.Id(), request.GetActionName(), AlibabaCloudSdkGoERROR)
+		return WrapErrorf(err, DefaultErrorMsg, d.Id(), action, AlibabaCloudSdkGoERROR)
 	}
-	return WrapError(vpcService.WaitForEipAssociation(d.Id(), Available, DefaultTimeoutMedium))
+
+	eipServiceV2 := EipServiceV2{client}
+	stateConf := BuildStateConf([]string{}, []string{}, d.Timeout(schema.TimeoutDelete), 5*time.Second, eipServiceV2.EipAssociationStateRefreshFunc(d.Id(), "PrivateIpAddress", []string{}))
+	if _, err := stateConf.WaitForState(); err != nil {
+		return WrapErrorf(err, IdMsg, d.Id())
+	}
+	return nil
 }

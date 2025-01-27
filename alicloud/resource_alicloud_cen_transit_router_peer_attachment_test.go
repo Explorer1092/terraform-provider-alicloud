@@ -21,10 +21,10 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 )
 
-func TestAccAlicloudCenTransitRouterPeerAttachment_basic(t *testing.T) {
+func TestAccAliCloudCenTransitRouterPeerAttachment_basic(t *testing.T) {
 	var v map[string]interface{}
 	resourceId := "alicloud_cen_transit_router_peer_attachment.default"
-	ra := resourceAttrInit(resourceId, AlicloudCenTransitRouterPeerAttachmentMap)
+	ra := resourceAttrInit(resourceId, AliCloudCenTransitRouterPeerAttachmentMap)
 	var providers []*schema.Provider
 	providerFactories := map[string]terraform.ResourceProviderFactory{
 		"alicloud": func() (terraform.ResourceProvider, error) {
@@ -36,7 +36,7 @@ func TestAccAlicloudCenTransitRouterPeerAttachment_basic(t *testing.T) {
 	testAccCheck := ra.resourceAttrMapUpdateSet()
 	rand := acctest.RandIntRange(1000000, 9999999)
 	name := fmt.Sprintf("tf-testAccCenTransitRouterPeerAttachment%d", rand)
-	testAccConfig := resourceTestAccConfigFunc(resourceId, name, AlicloudCenTransitRouterPeerAttachmentBasicDependence)
+	testAccConfig := resourceTestAccConfigFunc(resourceId, name, AliCloudCenTransitRouterPeerAttachmentBasicDependence)
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccPreCheck(t)
@@ -72,7 +72,7 @@ func TestAccAlicloudCenTransitRouterPeerAttachment_basic(t *testing.T) {
 			//	ResourceName:            resourceId,
 			//	ImportState:             true,
 			//	ImportStateVerify:       true,
-			//	ImportStateVerifyIgnore: []string{"dry_run", "route_table_association_enabled", "route_table_propagation_enabled"},
+			//	ImportStateVerifyIgnore: []string{"dry_run"},
 			//},
 			{
 				Config: testAccConfig(map[string]interface{}{
@@ -141,10 +141,10 @@ func TestAccAlicloudCenTransitRouterPeerAttachment_basic(t *testing.T) {
 	})
 }
 
-func TestAccAlicloudCenTransitRouterPeerAttachment_basic1(t *testing.T) {
+func TestAccAliCloudCenTransitRouterPeerAttachment_basic1(t *testing.T) {
 	var v map[string]interface{}
 	resourceId := "alicloud_cen_transit_router_peer_attachment.default"
-	ra := resourceAttrInit(resourceId, AlicloudCenTransitRouterPeerAttachmentMap)
+	ra := resourceAttrInit(resourceId, AliCloudCenTransitRouterPeerAttachmentMap)
 	var providers []*schema.Provider
 	providerFactories := map[string]terraform.ResourceProviderFactory{
 		"alicloud": func() (terraform.ResourceProvider, error) {
@@ -156,7 +156,7 @@ func TestAccAlicloudCenTransitRouterPeerAttachment_basic1(t *testing.T) {
 	testAccCheck := ra.resourceAttrMapUpdateSet()
 	rand := acctest.RandIntRange(1000000, 9999999)
 	name := fmt.Sprintf("tf-testAccCenTransitRouterPeerAttachment%d", rand)
-	testAccConfig := resourceTestAccConfigFunc(resourceId, name, AlicloudCenTransitRouterPeerAttachmentBasicDependence)
+	testAccConfig := resourceTestAccConfigFunc(resourceId, name, AliCloudCenTransitRouterPeerAttachmentBasicDependence)
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccPreCheck(t)
@@ -179,8 +179,6 @@ func TestAccAlicloudCenTransitRouterPeerAttachment_basic1(t *testing.T) {
 					"bandwidth":                             `5`,
 					"cen_bandwidth_package_id":              "${alicloud_cen_bandwidth_package.default.id}",
 					"dry_run":                               "false",
-					"route_table_association_enabled":       "false",
-					"route_table_propagation_enabled":       "false",
 					"transit_router_attachment_description": "desp",
 				}),
 				Check: resource.ComposeTestCheckFunc(
@@ -195,8 +193,6 @@ func TestAccAlicloudCenTransitRouterPeerAttachment_basic1(t *testing.T) {
 						"bandwidth":                             `5`,
 						"cen_bandwidth_package_id":              CHECKSET,
 						"dry_run":                               "false",
-						"route_table_association_enabled":       "false",
-						"route_table_propagation_enabled":       "false",
 						"transit_router_attachment_description": "desp",
 					}),
 				),
@@ -205,7 +201,7 @@ func TestAccAlicloudCenTransitRouterPeerAttachment_basic1(t *testing.T) {
 	})
 }
 
-var AlicloudCenTransitRouterPeerAttachmentMap = map[string]string{
+var AliCloudCenTransitRouterPeerAttachmentMap = map[string]string{
 	"auto_publish_route_enabled":            CHECKSET,
 	"bandwidth":                             CHECKSET,
 	"cen_bandwidth_package_id":              "",
@@ -214,8 +210,6 @@ var AlicloudCenTransitRouterPeerAttachmentMap = map[string]string{
 	"peer_transit_router_id":                CHECKSET,
 	"peer_transit_router_region_id":         "cn-beijing",
 	"resource_type":                         "TR",
-	"route_table_association_enabled":       NOSET,
-	"route_table_propagation_enabled":       NOSET,
 	"status":                                "Attached",
 	"transit_router_attachment_description": "",
 	"transit_router_attachment_name":        CHECKSET,
@@ -291,7 +285,7 @@ func testAccCheckCenTransitRouterPeerAttachmentDestroyWithProvider(s *terraform.
 	return nil
 }
 
-func AlicloudCenTransitRouterPeerAttachmentBasicDependence(name string) string {
+func AliCloudCenTransitRouterPeerAttachmentBasicDependence(name string) string {
 	return fmt.Sprintf(`
 
 variable "name" {	
@@ -342,10 +336,63 @@ resource "alicloud_cen_transit_router" "default_1" {
 
 `, name)
 }
-func TestAccAlicloudCenTransitRouterPeerAttachment_basic2(t *testing.T) {
+
+func AliCloudCenTransitRouterPeerAttachmentBasicDependenceMutile(name string) string {
+	return fmt.Sprintf(`
+
+variable "name" {	
+	default = "%s"
+}
+
+provider "alicloud" {
+  alias = "eu"
+  region = "eu-central-1"
+}
+
+provider "alicloud" {
+  alias = "cn"
+  region = "cn-hangzhou"
+}
+
+resource "alicloud_cen_instance" "default" {
+  provider = alicloud.eu
+  name = var.name
+  protection_level = "REDUCED"
+}
+
+resource "alicloud_cen_bandwidth_package" "default" {
+  provider = alicloud.eu
+  bandwidth                  = 5
+  cen_bandwidth_package_name = var.name
+  geographic_region_a_id     = "China"
+  geographic_region_b_id     = "China"
+}
+
+resource "alicloud_cen_bandwidth_package_attachment" "default" {
+  provider = alicloud.eu
+  instance_id          = alicloud_cen_instance.default.id
+  bandwidth_package_id = alicloud_cen_bandwidth_package.default.id
+}
+
+resource "alicloud_cen_transit_router" "default_0" {
+  provider = alicloud.eu
+  cen_id = alicloud_cen_bandwidth_package_attachment.default.instance_id
+  transit_router_name = "${var.name}-00"
+}
+
+resource "alicloud_cen_transit_router" "default_1" {
+  provider = alicloud.cn
+  cen_id = alicloud_cen_transit_router.default_0.cen_id
+  transit_router_name = "${var.name}-01"
+}
+
+`, name)
+}
+
+func TestAccAliCloudCenTransitRouterPeerAttachment_basic2(t *testing.T) {
 	var v map[string]interface{}
 	resourceId := "alicloud_cen_transit_router_peer_attachment.default"
-	ra := resourceAttrInit(resourceId, AlicloudCenTransitRouterPeerAttachmentMap)
+	ra := resourceAttrInit(resourceId, AliCloudCenTransitRouterPeerAttachmentMap)
 	var providers []*schema.Provider
 	providerFactories := map[string]terraform.ResourceProviderFactory{
 		"alicloud": func() (terraform.ResourceProvider, error) {
@@ -357,7 +404,7 @@ func TestAccAlicloudCenTransitRouterPeerAttachment_basic2(t *testing.T) {
 	testAccCheck := ra.resourceAttrMapUpdateSet()
 	rand := acctest.RandIntRange(1000000, 9999999)
 	name := fmt.Sprintf("tf-testAccCenTransitRouterPeerAttachment%d", rand)
-	testAccConfig := resourceTestAccConfigFunc(resourceId, name, AlicloudCenTransitRouterPeerAttachmentBasicDependence)
+	testAccConfig := resourceTestAccConfigFunc(resourceId, name, AliCloudCenTransitRouterPeerAttachmentBasicDependence)
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccPreCheck(t)
@@ -371,6 +418,7 @@ func TestAccAlicloudCenTransitRouterPeerAttachment_basic2(t *testing.T) {
 			{
 				Config: testAccConfig(map[string]interface{}{
 					"provider":                       "alicloud.cn",
+					"resource_type":                  "TR",
 					"cen_id":                         "${alicloud_cen_instance.default.id}",
 					"transit_router_id":              "${alicloud_cen_transit_router.default_0.transit_router_id}",
 					"peer_transit_router_id":         "${alicloud_cen_transit_router.default_1.transit_router_id}",
@@ -378,6 +426,7 @@ func TestAccAlicloudCenTransitRouterPeerAttachment_basic2(t *testing.T) {
 					"transit_router_attachment_name": name,
 					"bandwidth":                      "5",
 					"bandwidth_type":                 "DataTransfer",
+					"default_link_type":              "Platinum",
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheckCenTransitRouterPeerAttachmentExistsWithProviders(resourceId, v, &providers),
@@ -385,9 +434,35 @@ func TestAccAlicloudCenTransitRouterPeerAttachment_basic2(t *testing.T) {
 						"cen_id":                         CHECKSET,
 						"peer_transit_router_id":         CHECKSET,
 						"transit_router_id":              CHECKSET,
+						"resource_type":                  "TR",
 						"peer_transit_router_region_id":  "cn-beijing",
 						"transit_router_attachment_name": name,
 						"bandwidth_type":                 "DataTransfer",
+						"default_link_type":              "Platinum",
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"default_link_type": "Gold",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckCenTransitRouterPeerAttachmentExistsWithProviders(resourceId, v, &providers),
+					testAccCheck(map[string]string{
+						"default_link_type": "Gold",
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"bandwidth_type":           "BandwidthPackage",
+					"cen_bandwidth_package_id": "${alicloud_cen_bandwidth_package.default.id}",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckCenTransitRouterPeerAttachmentExistsWithProviders(resourceId, v, &providers),
+					testAccCheck(map[string]string{
+						"bandwidth_type":           "BandwidthPackage",
+						"cen_bandwidth_package_id": CHECKSET,
 					}),
 				),
 			},
@@ -395,7 +470,7 @@ func TestAccAlicloudCenTransitRouterPeerAttachment_basic2(t *testing.T) {
 	})
 }
 
-func TestAccAlicloudCenTransitRouterPeerAttachment_unit(t *testing.T) {
+func TestUnitAliCloudCenTransitRouterPeerAttachment(t *testing.T) {
 	p := Provider().(*schema.Provider).ResourcesMap
 	d, _ := schema.InternalMap(p["alicloud_cen_transit_router_peer_attachment"].Schema).Data(nil, nil)
 	dCreate, _ := schema.InternalMap(p["alicloud_cen_transit_router_peer_attachment"].Schema).Data(nil, nil)
@@ -412,8 +487,6 @@ func TestAccAlicloudCenTransitRouterPeerAttachment_unit(t *testing.T) {
 		"cen_bandwidth_package_id":              "cen_bandwidth_package_id",
 		"dry_run":                               false,
 		"resource_type":                         "TR",
-		"route_table_association_enabled":       false,
-		"route_table_propagation_enabled":       false,
 		"transit_router_attachment_description": "transit_router_attachment_description",
 	} {
 		err := dCreate.Set(key, value)
@@ -496,7 +569,7 @@ func TestAccAlicloudCenTransitRouterPeerAttachment_unit(t *testing.T) {
 				StatusCode: tea.Int(400),
 			}
 		})
-		err := resourceAlicloudCenTransitRouterPeerAttachmentCreate(d, rawClient)
+		err := resourceAliCloudCenTransitRouterPeerAttachmentCreate(d, rawClient)
 		patches.Reset()
 		assert.NotNil(t, err)
 	})
@@ -513,7 +586,7 @@ func TestAccAlicloudCenTransitRouterPeerAttachment_unit(t *testing.T) {
 			}
 			return responseMock["CreateNormal"]("")
 		})
-		err := resourceAlicloudCenTransitRouterPeerAttachmentCreate(d, rawClient)
+		err := resourceAliCloudCenTransitRouterPeerAttachmentCreate(d, rawClient)
 		patches.Reset()
 		assert.NotNil(t, err)
 	})
@@ -530,7 +603,7 @@ func TestAccAlicloudCenTransitRouterPeerAttachment_unit(t *testing.T) {
 			}
 			return responseMock["CreateNormal"]("")
 		})
-		err := resourceAlicloudCenTransitRouterPeerAttachmentCreate(dCreate, rawClient)
+		err := resourceAliCloudCenTransitRouterPeerAttachmentCreate(dCreate, rawClient)
 		patches.Reset()
 		assert.Nil(t, err)
 	})
@@ -548,7 +621,7 @@ func TestAccAlicloudCenTransitRouterPeerAttachment_unit(t *testing.T) {
 			}
 		})
 
-		err := resourceAlicloudCenTransitRouterPeerAttachmentUpdate(d, rawClient)
+		err := resourceAliCloudCenTransitRouterPeerAttachmentUpdate(d, rawClient)
 		patches.Reset()
 		assert.NotNil(t, err)
 	})
@@ -583,7 +656,7 @@ func TestAccAlicloudCenTransitRouterPeerAttachment_unit(t *testing.T) {
 			}
 			return responseMock["UpdateNormal"]("")
 		})
-		err := resourceAlicloudCenTransitRouterPeerAttachmentUpdate(resourceData1, rawClient)
+		err := resourceAliCloudCenTransitRouterPeerAttachmentUpdate(resourceData1, rawClient)
 		patches.Reset()
 		assert.NotNil(t, err)
 	})
@@ -618,7 +691,7 @@ func TestAccAlicloudCenTransitRouterPeerAttachment_unit(t *testing.T) {
 			}
 			return responseMock["UpdateNormal"]("")
 		})
-		err := resourceAlicloudCenTransitRouterPeerAttachmentUpdate(resourceData1, rawClient)
+		err := resourceAliCloudCenTransitRouterPeerAttachmentUpdate(resourceData1, rawClient)
 		patches.Reset()
 		assert.Nil(t, err)
 	})
@@ -633,7 +706,7 @@ func TestAccAlicloudCenTransitRouterPeerAttachment_unit(t *testing.T) {
 				StatusCode: tea.Int(400),
 			}
 		})
-		err := resourceAlicloudCenTransitRouterPeerAttachmentDelete(d, rawClient)
+		err := resourceAliCloudCenTransitRouterPeerAttachmentDelete(d, rawClient)
 		patches.Reset()
 		assert.NotNil(t, err)
 	})
@@ -650,7 +723,7 @@ func TestAccAlicloudCenTransitRouterPeerAttachment_unit(t *testing.T) {
 			}
 			return responseMock["DeleteNormal"]("")
 		})
-		err := resourceAlicloudCenTransitRouterPeerAttachmentDelete(d, rawClient)
+		err := resourceAliCloudCenTransitRouterPeerAttachmentDelete(d, rawClient)
 		patches.Reset()
 		assert.NotNil(t, err)
 	})
@@ -670,7 +743,7 @@ func TestAccAlicloudCenTransitRouterPeerAttachment_unit(t *testing.T) {
 		patcheDescribeCenTransitRouterPeerAttachment := gomonkey.ApplyMethod(reflect.TypeOf(&CbnService{}), "DescribeCenTransitRouterPeerAttachment", func(*CbnService, string) (map[string]interface{}, error) {
 			return responseMock["NotFoundError"]("ResourceNotfound")
 		})
-		err := resourceAlicloudCenTransitRouterPeerAttachmentDelete(d, rawClient)
+		err := resourceAliCloudCenTransitRouterPeerAttachmentDelete(d, rawClient)
 		patches.Reset()
 		patcheDescribeCenTransitRouterPeerAttachment.Reset()
 		assert.Nil(t, err)
@@ -688,7 +761,7 @@ func TestAccAlicloudCenTransitRouterPeerAttachment_unit(t *testing.T) {
 			}
 			return responseMock["DeleteNormal"]("")
 		})
-		err := resourceAlicloudCenTransitRouterPeerAttachmentDelete(d, rawClient)
+		err := resourceAliCloudCenTransitRouterPeerAttachmentDelete(d, rawClient)
 		patches.Reset()
 		assert.NotNil(t, err)
 	})
@@ -708,7 +781,7 @@ func TestAccAlicloudCenTransitRouterPeerAttachment_unit(t *testing.T) {
 			}
 			return responseMock["DeleteNormal"]("")
 		})
-		err := resourceAlicloudCenTransitRouterPeerAttachmentDelete(resourceData1, rawClient)
+		err := resourceAliCloudCenTransitRouterPeerAttachmentDelete(resourceData1, rawClient)
 		patches.Reset()
 		assert.NotNil(t, err)
 	})
@@ -725,7 +798,7 @@ func TestAccAlicloudCenTransitRouterPeerAttachment_unit(t *testing.T) {
 			}
 			return responseMock["ReadNormal"]("")
 		})
-		err := resourceAlicloudCenTransitRouterPeerAttachmentRead(d, rawClient)
+		err := resourceAliCloudCenTransitRouterPeerAttachmentRead(d, rawClient)
 		patcheDorequest.Reset()
 		assert.Nil(t, err)
 	})
@@ -741,8 +814,245 @@ func TestAccAlicloudCenTransitRouterPeerAttachment_unit(t *testing.T) {
 			}
 			return responseMock["ReadNormal"]("")
 		})
-		err := resourceAlicloudCenTransitRouterPeerAttachmentRead(d, rawClient)
+		err := resourceAliCloudCenTransitRouterPeerAttachmentRead(d, rawClient)
 		patcheDorequest.Reset()
 		assert.NotNil(t, err)
 	})
 }
+
+func SkipTestAccAliCloudCenTransitRouterPeerAttachment_basic3(t *testing.T) {
+	var v map[string]interface{}
+	resourceId := "alicloud_cen_transit_router_peer_attachment.default"
+	ra := resourceAttrInit(resourceId, AliCloudCenTransitRouterPeerAttachmentMap)
+	var providers []*schema.Provider
+	providerFactories := map[string]terraform.ResourceProviderFactory{
+		"alicloud": func() (terraform.ResourceProvider, error) {
+			p := Provider()
+			providers = append(providers, p.(*schema.Provider))
+			return p, nil
+		},
+	}
+	testAccCheck := ra.resourceAttrMapUpdateSet()
+	rand := acctest.RandIntRange(1000000, 9999999)
+	name := fmt.Sprintf("tf-testAccCenTransitRouterPeerAttachment%d", rand)
+	testAccConfig := resourceTestAccConfigFunc(resourceId, name, AliCloudCenTransitRouterPeerAttachmentBasicDependenceMutile)
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+			testAccPreCheckWithRegions(t, true, connectivity.CenTRSupportRegions)
+		},
+
+		IDRefreshName:     resourceId,
+		CheckDestroy:      testAccCheckCenTransitRouterPeerAttachmentDestroyWithProviders(&providers),
+		ProviderFactories: providerFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"resource_type":                  "TR",
+					"provider":                       "alicloud.eu",
+					"cen_id":                         "${alicloud_cen_instance.default.id}",
+					"transit_router_id":              "${alicloud_cen_transit_router.default_1.transit_router_id}",
+					"peer_transit_router_id":         "${alicloud_cen_transit_router.default_0.transit_router_id}",
+					"peer_transit_router_region_id":  "cn-hangzhou",
+					"transit_router_attachment_name": name,
+					"auto_publish_route_enabled":     "false",
+					//"bandwidth":                      `5`,
+					//"cen_bandwidth_package_id":              "${alicloud_cen_bandwidth_package.default.id}",
+					"dry_run":                               "false",
+					"transit_router_attachment_description": "desp",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckCenTransitRouterPeerAttachmentExistsWithProviders(resourceId, v, &providers),
+					testAccCheck(map[string]string{
+						"resource_type":                  "TR",
+						"cen_id":                         CHECKSET,
+						"peer_transit_router_id":         CHECKSET,
+						"transit_router_id":              CHECKSET,
+						"peer_transit_router_region_id":  "cn-hangzhou",
+						"transit_router_attachment_name": name,
+						"auto_publish_route_enabled":     "false",
+						//"bandwidth":                      `5`,
+						//"cen_bandwidth_package_id":              CHECKSET,
+						"dry_run":                               "false",
+						"transit_router_attachment_description": "desp",
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"bandwidth_type": "DataTransfer",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckCenTransitRouterPeerAttachmentExistsWithProviders(resourceId, v, &providers),
+					testAccCheck(map[string]string{
+						"bandwidth_type": "DataTransfer",
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"bandwidth_type": "BandwidthPackage",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckCenTransitRouterPeerAttachmentExistsWithProviders(resourceId, v, &providers),
+					testAccCheck(map[string]string{
+						"bandwidth_type": "BandwidthPackage",
+					}),
+				),
+			},
+		},
+	})
+}
+
+// Test Cen TransitRouterPeerAttachment. >>> Resource test cases, automatically generated.
+var AliCloudCenTransitRouterPeerAttachmentMap6600 = map[string]string{
+	"status":      CHECKSET,
+	"create_time": CHECKSET,
+}
+
+func AliCloudCenTransitRouterPeerAttachmentBasicDependence6600(name string) string {
+	return fmt.Sprintf(`
+variable "name" {
+    default = "%s"
+}
+
+resource "alicloud_cen_instance" "default3Y1UVp" {
+  description       = "铂金链路支持Terraform"
+  cen_instance_name = var.name
+}
+
+resource "alicloud_cen_transit_router" "defaultcmzeKb" {
+  cen_id                     = alicloud_cen_instance.default3Y1UVp.id
+  transit_router_name        = var.name
+  transit_router_description = "铂金链路支持Terraform"
+}
+
+resource "alicloud_cen_transit_router" "defaultlAxHgL" {
+  cen_id                     = alicloud_cen_instance.default3Y1UVp.id
+  transit_router_name        = var.name
+  transit_router_description = "铂金链路支持Terraform"
+}
+
+
+`, name)
+}
+
+// Case 铂金链路支持Terraform 6600  twin
+func SkipTestAccAliCloudCenTransitRouterPeerAttachment_basic6600_twin(t *testing.T) {
+	var v map[string]interface{}
+	resourceId := "alicloud_cen_transit_router_peer_attachment.default"
+	ra := resourceAttrInit(resourceId, AliCloudCenTransitRouterPeerAttachmentMap6600)
+	rc := resourceCheckInitWithDescribeMethod(resourceId, &v, func() interface{} {
+		return &CenServiceV2{testAccProvider.Meta().(*connectivity.AliyunClient)}
+	}, "DescribeCenTransitRouterPeerAttachment")
+	rac := resourceAttrCheckInit(rc, ra)
+	testAccCheck := rac.resourceAttrMapUpdateSet()
+	rand := acctest.RandIntRange(10000, 99999)
+	name := fmt.Sprintf("tf-testacc%scentransitrouterpeerattachment%d", defaultRegionToTest, rand)
+	testAccConfig := resourceTestAccConfigFunc(resourceId, name, AliCloudCenTransitRouterPeerAttachmentBasicDependence6600)
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		IDRefreshName: resourceId,
+		Providers:     testAccProviders,
+		CheckDestroy:  rac.checkResourceDestroy(),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"transit_router_attachment_name":        name,
+					"default_link_type":                     "Platinum",
+					"bandwidth_type":                        "DataTransfer",
+					"cen_id":                                "${alicloud_cen_instance.default3Y1UVp.id}",
+					"transit_router_attachment_description": "铂金链路支持Terraform - Create",
+					"peer_transit_router_region_id":         defaultRegionToTest,
+					"transit_router_id":                     "${alicloud_cen_transit_router.defaultcmzeKb.id}",
+					"peer_transit_router_id":                "${alicloud_cen_transit_router.defaultlAxHgL.id}",
+					"bandwidth":                             "10",
+					"tags": map[string]string{
+						"Created": "TF",
+						"For":     "Test",
+					},
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"transit_router_attachment_name":        name,
+						"default_link_type":                     "Platinum",
+						"bandwidth_type":                        "DataTransfer",
+						"cen_id":                                CHECKSET,
+						"transit_router_attachment_description": "铂金链路支持Terraform - Create",
+						"peer_transit_router_region_id":         CHECKSET,
+						"transit_router_id":                     CHECKSET,
+						"peer_transit_router_id":                CHECKSET,
+						"bandwidth":                             "10",
+						"tags.%":                                "2",
+						"tags.Created":                          "TF",
+						"tags.For":                              "Test",
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"default_link_type": "Gold",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"default_link_type": "Gold",
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"tags": map[string]string{
+						"Created": "TF",
+						"For":     "acceptance test",
+					},
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"tags.%":       "2",
+						"tags.Created": "TF",
+						"tags.For":     "acceptance test",
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"tags": map[string]string{
+						"Created": "TF",
+						"For":     "acceptance test",
+						"Updated": "TF",
+					},
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"tags.%":       "3",
+						"tags.Created": "TF",
+						"tags.For":     "acceptance test",
+						"tags.Updated": "TF",
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"tags": REMOVEKEY,
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"tags.%":       "0",
+						"tags.Created": REMOVEKEY,
+						"tags.For":     REMOVEKEY,
+					}),
+				),
+			},
+			{
+				ResourceName:            resourceId,
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"resource_type"},
+			},
+		},
+	})
+}
+
+// Test Cen TransitRouterPeerAttachment. <<< Resource test cases, automatically generated.

@@ -1,21 +1,36 @@
 ---
-subcategory: "Auto Scaling(ESS)"
+subcategory: "Auto Scaling"
 layout: "alicloud"
-page_title: "Alicloud: alicloud_ess_schedule"
+page_title: "Alicloud: alicloud_ess_scheduled_task"
 sidebar_current: "docs-alicloud-resource-ess-schedule"
 description: |-
   Provides a ESS schedule resource.
 ---
 
-# alicloud\_ess\_scheduled\_task
+# alicloud_ess_scheduled_task
 
 Provides a ESS schedule resource.
 
+For information about ess schedule task, see [Scheduled Tasks](https://www.alibabacloud.com/help/en/auto-scaling/latest/createscheduledtask).
+
+-> **NOTE:** Available since v1.60.0.
+
 ## Example Usage
 
-```
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_ess_scheduled_task&exampleId=c0d6ec92-7c2f-6169-a7e7-55dc4caba7a62290dca0&activeTab=example&spm=docs.r.ess_scheduled_task.0.c0d6ec927c&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
+```terraform
 variable "name" {
-  default = "essscheduleconfig"
+  default = "terraform-example"
+}
+
+resource "random_integer" "default" {
+  min = 10000
+  max = 99999
 }
 
 data "alicloud_zones" "default" {
@@ -36,20 +51,20 @@ data "alicloud_images" "default" {
 }
 
 resource "alicloud_vpc" "default" {
-  vpc_name       = var.name
+  vpc_name   = var.name
   cidr_block = "172.16.0.0/16"
 }
 
 resource "alicloud_vswitch" "default" {
-  vpc_id            = alicloud_vpc.default.id
-  cidr_block        = "172.16.0.0/24"
-  zone_id           = data.alicloud_zones.default.zones[0].id
-  name              = var.name
+  vpc_id       = alicloud_vpc.default.id
+  cidr_block   = "172.16.0.0/24"
+  zone_id      = data.alicloud_zones.default.zones[0].id
+  vswitch_name = var.name
 }
 
 resource "alicloud_security_group" "default" {
-  name   = var.name
-  vpc_id = alicloud_vpc.default.id
+  security_group_name = var.name
+  vpc_id              = alicloud_vpc.default.id
 }
 
 resource "alicloud_security_group_rule" "default" {
@@ -66,7 +81,7 @@ resource "alicloud_security_group_rule" "default" {
 resource "alicloud_ess_scaling_group" "default" {
   min_size           = 1
   max_size           = 1
-  scaling_group_name = var.name
+  scaling_group_name = "${var.name}-${random_integer.default.result}"
   vswitch_ids        = [alicloud_vswitch.default.id]
   removal_policies   = ["OldestInstance", "NewestInstance"]
 }
@@ -88,8 +103,13 @@ resource "alicloud_ess_scaling_rule" "default" {
 
 resource "alicloud_ess_scheduled_task" "default" {
   scheduled_action    = alicloud_ess_scaling_rule.default.ari
-  launch_time         = "2019-05-21T11:37Z"
-  scheduled_task_name = var.name
+  launch_time         = formatdate("YYYY-MM-DD'T'hh:mm'Z'", timeadd(timestamp(), "24h"))
+  scheduled_task_name = "${var.name}-${random_integer.default.result}"
+
+  # for test
+  lifecycle {
+    ignore_changes = [launch_time]
+  }
 }
 ```
 
@@ -113,7 +133,7 @@ The following arguments are supported:
 The time must be in UTC. You cannot enter a time point later than 90 days from the date of scheduled task creation. 
 If the `recurrence_type` parameter is specified, the task is executed repeatedly at the time specified by LaunchTime. 
 Otherwise, the task is only executed once at the date and time specified by LaunchTime.
-* `launch_expiration_time` - (Optional) The time period during which a failed scheduled task is retried. Unit: seconds. Valid values: 0 to 21600. Default value: 600
+* `launch_expiration_time` - (Optional) The time period during which a failed scheduled task is retried. Unit: seconds. Valid values: 0 to 1800, Available since v1.240.0. Default value: 600
 * `recurrence_type` - (Optional) Specifies the recurrence type of the scheduled task. **NOTE:** You must specify `RecurrenceType`, `RecurrenceValue`, and `RecurrenceEndTime` at the same time. Valid values:
     - Daily: The scheduled task is executed once every specified number of days.
     - Weekly: The scheduled task is executed on each specified day of a week.
@@ -139,7 +159,7 @@ The following attributes are exported:
 
 ESS schedule task can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_ess_scheduled_task.example abc123456
 ```
 

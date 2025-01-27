@@ -7,36 +7,43 @@ description: |-
   Provides a RAM Group membership resource.
 ---
 
-# alicloud\_ram\_group\_membership
+# alicloud_ram_group_membership
 
 Provides a RAM Group membership resource. 
 
+-> **NOTE:** Available since v1.0.0+.
+
 ## Example Usage
 
-```
-# Create a RAM Group membership.
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_ram_group_membership&exampleId=02a6be30-c01d-4b8e-3049-c7dea0927e8770f7366e&activeTab=example&spm=docs.r.ram_group_membership.0.02a6be30c0&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
+```terraform
+variable "name" {
+  default = "tfexample"
+}
 resource "alicloud_ram_group" "group" {
-  name     = "groupName"
+  name     = format("%sgroup", var.name)
   comments = "this is a group comments."
-  force    = true
 }
 
 resource "alicloud_ram_user" "user" {
-  name         = "user_test"
+  name         = format("%suser", var.name)
   display_name = "user_display_name"
   mobile       = "86-18688888888"
   email        = "hello.uuu@aaa.com"
   comments     = "yoyoyo"
-  force        = true
 }
 
 resource "alicloud_ram_user" "user1" {
-  name         = "user_test1"
+  name         = format("%suser1", var.name)
   display_name = "user_display_name1"
   mobile       = "86-18688888889"
   email        = "hello.uuu@aaa.com"
   comments     = "yoyoyo"
-  force        = true
 }
 
 resource "alicloud_ram_group_membership" "membership" {
@@ -56,12 +63,10 @@ The following arguments are supported:
 The following attributes are exported:
 
 * `id` - The membership ID, it's set to `group_name`
-* `group_name` - The group name.
-* `user_names` - The list of names of users which in the group.
 
 ## Import
 RAM Group membership can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_ram_group_membership.example my-group
 ```

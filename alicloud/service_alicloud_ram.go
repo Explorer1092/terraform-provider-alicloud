@@ -41,6 +41,30 @@ type RolePolicy struct {
 	Version   string
 }
 
+type PolicyDocumentStatementCondition struct {
+	Operator string
+	Variable string
+	Values   interface{}
+}
+
+type PolicyDocumentStatementPrincipal struct {
+	Entity      string
+	Identifiers interface{}
+}
+
+type PolicyDocumentStatement struct {
+	Effect    Effect
+	Action    interface{}
+	Resource  interface{}                         `json:",omitempty"`
+	Principal PolicyDocumentStatementPrincipalSet `json:",omitempty"`
+	Condition PolicyDocumentStatementConditionSet `json:",omitempty"`
+}
+
+type PolicyDocument struct {
+	Statement []PolicyDocumentStatement
+	Version   string
+}
+
 type PolicyStatement struct {
 	Effect   Effect
 	Action   interface{}
@@ -55,6 +79,9 @@ type Policy struct {
 type RamService struct {
 	client *connectivity.AliyunClient
 }
+
+type PolicyDocumentStatementPrincipalSet []PolicyDocumentStatementPrincipal
+type PolicyDocumentStatementConditionSet []PolicyDocumentStatementCondition
 
 func (s *RamService) ParseRolePolicyDocument(policyDocument string) (RolePolicy, error) {
 	var policy RolePolicy
@@ -176,7 +203,11 @@ func (s *RamService) JudgeRolePolicyPrincipal(roleName string) error {
 	return WrapError(fmt.Errorf("Role policy services must contains 'ecs.aliyuncs.com', Now is \n%v.", resp.Role.AssumeRolePolicyDocument))
 }
 
-func (s *RamService) GetIntersection(dataMap []map[string]interface{}, allDataMap map[string]interface{}) (allData []interface{}) {
+func (s *RamService) GetIntersection(dataMap []map[string]interface{}, allDataMap map[string]interface{}, groupOrUserNameOk, policyNameOk bool) (allData []interface{}) {
+	if (groupOrUserNameOk || policyNameOk) && len(dataMap) == 0 {
+		return
+	}
+
 	for _, v := range dataMap {
 		if len(v) > 0 {
 			for key := range allDataMap {
@@ -192,11 +223,12 @@ func (s *RamService) GetIntersection(dataMap []map[string]interface{}, allDataMa
 			allData = append(allData, v)
 		}
 	}
+
 	return
 }
 
-func (s *RamService) DescribeRamUser(id string) (*ram.UserInGetUser, error) {
-	user := &ram.UserInGetUser{}
+func (s *RamService) DescribeRamUser(id string) (*ram.User, error) {
+	user := &ram.User{}
 	listUsersRequest := ram.CreateListUsersRequest()
 	listUsersRequest.RegionId = s.client.RegionId
 	listUsersRequest.MaxItems = requests.NewInteger(100)
@@ -271,18 +303,31 @@ func (s *RamService) DescribeRamGroupMembership(id string) (*ram.ListUsersForGro
 	request := ram.CreateListUsersForGroupRequest()
 	request.RegionId = s.client.RegionId
 	request.GroupName = id
-	raw, err := s.client.WithRamClient(func(ramClient *ram.Client) (interface{}, error) {
-		return ramClient.ListUsersForGroup(request)
-	})
-	if err != nil {
-		if IsExpectedErrors(err, []string{"EntityNotExist"}) {
-			return response, WrapErrorf(err, NotFoundMsg, AlibabaCloudSdkGoERROR)
+	users := []ram.User{}
+
+	var raw interface{}
+	var err error
+	for {
+		raw, err = s.client.WithRamClient(func(ramClient *ram.Client) (interface{}, error) {
+			return ramClient.ListUsersForGroup(request)
+		})
+		if err != nil {
+			if IsExpectedErrors(err, []string{"EntityNotExist"}) {
+				return response, WrapErrorf(err, NotFoundMsg, AlibabaCloudSdkGoERROR)
+			}
+			return response, WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR)
 		}
-		return response, WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR)
+		addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+
+		response = raw.(*ram.ListUsersForGroupResponse)
+		users = append(users, response.Users.User...)
+		if !response.IsTruncated {
+			break
+		}
+		request.Marker = response.Marker
 	}
-	addDebug(request.GetActionName(), raw, request.RpcRequest, request)
-	response = raw.(*ram.ListUsersForGroupResponse)
-	if len(response.Users.User) > 0 {
+	response.Users.User = users
+	if len(users) > 0 {
 		return response, nil
 	}
 	return response, WrapErrorf(err, NotFoundMsg, ProviderERROR)
@@ -319,15 +364,17 @@ func (s *RamService) DescribeRamLoginProfile(id string) (*ram.GetLoginProfileRes
 	raw, err := s.client.WithRamClient(func(ramClient *ram.Client) (interface{}, error) {
 		return ramClient.GetLoginProfile(request)
 	})
+
 	if err != nil {
 		if IsExpectedErrors(err, []string{"EntityNotExist.User.LoginProfile", "EntityNotExist.User"}) {
-			return response, WrapErrorf(err, NotFoundMsg, AlibabaCloudSdkGoERROR)
+			return response, WrapErrorf(Error(GetNotFoundMessage("Ram:LoginProfile", id)), NotFoundMsg, ProviderERROR, fmt.Sprint(response.RequestId))
 		}
 		return response, WrapErrorf(err, DefaultErrorMsg, id, request.GetActionName(), AlibabaCloudSdkGoERROR)
 	}
-
 	addDebug(request.GetActionName(), raw, request.RpcRequest, request)
+
 	response = raw.(*ram.GetLoginProfileResponse)
+
 	return response, nil
 }
 
@@ -353,8 +400,8 @@ func (s *RamService) WaitForRamLoginProfile(id string, status Status, timeout in
 	}
 }
 
-func (s *RamService) DescribeRamGroupPolicyAttachment(id string) (*ram.PolicyInListPoliciesForGroup, error) {
-	response := &ram.PolicyInListPoliciesForGroup{}
+func (s *RamService) DescribeRamGroupPolicyAttachment(id string) (*ram.Policy, error) {
+	response := &ram.Policy{}
 	request := ram.CreateListPoliciesForGroupRequest()
 	request.RegionId = s.client.RegionId
 	parts, err := ParseResourceId(id, 4)
@@ -428,8 +475,8 @@ func (s *RamService) DescribeRamAccountAlias(id string) (*ram.GetAccountAliasRes
 	return response, nil
 }
 
-func (s *RamService) DescribeRamAccessKey(id, userName string) (*ram.AccessKeyInListAccessKeys, error) {
-	key := &ram.AccessKeyInListAccessKeys{}
+func (s *RamService) DescribeRamAccessKey(id, userName string) (*ram.AccessKey, error) {
+	key := &ram.AccessKey{}
 	request := ram.CreateListAccessKeysRequest()
 	request.RegionId = s.client.RegionId
 	request.UserName = userName
@@ -476,20 +523,15 @@ func (s *RamService) WaitForRamAccessKey(id, useName string, status Status, time
 }
 
 func (s *RamService) DescribeRamPolicy(id string) (object map[string]interface{}, err error) {
+	client := s.client
 	var response map[string]interface{}
-	conn, err := s.client.NewRamClient()
-	if err != nil {
-		return nil, WrapError(err)
-	}
 	action := "GetPolicy"
 	request := map[string]interface{}{
 		"RegionId":   s.client.RegionId,
 		"PolicyName": id,
 		"PolicyType": "Custom",
 	}
-	runtime := util.RuntimeOptions{}
-	runtime.SetAutoretry(true)
-	response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2015-05-01"), StringPointer("AK"), nil, request, &runtime)
+	response, err = client.RpcPost("Ram", "2015-05-01", action, nil, request, true)
 	if err != nil {
 		if IsExpectedErrors(err, []string{"EntityNotExist.Policy"}) {
 			err = WrapErrorf(Error(GetNotFoundMessage("RamPolicy", id)), NotFoundMsg, ProviderERROR)
@@ -629,8 +671,8 @@ func (s *RamService) WaitForRamRole(id string, status Status, timeout int) error
 	}
 }
 
-func (s *RamService) DescribeRamUserPolicyAttachment(id string) (*ram.PolicyInListPoliciesForUser, error) {
-	response := &ram.PolicyInListPoliciesForUser{}
+func (s *RamService) DescribeRamUserPolicyAttachment(id string) (*ram.Policy, error) {
+	response := &ram.Policy{}
 	request := ram.CreateListPoliciesForUserRequest()
 	request.RegionId = s.client.RegionId
 	parts, err := ParseResourceId(id, 4)
@@ -698,8 +740,8 @@ func (s *RamService) WaitForRamUserPolicyAttachment(id string, status Status, ti
 	}
 }
 
-func (s *RamService) DescribeRamRolePolicyAttachment(id string) (*ram.PolicyInListPoliciesForRole, error) {
-	response := &ram.PolicyInListPoliciesForRole{}
+func (s *RamService) DescribeRamRolePolicyAttachment(id string) (*ram.Policy, error) {
+	response := &ram.Policy{}
 	request := ram.CreateListPoliciesForRoleRequest()
 	request.RegionId = s.client.RegionId
 	parts, err := ParseResourceId(id, 4)
@@ -864,14 +906,17 @@ func (s *RamService) DescribeRamSecurityPreference(id string) (object map[string
 }
 
 func (s *RamService) DescribeRamServiceLinkedRole(id string) (*ram.GetRoleResponse, error) {
-	parts, _ := ParseResourceId(id, 2)
+	parts, err := ParseResourceId(id, 2)
+	if err != nil {
+		return nil, WrapErrorf(err, "invalid service linked role id: %s", id)
+	}
 	id = parts[1]
 
 	response := &ram.GetRoleResponse{}
 	request := ram.CreateGetRoleRequest()
 	request.RegionId = s.client.RegionId
 	request.RoleName = id
-	err := resource.Retry(5*time.Minute, func() *resource.RetryError {
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
 		raw, err := s.client.WithRamClient(func(ramClient *ram.Client) (interface{}, error) {
 			return ramClient.GetRole(request)
 		})

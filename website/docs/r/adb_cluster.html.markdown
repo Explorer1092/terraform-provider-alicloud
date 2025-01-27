@@ -13,7 +13,7 @@ Provides a ADB cluster resource. An ADB cluster is an isolated database
 environment in the cloud. An ADB cluster can contain multiple user-created
 databases.
 
--> **DEPRECATED:**  This resource  has been deprecated from version `1.121.0`. Please use new resource [alicloud_adb_db_cluster](https://www.terraform.io/docs/providers/alicloud/r/adb_db_cluster.html).
+-> **DEPRECATED:**  This resource  has been deprecated from version `1.121.0`. Please use new resource [alicloud_adb_db_cluster](https://www.terraform.io/docs/providers/alicloud/r/adb_db_cluster).
 
 -> **NOTE:** Available in v1.71.0+.
 
@@ -21,7 +21,7 @@ databases.
 
 ### Create a ADB MySQL cluster
 
-```
+```terraform
 variable "name" {
   default = "adbClusterconfig"
 }
@@ -35,15 +35,15 @@ data "alicloud_zones" "default" {
 }
 
 resource "alicloud_vpc" "default" {
-  vpc_name       = var.name
+  vpc_name   = var.name
   cidr_block = "172.16.0.0/16"
 }
 
 resource "alicloud_vswitch" "default" {
-  vpc_id            = alicloud_vpc.default.id
-  cidr_block        = "172.16.0.0/24"
-  zone_id           = data.alicloud_zones.default.zones[0].id
-  vswitch_name      = var.name
+  vpc_id       = alicloud_vpc.default.id
+  cidr_block   = "172.16.0.0/24"
+  zone_id      = data.alicloud_zones.default.zones[0].id
+  vswitch_name = var.name
 }
 
 resource "alicloud_adb_cluster" "default" {
@@ -93,6 +93,7 @@ The following attributes are exported:
 
 * `id` - The ADB cluster ID.
 * `connection_string` - (Available in 1.93.0+) The connection string of the ADB cluster.
+* `port` - (Available in 1.196.0+) The connection port of the ADB cluster.
 
 ### Timeouts
 
@@ -106,6 +107,6 @@ The `timeouts` block allows you to specify [timeouts](https://www.terraform.io/d
 
 ADB cluster can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_adb_cluster.example am-abc12345678
 ```

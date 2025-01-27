@@ -33,12 +33,13 @@ func init() {
 func testSweepResourceManagerResourceGroup(region string) error {
 	rawClient, err := sharedClientForRegion(region)
 	if err != nil {
-		return WrapErrorf(err, "Error getting Alicloud client.")
+		return WrapErrorf(err, "Error getting AliCloud client.")
 	}
 	client := rawClient.(*connectivity.AliyunClient)
 	prefixes := []string{
-		"tf-rd",
 		"tf-",
+		"tf-rd",
+		"tf-testacc",
 	}
 
 	action := "ListResourceGroups"
@@ -52,6 +53,7 @@ func testSweepResourceManagerResourceGroup(region string) error {
 	var groupIds []string
 	request["PageSize"] = PageSizeLarge
 	request["PageNumber"] = 1
+	defaultGroupId := ""
 	for {
 		runtime := util.RuntimeOptions{}
 		runtime.SetAutoretry(true)
@@ -67,21 +69,27 @@ func testSweepResourceManagerResourceGroup(region string) error {
 		result, _ := resp.([]interface{})
 		for _, v := range result {
 			item := v.(map[string]interface{})
+			if item["Name"].(string) == "default" {
+				defaultGroupId = item["Id"].(string)
+				continue
+			}
 			// Skip Invalid resource group.
 			if item["Status"].(string) != "OK" {
 				continue
 			}
 			skip := true
-			for _, prefix := range prefixes {
-				if strings.HasPrefix(strings.ToLower(item["Name"].(string)), strings.ToLower(prefix)) {
-					skip = false
+			if !sweepAll() {
+				for _, prefix := range prefixes {
+					if strings.HasPrefix(strings.ToLower(item["Name"].(string)), strings.ToLower(prefix)) {
+						skip = false
+					}
+				}
+				if skip {
+					log.Printf("[INFO] Skipping resource manager group: %s ", item["Name"])
+					continue
 				}
 			}
-			if skip {
-				log.Printf("[INFO] Skipping resource manager group: %s ", item["Name"])
-			} else {
-				groupIds = append(groupIds, item["Id"].(string))
-			}
+			groupIds = append(groupIds, item["Id"].(string))
 		}
 
 		if len(result) < PageSizeLarge {
@@ -92,14 +100,68 @@ func testSweepResourceManagerResourceGroup(region string) error {
 	}
 
 	for _, groupId := range groupIds {
+		request = map[string]interface{}{
+			"ResourceGroupId": groupId,
+			"PageSize":        100,
+		}
+		action = "ListResources"
+		wait := incrementalWait(3*time.Second, 3*time.Second)
+		err = resource.Retry(1*time.Minute, func() *resource.RetryError {
+			response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2020-03-31"), StringPointer("AK"), nil, request, &util.RuntimeOptions{})
+			if err != nil {
+				if NeedRetry(err) {
+					wait()
+					return resource.RetryableError(err)
+				}
+				return resource.NonRetryableError(err)
+			}
+			return nil
+		})
+		if err != nil {
+			log.Printf("[ERROR] Failed to list resources for manager group (%s): %s", groupId, err)
+		}
+		if v, ok := response["Resources"]; ok {
+			log.Printf("[INFO] Move resource for resource manager group: %s ", groupId)
+			resources := make([]interface{}, 0)
+			for i, item := range v.(map[string]interface{})["Resource"].([]interface{}) {
+				r := item.(map[string]interface{})
+				delete(r, "CreateDate")
+				delete(r, "ResourceGroupId")
+				if len(resources) >= 10 {
+					resources = []interface{}{r}
+				} else {
+					resources = append(resources, r)
+				}
+				if len(resources) != 10 && i != len(v.(map[string]interface{})["Resource"].([]interface{}))-1 {
+					continue
+				}
+				request = map[string]interface{}{
+					"ResourceGroupId": defaultGroupId,
+					"Resources":       resources,
+				}
+				action = "MoveResources"
+				wait := incrementalWait(3*time.Second, 3*time.Second)
+				err = resource.Retry(1*time.Minute, func() *resource.RetryError {
+					response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2020-03-31"), StringPointer("AK"), nil, request, &util.RuntimeOptions{})
+					log.Printf("[INFO] moving resource group %s %d resources got an error: %v", groupId, len(resources), err)
+					if err != nil {
+						if NeedRetry(err) {
+							wait()
+							return resource.RetryableError(err)
+						}
+						return resource.NonRetryableError(err)
+					}
+					return nil
+				})
+			}
+		}
 		log.Printf("[INFO] Delete resource manager group: %s ", groupId)
-
-		request := map[string]interface{}{
+		action = "DeleteResourceGroup"
+		request = map[string]interface{}{
 			"ResourceGroupId": groupId,
 		}
-
-		wait := incrementalWait(3*time.Second, 3*time.Second)
-		err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		wait = incrementalWait(3*time.Second, 3*time.Second)
+		err = resource.Retry(1*time.Minute, func() *resource.RetryError {
 			response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2020-03-31"), StringPointer("AK"), nil, request, &util.RuntimeOptions{})
 			if err != nil {
 				if NeedRetry(err) {
@@ -117,36 +179,60 @@ func testSweepResourceManagerResourceGroup(region string) error {
 	return nil
 }
 
-func TestAccAlicloudResourceManagerResourceGroup_basic(t *testing.T) {
+func TestAccAliCloudResourceManagerResourceGroup_basic0(t *testing.T) {
 	var v map[string]interface{}
 	resourceId := "alicloud_resource_manager_resource_group.default"
-	ra := resourceAttrInit(resourceId, ResourceManagerResourceGroupMap)
+	ra := resourceAttrInit(resourceId, AliCloudResourceManagerResourceGroupMap0)
 	rc := resourceCheckInitWithDescribeMethod(resourceId, &v, func() interface{} {
 		return &ResourcemanagerService{testAccProvider.Meta().(*connectivity.AliyunClient)}
 	}, "DescribeResourceManagerResourceGroup")
 	rac := resourceAttrCheckInit(rc, ra)
 	testAccCheck := rac.resourceAttrMapUpdateSet()
 	rand := acctest.RandIntRange(1000000, 9999999)
-	name := fmt.Sprintf("tf-rd%d", rand)
-	testAccConfig := resourceTestAccConfigFunc(resourceId, name, ResourceManagerResourceGroupBasicdependence)
+	name := fmt.Sprintf("tf-testacc-rg%d", rand)
+	testAccConfig := resourceTestAccConfigFunc(resourceId, name, AliCloudResourceManagerResourceGroupBasicDependence0)
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccPreCheck(t)
 		},
-
 		IDRefreshName: resourceId,
 		Providers:     testAccProviders,
 		CheckDestroy:  rac.checkResourceDestroy(),
 		Steps: []resource.TestStep{
 			{
 				Config: testAccConfig(map[string]interface{}{
-					"display_name": "terraform-test",
-					"name":         name,
+					"display_name":        name,
+					"resource_group_name": name,
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
-						"display_name": "terraform-test",
-						"name":         name,
+						"display_name":        name,
+						"resource_group_name": name,
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"display_name": name + "update",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"display_name": name + "update",
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"tags": map[string]string{
+						"Created": "TF",
+						"For":     "ResourceGroup",
+					},
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"tags.%":       "2",
+						"tags.Created": "TF",
+						"tags.For":     "ResourceGroup",
 					}),
 				),
 			},
@@ -155,27 +241,205 @@ func TestAccAlicloudResourceManagerResourceGroup_basic(t *testing.T) {
 				ImportState:       true,
 				ImportStateVerify: true,
 			},
+		},
+	})
+}
+
+func TestAccAliCloudResourceManagerResourceGroup_basic0_twin(t *testing.T) {
+	var v map[string]interface{}
+	resourceId := "alicloud_resource_manager_resource_group.default"
+	ra := resourceAttrInit(resourceId, AliCloudResourceManagerResourceGroupMap0)
+	rc := resourceCheckInitWithDescribeMethod(resourceId, &v, func() interface{} {
+		return &ResourcemanagerService{testAccProvider.Meta().(*connectivity.AliyunClient)}
+	}, "DescribeResourceManagerResourceGroup")
+	rac := resourceAttrCheckInit(rc, ra)
+	testAccCheck := rac.resourceAttrMapUpdateSet()
+	rand := acctest.RandIntRange(1000000, 9999999)
+	name := fmt.Sprintf("tf-testacc-rg%d", rand)
+	testAccConfig := resourceTestAccConfigFunc(resourceId, name, AliCloudResourceManagerResourceGroupBasicDependence0)
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		IDRefreshName: resourceId,
+		Providers:     testAccProviders,
+		CheckDestroy:  rac.checkResourceDestroy(),
+		Steps: []resource.TestStep{
 			{
 				Config: testAccConfig(map[string]interface{}{
-					"display_name": "terraform-test",
+					"display_name":        name,
+					"resource_group_name": name,
+					"tags": map[string]string{
+						"Created": "TF",
+						"For":     "ResourceGroup",
+					},
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
-						"display_name": "terraform-test",
+						"display_name":        name,
+						"resource_group_name": name,
+						"tags.%":              "2",
+						"tags.Created":        "TF",
+						"tags.For":            "ResourceGroup",
 					}),
 				),
+			},
+			{
+				ResourceName:      resourceId,
+				ImportState:       true,
+				ImportStateVerify: true,
 			},
 		},
 	})
 }
 
-var ResourceManagerResourceGroupMap = map[string]string{}
+func TestAccAliCloudResourceManagerResourceGroup_basic1(t *testing.T) {
+	var v map[string]interface{}
+	resourceId := "alicloud_resource_manager_resource_group.default"
+	ra := resourceAttrInit(resourceId, AliCloudResourceManagerResourceGroupMap0)
+	rc := resourceCheckInitWithDescribeMethod(resourceId, &v, func() interface{} {
+		return &ResourcemanagerService{testAccProvider.Meta().(*connectivity.AliyunClient)}
+	}, "DescribeResourceManagerResourceGroup")
+	rac := resourceAttrCheckInit(rc, ra)
+	testAccCheck := rac.resourceAttrMapUpdateSet()
+	rand := acctest.RandIntRange(1000000, 9999999)
+	name := fmt.Sprintf("tf-testacc-rg%d", rand)
+	testAccConfig := resourceTestAccConfigFunc(resourceId, name, AliCloudResourceManagerResourceGroupBasicDependence0)
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		IDRefreshName: resourceId,
+		Providers:     testAccProviders,
+		CheckDestroy:  rac.checkResourceDestroy(),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"display_name": name,
+					"name":         name,
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"display_name": name,
+						"name":         name,
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"display_name": name + "update",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"display_name": name + "update",
+					}),
+				),
+			},
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"tags": map[string]string{
+						"Created": "TF",
+						"For":     "ResourceGroup",
+					},
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"tags.%":       "2",
+						"tags.Created": "TF",
+						"tags.For":     "ResourceGroup",
+					}),
+				),
+			},
+			{
+				ResourceName:      resourceId,
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
+		},
+	})
+}
 
-func ResourceManagerResourceGroupBasicdependence(name string) string {
+func TestAccAliCloudResourceManagerResourceGroup_basic1_twin(t *testing.T) {
+	var v map[string]interface{}
+	resourceId := "alicloud_resource_manager_resource_group.default"
+	ra := resourceAttrInit(resourceId, AliCloudResourceManagerResourceGroupMap0)
+	rc := resourceCheckInitWithDescribeMethod(resourceId, &v, func() interface{} {
+		return &ResourcemanagerService{testAccProvider.Meta().(*connectivity.AliyunClient)}
+	}, "DescribeResourceManagerResourceGroup")
+	rac := resourceAttrCheckInit(rc, ra)
+	testAccCheck := rac.resourceAttrMapUpdateSet()
+	rand := acctest.RandIntRange(1000000, 9999999)
+	name := fmt.Sprintf("tf-testacc-rg%d", rand)
+	testAccConfig := resourceTestAccConfigFunc(resourceId, name, AliCloudResourceManagerResourceGroupBasicDependence0)
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		IDRefreshName: resourceId,
+		Providers:     testAccProviders,
+		CheckDestroy:  rac.checkResourceDestroy(),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"display_name": name,
+					"name":         name,
+					"tags": map[string]string{
+						"Created": "TF",
+						"For":     "ResourceGroup",
+						"Key1":    "Value1",
+						"Key2":    "Value2",
+						"Key3":    "Value3",
+						"Key4":    "Value4",
+						"Key5":    "Value5",
+						"Key6":    "Value6",
+						"Key7":    "Value7",
+						"Key8":    "Value8",
+						"Key9":    "Value9",
+						"Key10":   "Value10",
+					},
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"display_name": name,
+						"name":         name,
+						"tags.%":       "12",
+						"tags.Created": "TF",
+						"tags.For":     "ResourceGroup",
+						"tags.Key1":    "Value1",
+						"tags.Key2":    "Value2",
+						"tags.Key3":    "Value3",
+						"tags.Key4":    "Value4",
+						"tags.Key5":    "Value5",
+						"tags.Key6":    "Value6",
+						"tags.Key7":    "Value7",
+						"tags.Key8":    "Value8",
+						"tags.Key9":    "Value9",
+						"tags.Key10":   "Value10",
+					}),
+				),
+			},
+			{
+				ResourceName:      resourceId,
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
+		},
+	})
+}
+
+var AliCloudResourceManagerResourceGroupMap0 = map[string]string{
+	"resource_group_name": CHECKSET,
+	"name":                CHECKSET,
+	"account_id":          CHECKSET,
+	"status":              CHECKSET,
+	"region_statuses.#":   CHECKSET,
+}
+
+func AliCloudResourceManagerResourceGroupBasicDependence0(name string) string {
 	return ""
 }
 
-func TestUnitAlicloudResourceManagerResourceGroup(t *testing.T) {
+func TestUnitAliCloudResourceManagerResourceGroup(t *testing.T) {
 	p := Provider().(*schema.Provider).ResourcesMap
 	dInit, _ := schema.InternalMap(p["alicloud_resource_manager_resource_group"].Schema).Data(nil, nil)
 	dExisted, _ := schema.InternalMap(p["alicloud_resource_manager_resource_group"].Schema).Data(nil, nil)
@@ -251,7 +515,7 @@ func TestUnitAlicloudResourceManagerResourceGroup(t *testing.T) {
 			StatusCode: tea.Int(400),
 		}
 	})
-	err = resourceAlicloudResourceManagerResourceGroupCreate(dInit, rawClient)
+	err = resourceAliCloudResourceManagerResourceGroupCreate(dInit, rawClient)
 	patches.Reset()
 	assert.NotNil(t, err)
 	ReadMockResponseDiff := map[string]interface{}{
@@ -279,7 +543,7 @@ func TestUnitAlicloudResourceManagerResourceGroup(t *testing.T) {
 			}
 			return ReadMockResponse, nil
 		})
-		err := resourceAlicloudResourceManagerResourceGroupCreate(dInit, rawClient)
+		err := resourceAliCloudResourceManagerResourceGroupCreate(dInit, rawClient)
 		patches.Reset()
 		switch errorCode {
 		case "NonRetryableError":
@@ -306,7 +570,7 @@ func TestUnitAlicloudResourceManagerResourceGroup(t *testing.T) {
 			StatusCode: tea.Int(400),
 		}
 	})
-	err = resourceAlicloudResourceManagerResourceGroupUpdate(dExisted, rawClient)
+	err = resourceAliCloudResourceManagerResourceGroupUpdate(dExisted, rawClient)
 	patches.Reset()
 	assert.NotNil(t, err)
 	// UpdateResourceGroup
@@ -342,7 +606,7 @@ func TestUnitAlicloudResourceManagerResourceGroup(t *testing.T) {
 			}
 			return ReadMockResponse, nil
 		})
-		err := resourceAlicloudResourceManagerResourceGroupUpdate(dExisted, rawClient)
+		err := resourceAliCloudResourceManagerResourceGroupUpdate(dExisted, rawClient)
 		patches.Reset()
 		switch errorCode {
 		case "NonRetryableError":
@@ -381,7 +645,7 @@ func TestUnitAlicloudResourceManagerResourceGroup(t *testing.T) {
 			}
 			return ReadMockResponse, nil
 		})
-		err := resourceAlicloudResourceManagerResourceGroupRead(dExisted, rawClient)
+		err := resourceAliCloudResourceManagerResourceGroupRead(dExisted, rawClient)
 		patches.Reset()
 		switch errorCode {
 		case "NonRetryableError":
@@ -400,7 +664,7 @@ func TestUnitAlicloudResourceManagerResourceGroup(t *testing.T) {
 			StatusCode: tea.Int(400),
 		}
 	})
-	err = resourceAlicloudResourceManagerResourceGroupDelete(dExisted, rawClient)
+	err = resourceAliCloudResourceManagerResourceGroupDelete(dExisted, rawClient)
 	patches.Reset()
 	assert.NotNil(t, err)
 	errorCodes = []string{"NonRetryableError", "Throttling", "nil", "EntityNotExists.ResourceGroup"}
@@ -422,7 +686,7 @@ func TestUnitAlicloudResourceManagerResourceGroup(t *testing.T) {
 			}
 			return ReadMockResponse, nil
 		})
-		err := resourceAlicloudResourceManagerResourceGroupDelete(dExisted, rawClient)
+		err := resourceAliCloudResourceManagerResourceGroupDelete(dExisted, rawClient)
 		patches.Reset()
 		switch errorCode {
 		case "NonRetryableError":

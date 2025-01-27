@@ -1,7 +1,10 @@
 package alicloud
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	slsPop "github.com/aliyun/alibaba-cloud-sdk-go/services/sls"
@@ -260,9 +263,13 @@ func (s *LogService) DescribeLogtailConfig(id string) (*sls.LogConfig, error) {
 	err = resource.Retry(2*time.Minute, func() *resource.RetryError {
 		raw, err := s.client.WithLogClient(func(slsClient *sls.Client) (interface{}, error) {
 			requestInfo = slsClient
+			slsClient.RetryTimeOut = 30 * time.Second
 			return slsClient.GetConfig(projectName, configName)
 		})
 		if err != nil {
+			if IsExpectedErrors(err, []string{"unconvertable", "Unconvertable"}) {
+				return resource.NonRetryableError(err)
+			}
 			if IsExpectedErrors(err, []string{"InternalServerError"}) {
 				return resource.RetryableError(err)
 			}
@@ -387,6 +394,91 @@ func (s *LogService) WaitForLogtailAttachment(id string, status Status, timeout 
 			return WrapErrorf(err, WaitTimeoutMsg, id, GetFunc(1), timeout, object, name, ProviderERROR)
 		}
 	}
+}
+
+func (s *LogService) DescribeLogAlertResource(id string) (map[string]string, error) {
+	var result = map[string]string{}
+	parts, err := ParseResourceId(id, 3)
+	if err != nil {
+		return result, WrapError(err)
+	}
+	resourceType := parts[1]
+	if err := resource.Retry(2*time.Minute, func() *resource.RetryError {
+		_, err := s.client.WithLogPopClient(func(slsPopClient *slsPop.Client) (interface{}, error) {
+			switch resourceType {
+			case "user":
+				_, err := s.client.WithLogClient(func(slsClient *sls.Client) (interface{}, error) {
+					record, err := slsClient.GetResourceRecord("sls.alert.global_config", "default_config")
+					if err != nil {
+						return nil, err
+					}
+					var alertGlobalConfig AlertGlobalConfig
+					err = json.Unmarshal([]byte(record.Value), &alertGlobalConfig)
+					if err != nil {
+						return nil, err
+					}
+					region := alertGlobalConfig.ConfigDetail.AlertCenterLog.Region
+					accountId, err := s.client.AccountId()
+					if err != nil {
+						return nil, err
+					}
+					projectName := fmt.Sprintf("sls-alert-%s-%s", accountId, region)
+					endpoint := slsClient.Endpoint
+					slsClient.Endpoint = strings.Replace(endpoint, s.client.RegionId, region, 1)
+					_, err = slsClient.GetProject(projectName)
+					if err != nil {
+						slsClient.Endpoint = endpoint
+						return nil, err
+					}
+					_, err = slsClient.GetLogStore(projectName, "internal-alert-center-log")
+					slsClient.Endpoint = endpoint
+					if err != nil {
+						return nil, err
+					}
+					return nil, nil
+				})
+				if err != nil {
+					if IsExpectedErrors(err, []string{"ProjectNotExist"}) || IsExpectedErrors(err, []string{"LogStoreNotExist"}) {
+						return result, nil
+					}
+					return nil, err
+				}
+				lang := parts[2]
+				result["type"] = resourceType
+				result["project"] = ""
+				result["lang"] = lang
+				return result, nil
+			case "project":
+				project := parts[2]
+				_, err := s.client.WithLogClient(func(slsClient *sls.Client) (interface{}, error) {
+					return slsClient.GetLogStore(project, "internal-alert-history")
+				})
+				if err != nil {
+					if IsExpectedErrors(err, []string{"LogStoreNotExist"}) {
+						return nil, nil
+					}
+					return nil, err
+				}
+				result["type"] = resourceType
+				result["project"] = project
+				result["lang"] = ""
+				return result, nil
+			default:
+				return result, WrapErrorf(errors.New("type error"), DefaultErrorMsg, "alicloud_log_alert_resource", "ReadAlertResource", AliyunLogGoSdkERROR)
+			}
+		})
+		if err != nil {
+			if IsExpectedErrors(err, []string{LogClientTimeout}) {
+				time.Sleep(5 * time.Second)
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		return nil
+	}); err != nil {
+		return result, WrapErrorf(err, DefaultErrorMsg, "alicloud_log_alert_resource", "ReadAlertResource", AliyunLogGoSdkERROR)
+	}
+	return result, nil
 }
 
 func (s *LogService) DescribeLogAlert(id string) (*sls.Alert, error) {
@@ -622,6 +714,40 @@ func (s *LogService) WaitForLogDashboard(id string, status Status, timeout int) 
 	}
 }
 
+func (s *LogService) DescribeLogProjectPolicy(id string) (string, error) {
+	policy := ""
+	projectName := id
+	var requestInfo *sls.Client
+	err := resource.Retry(2*time.Minute, func() *resource.RetryError {
+		raw, err := s.client.WithLogClient(func(slsClient *sls.Client) (interface{}, error) {
+			requestInfo = slsClient
+			return slsClient.GetProjectPolicy(projectName)
+		})
+		if err != nil {
+			if IsExpectedErrors(err, []string{"InternalServerError", LogClientTimeout}) {
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		if debugOn() {
+			addDebug("GetLogProjectPolicy", raw, requestInfo, map[string]string{
+				"project": projectName,
+			})
+		}
+		policy, _ = raw.(string)
+		return nil
+	})
+
+	if err != nil {
+		if IsExpectedErrors(err, []string{"ProjectNotExist"}) {
+			return policy, WrapErrorf(err, NotFoundMsg, AliyunLogGoSdkERROR)
+		}
+		return policy, WrapErrorf(err, DefaultErrorMsg, id, "GetProjectPolicy", AliyunLogGoSdkERROR)
+	}
+
+	return policy, nil
+}
+
 func (s *LogService) DescribeLogProjectTags(project_name string) ([]*sls.ResourceTagResponse, error) {
 	var requestInfo *sls.Client
 	var respTags []*sls.ResourceTagResponse
@@ -716,6 +842,31 @@ func (s *LogService) WaitForLogETL(id string, status Status, timeout int) error 
 		if time.Now().After(deadline) {
 			return WrapErrorf(err, WaitTimeoutMsg, id, GetFunc(1), timeout, object.Name, id, ProviderERROR)
 		}
+	}
+}
+
+func (s *LogService) LogETLStateRefreshFunc(id string, failStates []string, slsClient *sls.Client) resource.StateRefreshFunc {
+	return func() (interface{}, string, error) {
+		parts, err := ParseResourceId(id, 2)
+		if err != nil {
+			return nil, "", WrapError(err)
+		}
+		object, err := slsClient.GetETL(parts[0], parts[1])
+		if err != nil {
+			if NotFoundError(err) {
+				// Set this to nil as if we didn't find anything.
+				return nil, "", nil
+			}
+			return nil, "", WrapError(err)
+		}
+
+		for _, failState := range failStates {
+			if object.Status == failState {
+				return object, object.Status, WrapError(Error(FailedToReachTargetStatus, object.Status))
+			}
+		}
+
+		return object, object.Status, nil
 	}
 }
 
@@ -881,6 +1032,78 @@ func (s *LogService) WaitForLogIngestion(id string, status Status, timeout int) 
 	}
 	for {
 		object, err := s.DescribeLogIngestion(id)
+		if err != nil {
+			if NotFoundError(err) {
+				if status == Deleted {
+					return nil
+				}
+			} else {
+				return WrapError(err)
+			}
+		}
+		if object.Name == parts[2] && status != Deleted {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return WrapErrorf(err, WaitTimeoutMsg, id, GetFunc(1), timeout, object.Name, id, ProviderERROR)
+		}
+	}
+}
+func (s *LogService) DescribeLogOssExport(id string) (*sls.Export, error) {
+	return s.describeLogExport(id)
+}
+
+func (s *LogService) describeLogExport(id string) (*sls.Export, error) {
+	var export *sls.Export
+	parts, err := ParseResourceId(id, 3)
+	if err != nil {
+		return export, WrapError(err)
+	}
+	projectName, logstoreName, exportName := parts[0], parts[1], parts[2]
+	var requestInfo *sls.Client
+	err = resource.Retry(2*time.Minute, func() *resource.RetryError {
+		raw, err := s.client.WithLogClient(func(slsClient *sls.Client) (interface{}, error) {
+			requestInfo = slsClient
+			return slsClient.GetExport(projectName, exportName)
+		})
+		if err != nil {
+			if IsExpectedErrors(err, []string{"InternalServerError", LogClientTimeout}) {
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		if debugOn() {
+			addDebug("GetExport", raw, requestInfo, map[string]string{
+				"project":     projectName,
+				"logstore":    logstoreName,
+				"export_name": exportName,
+			})
+		}
+		export, _ = raw.(*sls.Export)
+		return nil
+	})
+
+	if err != nil {
+		if IsExpectedErrors(err, []string{"ProjectNotExist", "JobNotExist"}) {
+			return export, WrapErrorf(err, NotFoundMsg, AliyunLogGoSdkERROR)
+		}
+		return export, WrapErrorf(err, DefaultErrorMsg, id, "GetExport", AliyunLogGoSdkERROR)
+	}
+	return export, nil
+}
+
+func (s *LogService) WaitForLogOssExport(id string, status Status, timeout int) error {
+	return s.waitForLogExport(id, status, timeout)
+}
+
+func (s *LogService) waitForLogExport(id string, status Status, timeout int) error {
+	deadline := time.Now().Add(time.Duration(timeout) * time.Second)
+	parts, err := ParseResourceId(id, 3)
+	if err != nil {
+		return WrapError(err)
+	}
+	for {
+		object, err := s.DescribeLogOssExport(id)
 		if err != nil {
 			if NotFoundError(err) {
 				if status == Deleted {

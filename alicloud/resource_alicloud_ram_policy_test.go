@@ -8,8 +8,6 @@ import (
 	"time"
 
 	"github.com/PaesslerAG/jsonpath"
-	util "github.com/alibabacloud-go/tea-utils/service"
-
 	"github.com/hashicorp/terraform-plugin-sdk/helper/acctest"
 
 	"github.com/aliyun/terraform-provider-alicloud/alicloud/connectivity"
@@ -35,10 +33,6 @@ func testSweepRamPolicies(region string) error {
 		return WrapError(err)
 	}
 	client := rawClient.(*connectivity.AliyunClient)
-	conn, err := client.NewRamClient()
-	if err != nil {
-		return WrapError(err)
-	}
 	action := "ListPolicies"
 	request := map[string]interface{}{
 		"PolicyType": "Custom",
@@ -52,9 +46,7 @@ func testSweepRamPolicies(region string) error {
 	var response map[string]interface{}
 	sweeped := false
 	for {
-		runtime := util.RuntimeOptions{}
-		runtime.SetAutoretry(true)
-		response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2015-05-01"), StringPointer("AK"), nil, request, &runtime)
+		response, err = client.RpcPost("Ram", "2015-05-01", action, nil, request, true)
 		if err != nil {
 			return WrapErrorf(err, DataDefaultErrorMsg, "alicloud_ram_policies", action, AlibabaCloudSdkGoERROR)
 		}
@@ -88,7 +80,7 @@ func testSweepRamPolicies(region string) error {
 			request := map[string]interface{}{
 				"PolicyName": name,
 			}
-			_, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2015-05-01"), StringPointer("AK"), nil, request, &util.RuntimeOptions{})
+			_, err = client.RpcPost("Ram", "2015-05-01", action, nil, request, true)
 			if err != nil {
 				log.Printf("[ERROR] Failed to delete Ram Policy (%s): %s", name, err)
 			}
@@ -104,7 +96,7 @@ func testSweepRamPolicies(region string) error {
 	return nil
 }
 
-func TestAccAlicloudRAMPolicy_basic(t *testing.T) {
+func TestAccAliCloudRAMPolicy_basic(t *testing.T) {
 	var v map[string]interface{}
 	resourceId := "alicloud_ram_policy.default"
 	ra := resourceAttrInit(resourceId, ramPolicyMap)
@@ -132,6 +124,7 @@ func TestAccAlicloudRAMPolicy_basic(t *testing.T) {
 					testAccCheck(map[string]string{
 						"name":        fmt.Sprintf("tf-testAcc%sRamPolicyConfig-%d", defaultRegionToTest, rand),
 						"policy_name": fmt.Sprintf("tf-testAcc%sRamPolicyConfig-%d", defaultRegionToTest, rand),
+						"force":       "true",
 					}),
 				),
 			},
@@ -147,6 +140,7 @@ func TestAccAlicloudRAMPolicy_basic(t *testing.T) {
 					testAccCheck(map[string]string{
 						"name":        fmt.Sprintf("tf-testAcc%sRamPolicyConfig-%d-N", defaultRegionToTest, rand),
 						"policy_name": fmt.Sprintf("tf-testAcc%sRamPolicyConfig-%d-N", defaultRegionToTest, rand),
+						"force":       "true",
 					}),
 				),
 			},
@@ -179,7 +173,7 @@ func TestAccAlicloudRAMPolicy_basic(t *testing.T) {
 	})
 }
 
-func TestAccAlicloudRAMPolicy_multi(t *testing.T) {
+func TestAccAliCloudRAMPolicy_multi(t *testing.T) {
 	var v map[string]interface{}
 	resourceId := "alicloud_ram_policy.default.9"
 	ra := resourceAttrInit(resourceId, ramPolicyMap)
@@ -218,7 +212,6 @@ var ramPolicyMap = map[string]string{
 	"description":      "this is a policy test",
 	"version":          "1",
 	"attachment_count": CHECKSET,
-	"force":            "true",
 	"statement.#":      "1",
 }
 
@@ -368,18 +361,12 @@ func testAccCheckRamPolicyDestroy(s *terraform.State) error {
 		client := testAccProvider.Meta().(*connectivity.AliyunClient)
 
 		// Try to find the policy
-		conn, err := client.NewRamClient()
-		if err != nil {
-			return WrapError(err)
-		}
 		action := "GetPolicy"
 		request := map[string]interface{}{
 			"PolicyName": rs.Primary.ID,
 			"PolicyType": "Custom",
 		}
-		runtime := util.RuntimeOptions{}
-		runtime.SetAutoretry(true)
-		_, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2015-05-01"), StringPointer("AK"), nil, request, &runtime)
+		_, err := client.RpcPost("Ram", "2015-05-01", action, nil, request, true)
 		if err != nil && !IsExpectedErrors(err, []string{"EntityNotExist.Policy"}) {
 			return WrapError(err)
 		}

@@ -7,30 +7,52 @@ description: |-
   Provides a Alicloud Log Dashboard resource.
 ---
 
-# alicloud\_log\_dashboard
+# alicloud_log_dashboard
+
 The dashboard is a real-time data analysis platform provided by the log service. You can display frequently used query and analysis statements in the form of charts and save statistical charts to the dashboard.
 [Refer to details](https://www.alibabacloud.com/help/doc-detail/102530.htm).
 
--> **NOTE:** Available in 1.86.0, parameter "action" in char_list is supported since 1.164.0+. 
+-> **NOTE:** Available since v1.86.0.
 
 ## Example Usage
 
 Basic Usage
 
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_log_dashboard&exampleId=d2bca676-a94d-ccf5-9c13-2a9f00cd9b18b15c8536&activeTab=example&spm=docs.r.log_dashboard.0.d2bca676a9&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
 ```terraform
-resource "alicloud_log_project" "default" {
-  name        = "tf-project"
-  description = "tf unit test"
+resource "random_integer" "default" {
+  max = 99999
+  min = 10000
 }
-resource "alicloud_log_store" "default" {
-  project          = "tf-project"
-  name             = "tf-logstore"
-  retention_period = "3000"
-  shard_count      = 1
+
+resource "alicloud_log_project" "example" {
+  project_name = "terraform-example-${random_integer.default.result}"
+  description  = "terraform-example"
 }
+
+resource "alicloud_log_store" "example" {
+  project_name          = alicloud_log_project.example.project_name
+  logstore_name         = "example-store"
+  shard_count           = 3
+  auto_split            = true
+  max_split_shard_count = 60
+  append_meta           = true
+}
+
 resource "alicloud_log_dashboard" "example" {
-  project_name   = "tf-project"
-  dashboard_name = "tf-dashboard"
+  project_name   = alicloud_log_project.example.project_name
+  dashboard_name = "terraform-example"
+  display_name   = "terraform-example"
+  attribute      = <<EOF
+  {
+    "type":"grid"
+  }
+EOF
   char_list      = <<EOF
   [
     {
@@ -38,7 +60,7 @@ resource "alicloud_log_dashboard" "example" {
       "title":"new_title",
       "type":"map",
       "search":{
-        "logstore":"tf-logstore",
+        "logstore":"example-store",
         "topic":"new_topic",
         "query":"* | SELECT COUNT(name) as ct_name, COUNT(product) as ct_product, name,product GROUP BY name,product",
         "start":"-86400s",
@@ -55,14 +77,13 @@ resource "alicloud_log_dashboard" "example" {
         "yPos":0,
         "width":10,
         "height":12,
-        "displayName":"xixihaha911"
+        "displayName":"terraform-example"
       }
     }
   ]
 EOF
 }
 ```
-
 
 ## Argument Reference
 
@@ -71,18 +92,20 @@ The following arguments are supported:
 * `project_name` - (Required, ForceNew) The name of the log project. It is the only in one Alicloud account.
 * `dashboard_name` - (Required, ForceNew) The name of the Log Dashboard.
 * `char_list` - (Required) Configuration of charts in the dashboard.
+  **Note:** From version 1.164.0, `char_list` can set parameter "action".
 * `display_name` - (Optional) Dashboard alias.
+* `attribute` - (Optional, Available since v1.183.0) Dashboard attribute.
 
 ## Attributes Reference
 
 The following attributes are exported:
 
-* `id` - The ID of the Log Dashboard. It sames as its name.
+* `id` - The resource ID in terraform of Log Dashboard. It formats as `<project_name>:<dashboard_name>`.
 
 ## Import
 
-Log Dashboard can be imported using the id or name, e.g.
+Log Dashboard can be imported using the id, e.g.
 
-```
-$ terraform import alicloud_log_dashboard.example tf-project:tf-logstore:tf-dashboard
+```shell
+$ terraform import alicloud_log_dashboard.example <project_name>:<dashboard_name>
 ```

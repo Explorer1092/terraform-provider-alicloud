@@ -1,5 +1,5 @@
 ---
-subcategory: "ApsaraDB for MyBase"
+subcategory: "ApsaraDB for MyBase (CDDC)"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_cddc_dedicated_host_account"
 sidebar_current: "docs-alicloud-resource-cddc-dedicated-host-account"
@@ -7,15 +7,17 @@ description: |-
   Provides a Alicloud ApsaraDB for MyBase Dedicated Host Account resource.
 ---
 
-# alicloud\_cddc\_dedicated\_host\_account
+# alicloud_cddc_dedicated_host_account
 
 Provides a ApsaraDB for MyBase Dedicated Host Account resource.
 
-For information about ApsaraDB for MyBase Dedicated Host Account and how to use it, see [What is Dedicated Host Account](https://www.alibabacloud.com/help/en/doc-detail/196877.html).
+For information about ApsaraDB for MyBase Dedicated Host Account and how to use it, see [What is Dedicated Host Account](https://www.alibabacloud.com/help/en/apsaradb-for-mybase/latest/creatededicatedhostaccount).
 
--> **NOTE:** Available in v1.148.0+.
+-> **NOTE:** Available since v1.148.0.
 
 -> **NOTE:** Each Dedicated host can have only one account. Before you create an account for a host, make sure that the existing account is deleted.
+
+-> **DEPRECATED:**  This resource has been [deprecated](https://www.alibabacloud.com/help/en/apsaradb-for-mybase/latest/notice-stop-selling-mybase-hosted-instances-from-august-31-2023) from version `1.225.1`. 
 
 ## Example Usage
 
@@ -23,62 +25,54 @@ Basic Usage
 
 ```terraform
 variable "name" {
-  default = "tftestacc"
+  default = "tf_example"
 }
-
 data "alicloud_cddc_zones" "default" {}
-
-data "alicloud_cddc_host_ecs_level_infos" "default" {
-  db_type        = "mssql"
-  zone_id        = data.alicloud_cddc_zones.default.ids.0
-  storage_type   = "cloud_essd"
-  image_category = "WindowsWithMssqlStdLicense"
-
+resource "alicloud_vpc" "default" {
+  vpc_name   = var.name
+  cidr_block = "10.4.0.0/16"
 }
-
-data "alicloud_cddc_dedicated_host_groups" "default" {
-  name_regex = "default-NODELETING"
-  engine     = "mssql"
-}
-
-data "alicloud_vpcs" "default" {
-  name_regex = "default-NODELETING"
+resource "alicloud_vswitch" "default" {
+  vswitch_name = var.name
+  cidr_block   = "10.4.0.0/24"
+  vpc_id       = alicloud_vpc.default.id
+  zone_id      = data.alicloud_cddc_zones.default.ids.0
 }
 
 resource "alicloud_cddc_dedicated_host_group" "default" {
-  count                     = length(data.alicloud_cddc_dedicated_host_groups.default.ids) > 0 ? 0 : 1
-  engine                    = "SQLServer"
-  vpc_id                    = data.alicloud_vpcs.default.ids.0
+  engine                    = "MySQL"
+  vpc_id                    = alicloud_vpc.default.id
+  cpu_allocation_ratio      = 101
+  mem_allocation_ratio      = 50
+  disk_allocation_ratio     = 200
   allocation_policy         = "Evenly"
   host_replace_policy       = "Manual"
   dedicated_host_group_desc = var.name
   open_permission           = true
 }
 
-data "alicloud_vswitches" "default" {
-  vpc_id  = length(data.alicloud_cddc_dedicated_host_groups.default.ids) > 0 ? data.alicloud_cddc_dedicated_host_groups.default.groups[0].vpc_id : data.alicloud_vpcs.default.ids.0
-  zone_id = data.alicloud_cddc_zones.default.ids.0
-}
-
-resource "alicloud_vswitch" "default" {
-  count      = length(data.alicloud_vswitches.default.ids) > 0 ? 0 : 1
-  vpc_id     = data.alicloud_vpcs.default.ids.0
-  cidr_block = data.alicloud_vpcs.default.vpcs[0].cidr_block
-  zone_id    = data.alicloud_cddc_zones.default.ids.0
+data "alicloud_cddc_host_ecs_level_infos" "default" {
+  db_type      = "mysql"
+  zone_id      = data.alicloud_cddc_zones.default.ids.0
+  storage_type = "cloud_essd"
 }
 
 resource "alicloud_cddc_dedicated_host" "default" {
   host_name               = var.name
-  dedicated_host_group_id = length(data.alicloud_cddc_dedicated_host_groups.default.ids) > 0 ? data.alicloud_cddc_dedicated_host_groups.default.ids.0 : alicloud_cddc_dedicated_host_group.default[0].id
+  dedicated_host_group_id = alicloud_cddc_dedicated_host_group.default.id
   host_class              = data.alicloud_cddc_host_ecs_level_infos.default.infos.0.res_class_code
   zone_id                 = data.alicloud_cddc_zones.default.ids.0
-  vswitch_id              = length(data.alicloud_vswitches.default.ids) > 0 ? data.alicloud_vswitches.default.ids.0 : alicloud_vswitch.default[0].id
+  vswitch_id              = alicloud_vswitch.default.id
   payment_type            = "Subscription"
-  image_category          = "WindowsWithMssqlStdLicense"
+  tags = {
+    Created = "TF"
+    For     = "CDDC_DEDICATED"
+  }
 }
-resource "alicloud_cddc_dedicated_host_account" "example" {
+
+resource "alicloud_cddc_dedicated_host_account" "default" {
   account_name      = var.name
-  account_password  = "yourpassword"
+  account_password  = "Password1234"
   dedicated_host_id = alicloud_cddc_dedicated_host.default.dedicated_host_id
   account_type      = "Normal"
 }
@@ -103,6 +97,6 @@ The following attributes are exported:
 
 ApsaraDB for MyBase Dedicated Host Account can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_cddc_dedicated_host_account.example <dedicated_host_id>:<account_name>
 ```

@@ -7,23 +7,35 @@ description: |-
   Provides a Alicloud Direct Mail Domain resource.
 ---
 
-# alicloud\_direct\_mail\_domain
+# alicloud_direct_mail_domain
 
 Provides a Direct Mail Domain resource.
 
 For information about Direct Mail Domain and how to use it, see [What is Domain](https://www.alibabacloud.com/help/en/doc-detail/29414.htm).
 
--> **NOTE:** Available in v1.134.0+.
+-> **NOTE:** Available since v1.134.0.
 
 ## Example Usage
 
 Basic Usage
 
-```terraform
-resource "alicloud_direct_mail_domain" "example" {
-  domain_name = "example_value"
-}
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_direct_mail_domain&exampleId=8cf26e8e-e78e-4738-8871-c25bdf29a899db03147b&activeTab=example&spm=docs.r.direct_mail_domain.0.8cf26e8ee7&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
 
+```terraform
+resource "random_integer" "default" {
+  min = 10000
+  max = 99999
+}
+provider "alicloud" {
+  region = "cn-hangzhou"
+}
+resource "alicloud_direct_mail_domain" "example" {
+  domain_name = "alicloud-provider-${random_integer.default.result}.online"
+}
 ```
 
 ## Argument Reference
@@ -43,6 +55,6 @@ The following attributes are exported:
 
 Direct Mail Domain can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_direct_mail_domain.example <id>
 ```

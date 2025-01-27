@@ -245,7 +245,7 @@ data "alicloud_zones" "default" {
     available_resource_creation = "VSwitch"
 }
 data "alicloud_vpcs" "default" {
-	name_regex = "default-NODELETING"
+	name_regex = "^default-NODELETING$"
 }
 data "alicloud_vswitches" "default" {
 	vpc_id  = data.alicloud_vpcs.default.ids.0
@@ -255,7 +255,7 @@ data "alicloud_vswitches" "default" {
 `, name)
 }
 
-func TestAccAlicloudMSEGateway_unit(t *testing.T) {
+func TestUnitAlicloudMSEGateway(t *testing.T) {
 	p := Provider().(*schema.Provider).ResourcesMap
 	d, _ := schema.InternalMap(p["alicloud_mse_gateway"].Schema).Data(nil, nil)
 	dCreate, _ := schema.InternalMap(p["alicloud_mse_gateway"].Schema).Data(nil, nil)

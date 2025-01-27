@@ -7,7 +7,7 @@ description: |-
   Provides a Alicloud Cloud SSO Access Assignment resource.
 ---
 
-# alicloud\_cloud\_sso\_access\_assignment
+# alicloud_cloud_sso_access_assignment
 
 Provides a Cloud SSO Access Assignment resource.
 
@@ -15,7 +15,7 @@ For information about Cloud SSO Access Assignment and how to use it, see [What i
 
 -> **NOTE:** When you configure access assignment for the first time, access configuration will be automatically deployed.
 
--> **NOTE:** Available in v1.145.0+.
+-> **NOTE:** Available since v1.145.0.
 
 -> **NOTE:** Cloud SSO Only Support `cn-shanghai` And `us-west-1` Region
 
@@ -23,46 +23,61 @@ For information about Cloud SSO Access Assignment and how to use it, see [What i
 
 Basic Usage
 
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_cloud_sso_access_assignment&exampleId=54852320-b6e7-39d1-c358-e1bb70b0daee2d8709ff&activeTab=example&spm=docs.r.cloud_sso_access_assignment.0.54852320b6&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
 ```terraform
-variable name {
-  default = "example-name"
+variable "name" {
+  default = "tf-example"
 }
+provider "alicloud" {
+  region = "cn-shanghai"
+}
+data "alicloud_cloud_sso_directories" "default" {}
+data "alicloud_resource_manager_resource_directories" "default" {}
 
-data alicloud_cloud_sso_directories default {}
-
-data alicloud_resource_manager_resource_directories default {}
-
-resource alicloud_cloud_sso_directory default {
+resource "alicloud_cloud_sso_directory" "default" {
   count          = length(data.alicloud_cloud_sso_directories.default.ids) > 0 ? 0 : 1
   directory_name = var.name
 }
 
-resource alicloud_cloud_sso_user default {
-  directory_id = length(data.alicloud_cloud_sso_directories.default.ids) > 0 ? data.alicloud_cloud_sso_directories.default.ids[0] : concat(alicloud_cloud_sso_directory.default.*.id[""])[0]
-  user_name    = var.name
+locals {
+  directory_id = length(data.alicloud_cloud_sso_directories.default.ids) > 0 ? data.alicloud_cloud_sso_directories.default.ids[0] : concat(alicloud_cloud_sso_directory.default.*.id, [""])[0]
 }
 
-resource alicloud_cloud_sso_access_configuration default {
-  access_configuration_name = var.name
-  directory_id              = length(data.alicloud_cloud_sso_directories.default.ids) > 0 ? data.alicloud_cloud_sso_directories.default.ids[0] : concat(alicloud_cloud_sso_directory.default.*.id[""])[0]
+resource "random_integer" "default" {
+  min = 10000
+  max = 99999
 }
 
-resource alicloud_cloud_sso_access_configuration_provisioning default {
-  directory_id            = length(data.alicloud_cloud_sso_directories.default.ids) > 0 ? data.alicloud_cloud_sso_directories.default.ids[0] : concat(alicloud_cloud_sso_directory.default.*.id[""])[0]
+resource "alicloud_cloud_sso_user" "default" {
+  directory_id = local.directory_id
+  user_name    = "${var.name}-${random_integer.default.result}"
+}
+
+resource "alicloud_cloud_sso_access_configuration" "default" {
+  access_configuration_name = "${var.name}-${random_integer.default.result}"
+  directory_id              = local.directory_id
+}
+
+resource "alicloud_cloud_sso_access_configuration_provisioning" "default" {
+  directory_id            = local.directory_id
   access_configuration_id = alicloud_cloud_sso_access_configuration.default.access_configuration_id
   target_type             = "RD-Account"
   target_id               = data.alicloud_resource_manager_resource_directories.default.directories.0.master_account_id
 }
 
-resource alicloud_cloud_sso_access_assignment default {
-  directory_id            = length(data.alicloud_cloud_sso_directories.default.ids) > 0 ? data.alicloud_cloud_sso_directories.default.ids[0] : concat(alicloud_cloud_sso_directory.default.*.id[""])[0]
+resource "alicloud_cloud_sso_access_assignment" "default" {
+  directory_id            = alicloud_cloud_sso_access_configuration_provisioning.default.directory_id
   access_configuration_id = alicloud_cloud_sso_access_configuration.default.access_configuration_id
   target_type             = "RD-Account"
   target_id               = data.alicloud_resource_manager_resource_directories.default.directories.0.master_account_id
   principal_type          = "User"
   principal_id            = alicloud_cloud_sso_user.default.user_id
   deprovision_strategy    = "DeprovisionForLastAccessAssignmentOnAccount"
-  depends_on              = [alicloud_cloud_sso_access_configuration_provisioning.default]
 }
 ```
 
@@ -84,6 +99,8 @@ The following attributes are exported:
 
 * `id` - The resource ID of Access Assignment. The value formats as `<directory_id>:<access_configuration_id>:<target_type>:<target_id>:<principal_type>:<principal_id>`. 
 
+## Timeouts
+
 The `timeouts` block allows you to specify [timeouts](https://www.terraform.io/docs/configuration-0-11/resources.html#timeouts) for certain actions:
 
 * `create` - (Defaults to 5 mins) Used when create the Cloud SSO Access Assignment.
@@ -93,7 +110,7 @@ The `timeouts` block allows you to specify [timeouts](https://www.terraform.io/d
 
 Cloud SSO Access Assignment can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_cloud_sso_access_assignment.example <directory_id>:<access_configuration_id>:<target_type>:<target_id>:<principal_type>:<principal_id>
 ```
 

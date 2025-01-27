@@ -69,7 +69,7 @@ func resourceAlicloudSlbLoadBalancer() *schema.Resource {
 				Type:         schema.TypeInt,
 				Optional:     true,
 				Default:      1,
-				ValidateFunc: validation.IntBetween(1, 1000),
+				ValidateFunc: validation.IntBetween(1, 5120),
 				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
 					if d.Get("internet_charge_type").(string) == "PayByTraffic" {
 						return true
@@ -84,9 +84,6 @@ func resourceAlicloudSlbLoadBalancer() *schema.Resource {
 				Default:      "off",
 				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
 					if v, ok := d.GetOk("payment_type"); ok && v.(string) == "Subscription" {
-						return true
-					}
-					if v, ok := d.GetOk("instance_charge_type"); ok && v.(string) == "PrePaid" {
 						return true
 					}
 					return false
@@ -121,16 +118,28 @@ func resourceAlicloudSlbLoadBalancer() *schema.Resource {
 				Type:          schema.TypeString,
 				Optional:      true,
 				Computed:      true,
-				ValidateFunc:  validation.StringInSlice([]string{"slb.s1.small", "slb.s2.medium", "slb.s2.small", "slb.s3.large", "slb.s3.medium", "slb.s3.small", "slb.s4.large"}, false),
+				ValidateFunc:  validation.StringInSlice([]string{"slb.s1.small", "slb.s2.medium", "slb.s2.small", "slb.s3.large", "slb.s3.medium", "slb.s3.small", "slb.s4.large", "slb.lcu.elastic"}, false),
 				ConflictsWith: []string{"specification"},
+				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
+					if v, ok := d.GetOk("instance_charge_type"); ok && v.(string) == "PayByCLCU" {
+						return true
+					}
+					return false
+				},
 			},
 			"specification": {
 				Type:          schema.TypeString,
 				Optional:      true,
 				Computed:      true,
-				ValidateFunc:  validation.StringInSlice([]string{"slb.s1.small", "slb.s2.medium", "slb.s2.small", "slb.s3.large", "slb.s3.medium", "slb.s3.small", "slb.s4.large"}, false),
+				ValidateFunc:  validation.StringInSlice([]string{"slb.s1.small", "slb.s2.medium", "slb.s2.small", "slb.s3.large", "slb.s3.medium", "slb.s3.small", "slb.s4.large", "slb.lcu.elastic"}, false),
 				Deprecated:    "Field 'specification' has been deprecated from provider version 1.123.1. New field 'load_balancer_spec' instead",
 				ConflictsWith: []string{"load_balancer_spec"},
+				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
+					if v, ok := d.GetOk("instance_charge_type"); ok && v.(string) == "PayByCLCU" {
+						return true
+					}
+					return false
+				},
 			},
 			"master_zone_id": {
 				Type:     schema.TypeString,
@@ -161,19 +170,22 @@ func resourceAlicloudSlbLoadBalancer() *schema.Resource {
 				ValidateFunc:     validation.Any(validation.IntBetween(1, 9), validation.IntInSlice([]int{12, 24, 36})),
 			},
 			"payment_type": {
-				Type:          schema.TypeString,
-				Optional:      true,
-				Computed:      true,
-				ValidateFunc:  validation.StringInSlice([]string{"PayAsYouGo", "Subscription"}, false),
-				ConflictsWith: []string{"instance_charge_type"},
+				Type:         schema.TypeString,
+				Optional:     true,
+				Computed:     true,
+				ValidateFunc: validation.StringInSlice([]string{"PayAsYouGo", "Subscription"}, false),
 			},
 			"instance_charge_type": {
-				Type:          schema.TypeString,
-				Optional:      true,
-				Computed:      true,
-				ValidateFunc:  validation.StringInSlice([]string{"PostPaid", "PrePaid"}, false),
-				ConflictsWith: []string{"payment_type"},
-				Deprecated:    "Field 'instance_charge_type' has been deprecated from provider version 1.124. Use 'payment_type' replaces it.",
+				Type:         schema.TypeString,
+				Optional:     true,
+				Computed:     true,
+				ValidateFunc: validation.StringInSlice([]string{"PayBySpec", "PayByCLCU"}, false),
+				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
+					if v, ok := d.GetOk("payment_type"); !ok || v.(string) == "PayAsYouGo" {
+						return false
+					}
+					return true
+				},
 			},
 			"resource_group_id": {
 				Type:     schema.TypeString,
@@ -191,9 +203,9 @@ func resourceAlicloudSlbLoadBalancer() *schema.Resource {
 				Type:         schema.TypeString,
 				Optional:     true,
 				Computed:     true,
-				ValidateFunc: validation.StringInSlice([]string{"active", "inactive"}, false),
+				ValidateFunc: validation.StringInSlice([]string{"active", "inactive", "locked"}, false),
 			},
-			"tags": tagsSchema(),
+			"tags": tagsSchemaComputed(),
 			"vswitch_id": {
 				Type:     schema.TypeString,
 				Optional: true,
@@ -269,8 +281,9 @@ func resourceAlicloudSlbLoadBalancerCreate(d *schema.ResourceData, meta interfac
 
 	if v, ok := d.GetOk("payment_type"); ok {
 		request["PayType"] = convertSlbLoadBalancerPaymentTypeRequest(v.(string))
-	} else if v, ok := d.GetOk("instance_charge_type"); ok {
-		request["PayType"] = convertSlbLoadBalancerInstanceChargeTypeRequest(v.(string))
+	}
+	if v, ok := d.GetOk("instance_charge_type"); ok {
+		request["InstanceChargeType"] = v
 	}
 	if v, ok := request["PayType"]; ok && v.(string) == "PrePay" {
 		period := 1
@@ -358,7 +371,7 @@ func resourceAlicloudSlbLoadBalancerRead(d *schema.ResourceData, meta interface{
 	d.Set("modification_protection_reason", object["ModificationProtectionReason"])
 	d.Set("modification_protection_status", object["ModificationProtectionStatus"])
 	d.Set("payment_type", convertSlbLoadBalancerPaymentTypeResponse(object["PayType"]))
-	d.Set("instance_charge_type", convertSlbLoadBalancerInstanceChargeTypeResponse(object["PayType"]))
+	d.Set("instance_charge_type", object["InstanceChargeType"])
 	d.Set("resource_group_id", object["ResourceGroupId"])
 	d.Set("slave_zone_id", object["SlaveZoneId"])
 	d.Set("status", object["LoadBalancerStatus"])
@@ -476,6 +489,39 @@ func resourceAlicloudSlbLoadBalancerUpdate(d *schema.ResourceData, meta interfac
 		}
 		d.SetPartial("name")
 		d.SetPartial("load_balancer_name")
+	}
+	update = false
+	modifyLoadBalancerInstanceChargeTypeReq := map[string]interface{}{
+		"LoadBalancerId": d.Id(),
+	}
+	if !d.IsNewResource() && d.HasChange("instance_charge_type") {
+		update = true
+		modifyLoadBalancerInstanceChargeTypeReq["InstanceChargeType"] = d.Get("instance_charge_type")
+	}
+	modifyLoadBalancerInstanceChargeTypeReq["RegionId"] = client.RegionId
+	if update {
+		action := "ModifyLoadBalancerInstanceChargeType"
+		conn, err := client.NewSlbClient()
+		if err != nil {
+			return WrapError(err)
+		}
+		wait := incrementalWait(3*time.Second, 3*time.Second)
+		err = resource.Retry(d.Timeout(schema.TimeoutUpdate), func() *resource.RetryError {
+			response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2014-05-15"), StringPointer("AK"), nil, modifyLoadBalancerInstanceChargeTypeReq, &util.RuntimeOptions{})
+			if err != nil {
+				if NeedRetry(err) {
+					wait()
+					return resource.RetryableError(err)
+				}
+				return resource.NonRetryableError(err)
+			}
+			addDebug(action, response, modifyLoadBalancerInstanceChargeTypeReq)
+			return nil
+		})
+		if err != nil {
+			return WrapErrorf(err, DefaultErrorMsg, d.Id(), action, AlibabaCloudSdkGoERROR)
+		}
+		d.SetPartial("instance_charge_type")
 	}
 	update = false
 	modifyLoadBalancerInstanceSpecReq := map[string]interface{}{
@@ -599,10 +645,6 @@ func resourceAlicloudSlbLoadBalancerUpdate(d *schema.ResourceData, meta interfac
 		update = true
 		modifyLoadBalancerPayTypeReq["PayType"] = convertSlbLoadBalancerPaymentTypeRequest(d.Get("payment_type").(string))
 	}
-	if !d.IsNewResource() && d.HasChange("instance_charge_type") {
-		update = true
-		modifyLoadBalancerPayTypeReq["PayType"] = convertSlbLoadBalancerInstanceChargeTypeRequest(d.Get("instance_charge_type").(string))
-	}
 	if v, ok := modifyLoadBalancerPayTypeReq["PayType"]; ok && v.(string) == "PrePay" {
 		period := 1
 		if v, ok := d.GetOk("period"); ok {
@@ -638,7 +680,6 @@ func resourceAlicloudSlbLoadBalancerUpdate(d *schema.ResourceData, meta interfac
 		if err != nil {
 			return WrapErrorf(err, DefaultErrorMsg, d.Id(), action, AlibabaCloudSdkGoERROR)
 		}
-		d.SetPartial("instance_charge_type")
 		d.SetPartial("payment_type")
 	}
 	d.Partial(false)

@@ -3,13 +3,10 @@ layout: "alicloud"
 page_title: "Provider: alicloud"
 sidebar_current: "docs-alicloud-index"
 description: |-
-  The Alicloud provider is used to interact with many resources supported by Alicloud. The provider needs to be configured with the proper credentials before it can be used.
+  The Alicloud provider is used to interact with many resources supported by Alibaba Cloud. The provider needs to be configured with the proper credentials before it can be used.
 ---
 
 # Alibaba Cloud Provider
-
-~> **News:** Currently, Alibaba Cloud has published [Terraform Module Web GUI](https://api.aliyun.com/#/cli?tool=Terraform) to
- help developers to use Terraform Module more simply and conveniently. Welcome to access it and let us know your more requirements!
 
 The Alibaba Cloud provider is used to interact with the
 many resources supported by [Alibaba Cloud](https://www.alibabacloud.com). The provider needs to be configured
@@ -22,42 +19,73 @@ Use the navigation on the left to read about the available resources.
 
 ## Example Usage
 
-```hcl
-# Configure the Alicloud Provider
+```terraform
+# Configure the AliCloud Provider
+
 provider "alicloud" {
-  access_key = "${var.access_key}"
-  secret_key = "${var.secret_key}"
-  region     = "${var.region}"
+  access_key = var.access_key
+  secret_key = var.secret_key
+  # If not set, cn-beijing will be used.
+  region = var.region
 }
 
-data "alicloud_instance_types" "c2g4" {
-  cpu_core_count = 2
-  memory_size    = 4
+variable "name" {
+  default = "terraform-example"
 }
 
-data "alicloud_images" "default" {
-  name_regex  = "^ubuntu"
-  most_recent = true
-  owners      = "system"
+data "alicloud_zones" "default" {
+  available_disk_category     = "cloud_efficiency"
+  available_resource_creation = "VSwitch"
 }
 
-# Create a web server
-resource "alicloud_instance" "web" {
-  image_id             = "${data.alicloud_images.default.images.0.id}"
-  internet_charge_type = "PayByBandwidth"
-
-  instance_type        = "${data.alicloud_instance_types.c2g4.instance_types.0.id}"
-  system_disk_category = "cloud_efficiency"
-  security_groups      = ["${alicloud_security_group.default.id}"]
-  instance_name        = "web"
-  vswitch_id           = "vsw-abc12345"
+# Create a new ECS instance for VPC
+resource "alicloud_vpc" "vpc" {
+  vpc_name   = var.name
+  cidr_block = "172.16.0.0/16"
 }
 
-# Create security group
-resource "alicloud_security_group" "default" {
-  name        = "default"
-  description = "default"
-  vpc_id      = "vpc-abc12345"
+resource "alicloud_vswitch" "vswitch" {
+  vpc_id       = alicloud_vpc.vpc.id
+  cidr_block   = "172.16.0.0/24"
+  zone_id      = data.alicloud_zones.default.zones.0.id
+  vswitch_name = var.name
+}
+
+# Create a new Security in a VPC
+resource "alicloud_security_group" "group" {
+  name        = var.name
+  description = "foo"
+  vpc_id      = alicloud_vpc.vpc.id
+}
+# Create a kms to encrypt the disk
+resource "alicloud_kms_key" "key" {
+  description            = "Hello KMS"
+  pending_window_in_days = "7"
+  status                 = "Enabled"
+}
+
+resource "alicloud_instance" "instance" {
+  # cn-beijing
+  availability_zone = data.alicloud_zones.default.zones.0.id
+  security_groups   = alicloud_security_group.group.*.id
+
+  # series III
+  instance_type              = "ecs.n4.large"
+  system_disk_category       = "cloud_efficiency"
+  system_disk_name           = var.name
+  system_disk_description    = "system_disk_description"
+  image_id                   = "ubuntu_18_04_64_20G_alibase_20190624.vhd"
+  instance_name              = var.name
+  vswitch_id                 = alicloud_vswitch.vswitch.id
+  internet_max_bandwidth_out = 10
+  data_disks {
+    name        = "data-disk"
+    size        = 20
+    category    = "cloud_efficiency"
+    description = "disk-description"
+    encrypted   = true
+    kms_key_id  = alicloud_kms_key.key.id
+  }
 }
 ```
 
@@ -69,8 +97,9 @@ The following methods are supported, in this order, and explained below:
 - Static credentials
 - Environment variables
 - Shared credentials/configuration file  
-- ECS Role
-- Assume role
+- ECS Instance Role
+- Assuming A RAM Role
+- Assuming A RAM Role With OIDC
 - Sidecar Credentials
 
 ### Static credentials
@@ -80,36 +109,37 @@ alicloud provider block:
 
 Usage:
 
-```hcl
+```terraform
 provider "alicloud" {
-  access_key = "${var.access_key}"
-  secret_key = "${var.secret_key}"
-  region     = "${var.region}"
+  access_key = var.access_key
+  secret_key = var.secret_key
+  region     = var.region
 }
 ```
 
 ### Environment variables
 
-You can provide your credentials via `ALICLOUD_ACCESS_KEY` and `ALICLOUD_SECRET_KEY`
-environment variables, representing your Alicloud access key and secret key respectively.
-`ALICLOUD_REGION` is also used, if applicable:
-
-```hcl
-provider "alicloud" {}
-```
+You can provide your credentials via `ALIBABA_CLOUD_ACCESS_KEY_ID`, `ALIBABA_CLOUD_ACCESS_KEY_SECRET` and optionally
+`ALIBABA_CLOUD_SECURITY_TOKEN` environment variables. The Region can be set using the `ALIBABA_CLOUD_REGION` environment variables.
 
 Usage:
-
+```terraform
+provider "alicloud" {}
+```
 ```shell
-$ export ALICLOUD_ACCESS_KEY="anaccesskey"
-$ export ALICLOUD_SECRET_KEY="asecretkey"
-$ export ALICLOUD_REGION="cn-beijing"
+$ export ALIBABA_CLOUD_ACCESS_KEY_ID="<Your-Access-Key-ID>"
+$ export ALIBABA_CLOUD_ACCESS_KEY_SECRET="<Your-Access-Key-Secret>"
+$ export ALIBABA_CLOUD_REGION="cn-beijing"
 $ terraform plan
 ```
 
 ### Shared Credentials File
 
-You can use an [Alibaba Cloud credentials or configuration file](https://www.alibabacloud.com/help/doc-detail/110341.htm) to specify your credentials. The default location is `$HOME/.aliyun/config.json` on Linux and macOS, or `"%USERPROFILE%\.aliyun/config.json"` on Windows. You can optionally specify a different location in the Terraform configuration by providing the `shared_credentials_file` argument or using the `ALICLOUD_SHARED_CREDENTIALS_FILE` environment variable. This method also supports a `profile` configuration and matching `ALICLOUD_PROFILE` environment variable:
+You can use an [Alibaba Cloud credentials or configuration file](https://www.alibabacloud.com/help/doc-detail/110341.htm) to specify your credentials. 
+The default location is `$HOME/.aliyun/config.json` on Linux and macOS, or `"%USERPROFILE%\.aliyun/config.json"` on Windows. 
+You can optionally specify a different location in the Terraform configuration by providing the `shared_credentials_file` argument 
+or using the `ALIBABA_CLOUD_CREDENTIALS_FILE` environment variable. 
+This method also supports a `profile` configuration and matching `ALIBABA_CLOUD_PROFILE` environment variable:
 
 Usage:
 
@@ -121,7 +151,7 @@ provider "alicloud" {
 }
 ```
 
-### ECS Role
+### ECS Instance Role
 
 If you're running Terraform from an ECS instance with RAM Instance using RAM Role,
 Terraform will just access
@@ -130,41 +160,67 @@ to obtain the STS credential.
 Refer to details [Access other Cloud Product APIs by the Instance RAM Role](https://www.alibabacloud.com/help/doc-detail/54579.htm).
 
 This is a preferred approach over any other when running in ECS as you can avoid
-hard coding credentials. Instead these are leased on-the-fly by Terraform
+hard coding credentials. Instead, these are leased on-the-fly by Terraform
 which reduces the chance of leakage.
 
+The ECS Instance Role can be set using the `ALIBABA_CLOUD_ECS_METADATA` environment variables.
 
 Usage:
 
-```hcl
+```terraform
 provider "alicloud" {
   ecs_role_name = "terraform-provider-alicloud"
-  region        = "${var.region}"
+  region        = var.region
 }
 ```
 
--> **NOTE:** At present, the [MNS Resources](https://www.terraform.io/docs/providers/alicloud/r/mns_queue.html) does not support ECS Role Credential.
+### Assuming A RAM Role
 
-### Assume role
-
-If provided with a role ARN, Terraform will attempt to assume this role using the supplied credentials.
+If provided with a role ARN, Terraform will attempt to assume this role using the supplied credentials. 
+The role arn can be set using the `ALIBABA_CLOUD_ROLE_ARN` environment variables, 
+and the role session name using the `ALIBABA_CLOUD_ROLE_SESSION_NAME` environment variables.
 
 Usage:
 
-```hcl
+```terraform
 provider "alicloud" {
+  access_key = "<One-AccessKeyId-With-AssumeRole-Policy>"
+  secret_key = "<One-AccessKeySecret-With-AssumeRole-Policy>"
   assume_role {
     role_arn           = "acs:ram::ACCOUNT_ID:role/ROLE_NAME"
-    policy             = "POLICY"
-    session_name       = "SESSION_NAME"
+    policy             = "Policy Content"
+    session_name       = "A Role Session Name"
     session_expiration = 999
+  }
+}
+```
+
+### Assuming A RAM Role With OIDC
+
+If provided with a role ARN and a token from a service account OpenID Connect (OIDC),
+the Alibaba CLoud Provider will attempt to assume this role using the supplied credentials.
+
+**NOTE:** Assuming-Role-With-OIDC is a no-AK auth type, and there is no need setting access_key and secret_key while using it.
+
+Usage:
+
+```terraform
+provider "alicloud" {
+  assume_role_with_oidc {
+    oidc_provider_arn = "acs:ram::ACCOUNT_ID:oidc-provider/ROLE_NAME"
+    role_arn          = "acs:ram::ACCOUNT_ID:role/ROLE_NAME"
+    oidc_token_file   = "/Users/tf_user/secrets/rrsa-tokens/token"
+    role_session_name = "A Role Session Name"
   }
 }
 ```
 
 ### Sidecar Credentials
 
-You can deploy a sidecar to storage alibaba cloud credentials. Then, you can optionally specify a credentials URI in the Terraform configuration by providing the `credentials_uri` argument or using the `ALICLOUD_CREDENTIALS_URI` environment variable to get the credentials automatically. The Sidecar Credentials is available in v1.141.0+.
+You can deploy a sidecar to storage alibaba cloud credentials. 
+Then, you can optionally specify a credentials URI in the Terraform configuration by providing the `credentials_uri` argument 
+or using the `ALIBABA_CLOUD_CREDENTIALS_URI` environment variable to get the credentials automatically. 
+The Sidecar Credentials is available since v1.141.0.
 
 Usage:
 
@@ -201,61 +257,108 @@ In addition to [generic `provider` arguments](https://www.terraform.io/docs/conf
 (e.g. `alias` and `version`), the following arguments are supported in the Alibaba Cloud
  `provider` block:
 
-* `access_key` - This is the Alicloud access key. It must be provided, but
-  it can also be sourced from the `ALICLOUD_ACCESS_KEY` environment variable, or via
-  a dynamic access key if `ecs_role_name` is specified.
+* `access_key` - Alibaba Cloud access key. It is required for the provider. 
+  Can also be set with the `ALIBABA_CLOUD_ACCESS_KEY_ID` environment variable since v1.228.0, 
+  or via a shared credentials file if profile is specified. See also `secret_key`. 
+  Environment variable `ALICLOUD_ACCESS_KEY` and `ALIBABACLOUD_ACCESS_KEY_ID` have been deprecated since v1.228.0.
 
-* `secret_key` - This is the Alicloud secret key. It must be provided, but
-  it can also be sourced from the `ALICLOUD_SECRET_KEY` environment variable, or via
-  a dynamic secret key if `ecs_role_name` is specified.
+* `secret_key` - Alibaba Cloud secret key. It is required for the provider. 
+  Can also be set with the `ALIBABA_CLOUD_ACCESS_KEY_SECRET` environment variable since v1.228.0,
+  or via a shared credentials file if profile is specified. See also `access_key`.
+  Environment variable `ALICLOUD_SECRET_KEY` and `ALIBABACLOUD_ACCESS_KEY_SECRET` have been deprecated since v1.228.0.
 
-* `security_token` - Alicloud [Security Token Service](https://www.alibabacloud.com/help/doc-detail/66222.html).
-  It can be sourced from the `ALICLOUD_SECURITY_TOKEN` environment variable,  or via
-  a dynamic security token if `ecs_role_name` is specified.
+* `security_token` - Alibaba Cloud [Security Token Service](https://www.alibabacloud.com/help/en/ram/product-overview/what-is-sts).
+  Can also be set with the `ALIBABA_CLOUD_SECURITY_TOKEN` environment variable since v1.228.0,
+  or via a shared credentials file if profile is specified. See also `access_key`.
+  Environment variable `ALICLOUD_SECURITY_TOKEN` and `ALIBABACLOUD_SECURITY_TOKEN` have been deprecated since v1.228.0.
 
-* `ecs_role_name` - "The RAM Role Name attached on a ECS instance for API operations. You can retrieve this from the 'Access Control' section of the Alibaba Cloud console.",
+* `ecs_role_name` - The RAM Role Name attached on a ECS instance for API operations.
+  Can also be set with the `ALIBABA_CLOUD_ECS_METADATA` environment variable since v1.228.0.
+  Environment variable `ALICLOUD_ECS_ROLE_NAME` has been deprecated since v1.228.0.
 
-* `region` - This is the Alicloud region. It must be provided, but
-  it can also be sourced from the `ALICLOUD_REGION` environment variables.
+* `region` - Alibaba Cloud region. Default to `cn-beijing`. 
+  Can also be set with the `ALIBABA_CLOUD_REGION` environment variable since v1.228.0.
+  Environment variable `ALICLOUD_REGION` has been deprecated since v1.228.0.
 
 * `account_id` - (Optional) Alibaba Cloud Account ID. It is used by the Function Compute service and to connect router interfaces.
   If not provided, the provider will attempt to retrieve it automatically with [STS GetCallerIdentity](https://www.alibabacloud.com/help/doc-detail/43767.htm).
-  It can be sourced from the `ALICLOUD_ACCOUNT_ID` environment variable.
+  Can also be set with the `ALIBABA_CLOUD_ACCOUNT_ID` environment variable since v1.228.0.
+  Environment variable `ALICLOUD_ACCOUNT_ID` has been deprecated since v1.228.0.
 
-* `shared_credentials_file` - (Optional, Available in 1.49.0+) This is the path to the shared credentials file. It can also be sourced from the `ALICLOUD_SHARED_CREDENTIALS_FILE` environment variable. If this is not set and a profile is specified, ~/.aliyun/config.json will be used.
+* `account_type` - (Optional, Available since 1.240.0) Alibaba Cloud [Account Type](https://registry.terraform.io/providers/aliyun/alicloud/latest/docs/guides/getting-account). 
+  It used to indicate caller identity's account type. Can also be set with the `ALIBABA_CLOUD_ACCOUNT_TYPE` environment variable. Valid values:
+  - `Domestic`(Default): China-Site Account.
+  - `International`: International-Site Account.
+  
+* `shared_credentials_file` - (Optional, Available since 1.49.0) This is the path to the shared credentials file.
+  Can also be set with the `ALIBABA_CLOUD_CREDENTIALS_FILE` environment variable since v1.228.0.
+  Environment variable `ALICLOUD_SHARED_CREDENTIALS_FILE` has been deprecated since v1.228.0.
+  If this is not set and `profile` is specified, "~/.aliyun/config.json" will be used.
 
-* `profile` - (Optional, Available in 1.49.0+) This is the Alicloud profile name as set in the shared credentials file. It can also be sourced from the `ALICLOUD_PROFILE` environment variable.
+* `profile` - (Optional, Available since 1.49.0) This is the Alibaba Cloud profile name as set in the shared credentials file.
+  Can also be set with the `ALIBABA_CLOUD_PROFILE` environment variable since v1.228.0.
+  Environment variable `ALICLOUD_PROFILE` has been deprecated since v1.228.0.
 
-* `assume_role` - (Optional) An `assume_role` block (documented below). Only one `assume_role` block may be in the configuration.
+* `assume_role` - (Optional) An [`assume_role` Configuration Block](#assume_role-configuration-block) block. Only one `assume_role` block may be in the configuration.
 
-* `endpoints` - (Optional) An `endpoints` block (documented below) to support custom endpoints.
+* `assume_role_with_oidc` - (Optional, Available since v1.220.0) Configuration block for assuming an RAM role using an OIDC. See the [`assume_role_with_oidc` Configuration Block](#assume_role_with_oidc-configuration-block) section below. Only one `assume_role_with_oidc` block may be in the configuration.
 
-* `skip_region_validation` - (Optional, Available in 1.52.0+) Skip static validation of region ID. Used by users of alternative AlibabaCloud-like APIs or users w/ access to regions that are not public (yet).
+* `credentials_uri` - (Optional, Available since 1.141.0) The URI of sidecar credentials service. 
+  Can also be set with the `ALIBABA_CLOUD_CREDENTIALS_URI` environment variable since v1.228.0.
+  Environment variable `ALICLOUD_CREDENTIALS_URI` has been deprecated since v1.228.0.
 
-* `configuration_source` - (Optional, Available in 1.56.0+) Use a string to mark a configuration file source, like `terraform-alicloud-modules/terraform-alicloud-ecs-instance` or `terraform-provider-alicloud/examples/vpc`.
-The length should not more than 64. From the version 1.145.0+, it supports to be set by environment variable `TF_APPEND_USER_AGENT`. See `Custom User-Agent Information`.
+* `endpoints` - (Optional) An [`endpoints`](#endpoints) block to support custom endpoints.
 
-* `protocol` - (Optional, Available in 1.72.0+) The Protocol of used by API request. Valid values: `HTTP` and `HTTPS`. Default to `HTTPS`. 
+* `skip_region_validation` - (Optional, Available since 1.52.0) Skip static validation of region ID. Used by users of alternative AlibabaCloud-like APIs or users w/ access to regions that are not public (yet).
 
-* `client_read_timeout` - (Optional, Available in 1.125.0+) The maximum timeout in millisecond second of the client read request. Default to 60000.
+* `configuration_source` - (Optional, Available since 1.56.0) Use a string to mark a configuration file source, like `terraform-alicloud-modules/terraform-alicloud-ecs-instance` or `terraform-provider-alicloud/examples/vpc`.
+The length should not more than 128(Before 1.207.2, it should not more than 64). Since the version 1.145.0, it supports to be set by environment variable `TF_APPEND_USER_AGENT`. See `Custom User-Agent Information`.
 
-* `client_connect_timeout` - (Optional, Available in 1.125.0+) The maximum timeout in millisecond second of the client connection server. Default to 60000.
+* `protocol` - (Optional, Available since 1.72.0) The Protocol of used by API request. Valid values: `HTTP` and `HTTPS`. Default to `HTTPS`. 
 
-The nested `assume_role` block supports the following:
+* `client_read_timeout` - (Optional, Available since 1.125.0) The maximum timeout in millisecond second of the client read request. Default to 60000.
 
-* `role_arn` - (Required) The ARN of the role to assume. If ARN is set to an empty string, it does not perform role switching. It supports environment variable `ALICLOUD_ASSUME_ROLE_ARN`.
+* `client_connect_timeout` - (Optional, Available since 1.125.0) The maximum timeout in millisecond second of the client connection server. Default to 60000.
+
+* `max_retry_timeout` - (Optional, Available since 1.183.0) The maximum retry timeout in second of the request. Default to `0`.
+
+### `assume_role` Configuration Block
+
+* `role_arn` - (Required) The ARN of the role to assume. If ARN is set to an empty string, it does not perform role switching. 
+  Can also be set with the `ALIBABA_CLOUD_ROLE_ARN` environment variable since v1.228.0.
+  Environment variable `ALICLOUD_ASSUME_ROLE_ARN` has been deprecated since v1.228.0.
   Terraform executes configuration on account with provided credentials.
 
 * `policy` - (Optional) A more restrictive policy to apply to the temporary credentials. This gives you a way to further restrict the permissions for the resulting temporary
   security credentials. You cannot use the passed policy to grant permissions that are in excess of those allowed by the access policy of the role that is being assumed.
 
-* `session_name` - (Optional) The session name to use when assuming the role. If omitted, 'terraform' is passed to the AssumeRole call as session name. It supports environment variable `ALICLOUD_ASSUME_ROLE_SESSION_NAME`.
+* `session_name` - (Optional) The session name to use when assuming the role. If omitted, 'terraform' is passed to the AssumeRole call as session name. 
+  Can also be set with the `ALIBABA_CLOUD_ROLE_SESSION_NAME` environment variable since v1.228.0.
+  Environment variable `ALICLOUD_ASSUME_ROLE_SESSION_NAME` has been deprecated since v1.228.0.
 
-* `session_expiration` - (Optional) The time after which the established session for assuming role expires. Valid value range: [900-3600] seconds. Default to 3600 (in this case Alicloud use own default value). It supports environment variable `ALICLOUD_ASSUME_ROLE_SESSION_EXPIRATION`.
+* `session_expiration` - (Optional) The time after which the established session for assuming role expires. Valid value range: [900-43200] seconds. Default to 3600 (in this case Alicloud use own default value). It supports environment variable `ALICLOUD_ASSUME_ROLE_SESSION_EXPIRATION`.
 
-* `credentials_uri` - (Optional, Available in 1.141.0+) The URI of sidecar credentials service. It can also be sourced from the `ALICLOUD_CREDENTIALS_URI` environment variable.
-  
-Nested `endpoints` block supports the following:
+* `external_id` - (Optional, Available since 1.207.1) The external ID of the RAM role. 
+  This parameter is provided by an external party and is used to prevent the confused deputy problem. 
+  The value must be 2 to 1,224 characters in length and can contain letters, digits, and the following special characters:`= , . @ : / - _`.
+
+### assume_role_with_oidc Configuration Block
+
+The `assume_role_with_oidc` configuration block supports the following arguments:
+
+* `oidc_provider_arn` - (Required) ARN of the OIDC IdP. Can also be set with the `ALIBABA_CLOUD_OIDC_PROVIDER_ARN` environment variable.
+* `role_arn` - (Required) ARN of the RAM Role to assume. Can also be set with the `ALIBABA_CLOUD_ROLE_ARN` environment variable.
+* `oidc_token` - (Optional) Value of a RRSA security token from an OIDC Idp. One of `oidc_token` or `oidc_token_file` is required.
+* `oidc_token_file` - (Optional) File containing a RRSA security token from an OIDC. One of `oidc_token_file` or `oidc_token` is required.
+  Can also be set with the `ALIBABA_CLOUD_OIDC_TOKEN_FILE` environment variable.
+* `role_session_name` - (Optional) The session name to use when assuming the role. If omitted, 'terraform' is passed to the AssumeRoleWithOIDC call as session name. 
+  Can also be set with the `ALIBABA_CLOUD_ROLE_SESSION_NAME` environment variable.
+* `session_expiration` - (Optional) The validity period of the STS token. Unit: seconds. Default value: 3600. Minimum value: 900. Maximum value: the value of the MaxSessionDuration parameter when creating a ram role.
+* `policy` - (Optional) The policy that specifies the permissions of the returned STS token. You can use this parameter to grant the STS token fewer permissions than the permissions granted to the RAM role.
+ 
+### `endpoints`
+
+**NOTE:** Due to certain API restrictions, the endpoints pointing to the area should be consistent with the `region_id`.
 
 * `ecs` - (Optional) Use this to override the default endpoint URL constructed from the `region`. It's typically used to connect to custom ECS endpoints.
 
@@ -381,6 +484,9 @@ Nested `endpoints` block supports the following:
 
 * `cloudsso` - (Optional) Use this to override the default endpoint URL constructed from the `region`. It's typically used to connect to custom Cloud SSO endpoints.
 
+* `edas` - (Optional) Use this to override the default endpoint URL constructed from the `region`. It's typically used to connect to custom EDAS endpoints.
+* `dmsenterprise` - - (Optional) Use this to override the default endpoint URL constructed from the `region`. It's typically used to connect to custom DMS Enterprise endpoints.
+
 ## Testing
 
-Credentials must be provided via the `ALICLOUD_ACCESS_KEY`, `ALICLOUD_SECRET_KEY` and `ALICLOUD_REGION` environment variables in order to run acceptance tests.
+Credentials must be provided via the `ALIBABA_CLOUD_ACCESS_KEY_ID`, `ALIBABA_CLOUD_ACCESS_KEY_SECRET` and `ALIBABA_CLOUD_REGION` environment variables in order to run acceptance tests.

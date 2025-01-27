@@ -1,20 +1,15 @@
 package alicloud
 
 import (
-	"fmt"
+	"encoding/json"
 	"regexp"
+	"strings"
 	"time"
 
-	roacs "github.com/alibabacloud-go/cs-20151215/v3/client"
+	roacs "github.com/alibabacloud-go/cs-20151215/v5/client"
 	"github.com/alibabacloud-go/tea/tea"
 
-	util "github.com/alibabacloud-go/tea-utils/service"
-
-	"github.com/hashicorp/terraform-plugin-sdk/helper/validation"
-
 	"github.com/aliyun/terraform-provider-alicloud/alicloud/connectivity"
-	"github.com/denverdino/aliyungo/common"
-	"github.com/denverdino/aliyungo/cs"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 )
@@ -39,37 +34,39 @@ func resourceAlicloudCSServerlessKubernetes() *schema.Resource {
 				Type:          schema.TypeString,
 				Optional:      true,
 				Computed:      true,
-				ValidateFunc:  validation.StringLenBetween(1, 63),
+				ValidateFunc:  StringLenBetween(1, 63),
 				ConflictsWith: []string{"name_prefix"},
 			},
 			"name_prefix": {
 				Type:          schema.TypeString,
 				Optional:      true,
-				ForceNew:      true,
-				ValidateFunc:  validation.StringLenBetween(0, 37),
+				ValidateFunc:  StringLenBetween(0, 37),
 				ConflictsWith: []string{"name"},
 			},
 			"vpc_id": {
-				Type:     schema.TypeString,
-				Required: true,
-				ForceNew: true,
+				Type:          schema.TypeString,
+				Optional:      true,
+				Computed:      true,
+				ForceNew:      true,
+				ConflictsWith: []string{"zone_id"},
 			},
 			"vswitch_id": {
-				Type:       schema.TypeString,
-				Optional:   true,
-				Computed:   true,
-				Deprecated: "Field 'vswitch_id' has been deprecated from provider version 1.91.0. New field 'vswitch_ids' replace it.",
+				Type:     schema.TypeString,
+				Optional: true,
+				Computed: true,
+				Removed:  "Field 'vswitch_id' has been removed from provider version 1.229.1. New field 'vswitch_ids' replace it.",
 			},
 			"vswitch_ids": {
 				Type:     schema.TypeList,
 				Optional: true,
+				ForceNew: true,
 				Computed: true,
 				Elem: &schema.Schema{
 					Type:         schema.TypeString,
-					ValidateFunc: validation.StringMatch(regexp.MustCompile(`^vsw-[a-z0-9]*$`), "should start with 'vsw-'."),
+					ValidateFunc: StringMatch(regexp.MustCompile(`^vsw-[a-z0-9]*$`), "should start with 'vsw-'."),
 				},
 				MinItems:      1,
-				ConflictsWith: []string{"vswitch_id"},
+				ConflictsWith: []string{"zone_id"},
 			},
 			"service_cidr": {
 				Type:     schema.TypeString,
@@ -79,7 +76,6 @@ func resourceAlicloudCSServerlessKubernetes() *schema.Resource {
 			"new_nat_gateway": {
 				Type:     schema.TypeBool,
 				Optional: true,
-				ForceNew: true,
 				Default:  true,
 			},
 			"deletion_protection": {
@@ -87,27 +83,29 @@ func resourceAlicloudCSServerlessKubernetes() *schema.Resource {
 				Optional: true,
 				Default:  false,
 			},
+			"enable_rrsa": {
+				Type:     schema.TypeBool,
+				Optional: true,
+			},
 			"private_zone": {
 				Type:          schema.TypeBool,
 				Optional:      true,
-				ForceNew:      true,
 				ConflictsWith: []string{"service_discovery_types"},
 				Deprecated:    "Field 'private_zone' has been deprecated from provider version 1.123.1. New field 'service_discovery_types' replace it.",
 			},
 			"service_discovery_types": {
 				Type:     schema.TypeList,
 				Optional: true,
-				ForceNew: true,
 				Elem: &schema.Schema{
 					Type:         schema.TypeString,
-					ValidateFunc: validation.StringInSlice([]string{"CoreDNS", "PrivateZone"}, false),
+					ValidateFunc: StringInSlice([]string{"CoreDNS", "PrivateZone"}, false),
 				},
 				ConflictsWith: []string{"private_zone"},
 			},
 			"zone_id": {
-				Type:     schema.TypeString,
-				ForceNew: true,
-				Optional: true,
+				Type:          schema.TypeString,
+				Optional:      true,
+				ConflictsWith: []string{"vpc_id", "vswitch_ids", "vswitch_id"},
 			},
 			"endpoint_public_access_enabled": {
 				Type:     schema.TypeBool,
@@ -116,23 +114,20 @@ func resourceAlicloudCSServerlessKubernetes() *schema.Resource {
 				Default:  false,
 			},
 			"kube_config": {
-				Type:     schema.TypeString,
-				ForceNew: true,
-				Optional: true,
+				Type:       schema.TypeString,
+				Optional:   true,
+				Deprecated: "Field 'kube_config' has been deprecated from provider version 1.187.0. New DataSource 'alicloud_cs_cluster_credential' manage your cluster's kube config.",
 			},
 			"client_cert": {
 				Type:     schema.TypeString,
-				ForceNew: true,
 				Optional: true,
 			},
 			"client_key": {
 				Type:     schema.TypeString,
-				ForceNew: true,
 				Optional: true,
 			},
 			"cluster_ca_cert": {
 				Type:     schema.TypeString,
-				ForceNew: true,
 				Optional: true,
 			},
 			"tags": {
@@ -142,18 +137,17 @@ func resourceAlicloudCSServerlessKubernetes() *schema.Resource {
 			"force_update": {
 				Type:     schema.TypeBool,
 				Optional: true,
-				ForceNew: true,
-				Default:  false,
+				Removed:  "Field 'force_update' has been removed from provider version 1.229.1.",
 			},
 			"security_group_id": {
 				Type:     schema.TypeString,
 				Optional: true,
+				ForceNew: true,
 				Computed: true,
 			},
 			"addons": {
 				Type:     schema.TypeList,
 				Optional: true,
-				Computed: true,
 				Elem: &schema.Resource{
 					Schema: map[string]*schema.Schema{
 						"name": {
@@ -161,6 +155,10 @@ func resourceAlicloudCSServerlessKubernetes() *schema.Resource {
 							Optional: true,
 						},
 						"config": {
+							Type:     schema.TypeString,
+							Optional: true,
+						},
+						"version": {
 							Type:     schema.TypeString,
 							Optional: true,
 						},
@@ -181,31 +179,30 @@ func resourceAlicloudCSServerlessKubernetes() *schema.Resource {
 				Type:     schema.TypeString,
 				Optional: true,
 				Computed: true,
-				ForceNew: true,
 			},
 			"load_balancer_spec": {
 				Type:         schema.TypeString,
 				Optional:     true,
 				Computed:     true,
-				ValidateFunc: validation.StringInSlice([]string{"slb.s1.small", "slb.s2.small", "slb.s2.medium", "slb.s3.small", "slb.s3.medium", "slb.s3.large"}, false),
+				ValidateFunc: StringInSlice([]string{"slb.s1.small", "slb.s2.small", "slb.s2.medium", "slb.s3.small", "slb.s3.medium", "slb.s3.large"}, false),
+				Deprecated:   "Field 'load_balancer_spec' has been deprecated from provider version 1.229.1. The load balancer has been changed to PayByCLCU so that the spec is no need anymore.",
 			},
 			"logging_type": {
-				Type:     schema.TypeString,
-				Optional: true,
-				ForceNew: true,
-				Default:  "SLS",
+				Type:       schema.TypeString,
+				Optional:   true,
+				Default:    "SLS",
+				Deprecated: "Field 'logging_type' has been deprecated from provider version 1.229.1. Please use addons `alibaba-log-controller` to enable logging.",
 			},
 			"sls_project_name": {
-				Type:     schema.TypeString,
-				Optional: true,
-				Computed: true,
-				ForceNew: true,
+				Type:       schema.TypeString,
+				Optional:   true,
+				Computed:   true,
+				Deprecated: "Field 'sls_project_name' has been deprecated from provider version 1.229.1. Please use the field `config` of addons `alibaba-log-controller` to specify log project name.",
 			},
 			"time_zone": {
 				Type:     schema.TypeString,
 				Optional: true,
 				Computed: true,
-				ForceNew: true,
 			},
 			"retain_resources": {
 				Type:     schema.TypeList,
@@ -218,13 +215,117 @@ func resourceAlicloudCSServerlessKubernetes() *schema.Resource {
 				Type:         schema.TypeString,
 				Optional:     true,
 				Computed:     true,
-				ForceNew:     true,
-				ValidateFunc: validation.StringInSlice([]string{"ack.standard", "ack.pro.small"}, false),
+				ValidateFunc: StringInSlice([]string{"ack.standard", "ack.pro.small"}, false),
 			},
 			"create_v2_cluster": {
 				Type:     schema.TypeBool,
 				Optional: true,
 				Computed: true,
+				Removed:  "Field 'create_v2_cluster' has been removed from provider version 1.229.1.",
+			},
+			"rrsa_metadata": {
+				Type:     schema.TypeList,
+				Computed: true,
+				MaxItems: 1,
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"enabled": {
+							Type:     schema.TypeBool,
+							Computed: true,
+						},
+						"rrsa_oidc_issuer_url": {
+							Type:     schema.TypeString,
+							Computed: true,
+						},
+						"ram_oidc_provider_name": {
+							Type:     schema.TypeString,
+							Computed: true,
+						},
+						"ram_oidc_provider_arn": {
+							Type:     schema.TypeString,
+							Computed: true,
+						},
+					},
+				},
+			},
+			"custom_san": {
+				Type:     schema.TypeString,
+				Optional: true,
+			},
+			"delete_options": {
+				Type:     schema.TypeList,
+				Optional: true,
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"resource_type": {
+							Type:         schema.TypeString,
+							Optional:     true,
+							ValidateFunc: StringInSlice([]string{"SLB", "ALB", "SLS_Data", "SLS_ControlPlane", "PrivateZone"}, false),
+						},
+						"delete_mode": {
+							Type:         schema.TypeString,
+							Optional:     true,
+							ValidateFunc: StringInSlice([]string{"delete", "retain"}, false),
+						},
+					},
+				},
+			},
+			"maintenance_window": {
+				Type:     schema.TypeList,
+				Optional: true,
+				Computed: true,
+				MaxItems: 1,
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"enable": {
+							Type:     schema.TypeBool,
+							Optional: true,
+							Computed: true,
+						},
+						"maintenance_time": {
+							Type:     schema.TypeString,
+							Optional: true,
+							Computed: true,
+						},
+						"duration": {
+							Type:     schema.TypeString,
+							Optional: true,
+							Computed: true,
+						},
+						"weekly_period": {
+							Type:     schema.TypeString,
+							Optional: true,
+							Computed: true,
+						},
+					},
+				},
+			},
+			"operation_policy": {
+				Type:     schema.TypeList,
+				Optional: true,
+				Computed: true,
+				MaxItems: 1,
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"cluster_auto_upgrade": {
+							Type:     schema.TypeList,
+							Optional: true,
+							MaxItems: 1,
+							Elem: &schema.Resource{
+								Schema: map[string]*schema.Schema{
+									"enabled": {
+										Type:     schema.TypeBool,
+										Optional: true,
+									},
+									"channel": {
+										Type:     schema.TypeString,
+										Optional: true,
+									},
+								},
+							},
+						},
+					},
+				},
 			},
 		},
 	}
@@ -232,9 +333,8 @@ func resourceAlicloudCSServerlessKubernetes() *schema.Resource {
 
 func resourceAlicloudCSServerlessKubernetesCreate(d *schema.ResourceData, meta interface{}) error {
 	client := meta.(*connectivity.AliyunClient)
-	invoker := NewInvoker()
-
-	csService := CsService{client}
+	roa, _ := client.NewRoaCsClient()
+	csClient := CsClient{roa}
 
 	var clusterName string
 	if v, ok := d.GetOk("name"); ok {
@@ -243,161 +343,199 @@ func resourceAlicloudCSServerlessKubernetesCreate(d *schema.ResourceData, meta i
 		clusterName = resource.PrefixedUniqueId(d.Get("name_prefix").(string))
 	}
 
-	tags := make([]cs.Tag, 0)
+	tags := make([]*roacs.Tag, 0)
 	tagsMap, ok := d.Get("tags").(map[string]interface{})
 	if ok {
 		for key, value := range tagsMap {
 			if value != nil {
 				if v, ok := value.(string); ok {
-					tags = append(tags, cs.Tag{
-						Key:   key,
-						Value: v,
+					tags = append(tags, &roacs.Tag{
+						Key:   tea.String(key),
+						Value: tea.String(v),
 					})
 				}
 			}
 		}
 	}
 
-	addons := make([]cs.Addon, 0)
+	addons := make([]*roacs.Addon, 0)
 	if v, ok := d.GetOk("addons"); ok {
 		all, ok := v.([]interface{})
 		if ok {
 			for _, a := range all {
 				addon, ok := a.(map[string]interface{})
 				if ok {
-					addons = append(addons, cs.Addon{
-						Name:     addon["name"].(string),
-						Config:   addon["config"].(string),
-						Disabled: addon["disabled"].(bool),
+					addons = append(addons, &roacs.Addon{
+						Name:     tea.String(addon["name"].(string)),
+						Config:   tea.String(addon["config"].(string)),
+						Version:  tea.String(addon["version"].(string)),
+						Disabled: tea.Bool(addon["disabled"].(bool)),
 					})
 				}
 			}
 		}
 	}
-
-	var clusterType, profile string
-	if d.Get("create_v2_cluster").(bool) {
-		clusterType = cs.ClusterTypeServerlessKubernetes
-		profile = "ask.v2"
-	} else {
-		clusterType = cs.ClusterTypeManagedKubernetes
-		profile = cs.ProfileServerlessKubernetes
-	}
-
-	args := &cs.ServerlessCreationArgs{
-		Name:                 clusterName,
-		ClusterType:          cs.KubernetesClusterType(clusterType),
-		Profile:              cs.KubernetesClusterProfile(profile),
-		RegionId:             client.RegionId,
-		VpcId:                d.Get("vpc_id").(string),
-		EndpointPublicAccess: d.Get("endpoint_public_access_enabled").(bool),
-		NatGateway:           d.Get("new_nat_gateway").(bool),
-		SecurityGroupId:      d.Get("security_group_id").(string),
-		Addons:               addons,
-		KubernetesVersion:    d.Get("version").(string),
-		DeletionProtection:   d.Get("deletion_protection").(bool),
-		ResourceGroupId:      d.Get("resource_group_id").(string),
-	}
-
-	newGatway := d.Get("new_nat_gateway").(bool)
-	if d.Get("create_v2_cluster").(bool) {
-		args.NatGateway = newGatway
-	} else {
-		args.SnatEntry = newGatway
-	}
-
-	if v, ok := d.GetOk("time_zone"); ok {
-		args.TimeZone = v.(string)
-	}
-
-	if v, ok := d.GetOk("zone_id"); ok {
-		args.ZoneID = v.(string)
-	}
-
-	if v, ok := d.GetOk("service_cidr"); ok {
-		args.ServiceCIDR = v.(string)
-	}
-
-	if v, ok := d.GetOk("logging_type"); ok {
-		args.LoggingType = v.(string)
-	}
-
 	if v, ok := d.GetOk("sls_project_name"); ok {
-		args.SLSProjectName = v.(string)
-	}
+		exist := false
+		for _, addon := range addons {
+			if tea.StringValue(addon.Name) == "alibaba-log-controller" {
+				var config map[string]interface{}
+				err := json.Unmarshal([]byte(tea.StringValue(addon.Config)), &config)
+				if err == nil {
+					if project, ok := config["sls_project_name"].(string); !ok || project == "" {
+						config["sls_project_name"] = v.(string)
+					}
+					if configRaw, err := json.Marshal(config); err == nil {
+						addon.Config = tea.String(string(configRaw))
+					}
+				}
+				exist = true
+				break
+			}
+		}
+		if exist == false {
+			config := map[string]interface{}{
+				"sls_project_name": v.(string),
+			}
+			if configRaw, err := json.Marshal(config); err == nil {
+				addons = append(addons, &roacs.Addon{
+					Name:   tea.String("alibaba-log-controller"),
+					Config: tea.String(string(configRaw)),
+				})
+			}
 
-	if v, ok := d.GetOk("service_discovery_types"); ok {
-		args.ServiceDiscoveryTypes = expandStringList(v.([]interface{}))
-	}
-
-	if v, ok := d.GetOkExists("private_zone"); ok {
-		args.ServiceDiscoveryTypes = []string{}
-		if v.(bool) == true {
-			args.ServiceDiscoveryTypes = []string{"PrivateZone"}
 		}
 	}
 
-	if v := d.Get("vswitch_id").(string); v != "" {
-		args.VSwitchId = v
+	request := &roacs.CreateClusterRequest{
+		Name:                 tea.String(clusterName),
+		KubernetesVersion:    tea.String(d.Get("version").(string)),
+		ClusterType:          tea.String("ManagedKubernetes"),
+		Profile:              tea.String("Serverless"),
+		Tags:                 tags,
+		Addons:               addons,
+		DeletionProtection:   tea.Bool(d.Get("deletion_protection").(bool)),
+		RegionId:             tea.String(client.RegionId),
+		ResourceGroupId:      tea.String(d.Get("resource_group_id").(string)),
+		Vpcid:                tea.String(d.Get("vpc_id").(string)),
+		SnatEntry:            tea.Bool(d.Get("new_nat_gateway").(bool)),
+		NatGateway:           tea.Bool(d.Get("new_nat_gateway").(bool)),
+		EndpointPublicAccess: tea.Bool(d.Get("endpoint_public_access_enabled").(bool)),
+		SecurityGroupId:      tea.String(d.Get("security_group_id").(string)),
+		LoggingType:          tea.String(d.Get("logging_type").(string)),
+	}
+	if v, ok := d.GetOk("time_zone"); ok {
+		request.Timezone = tea.String(v.(string))
+	}
+
+	if v, ok := d.GetOk("zone_id"); ok {
+		request.ZoneId = tea.String(v.(string))
+	}
+
+	if v, ok := d.GetOk("service_cidr"); ok {
+		request.ServiceCidr = tea.String(v.(string))
+	}
+
+	if v, ok := d.GetOk("service_discovery_types"); ok {
+		r := make([]*string, 0)
+		for _, vv := range v.([]interface{}) {
+			r = append(r, tea.String(vv.(string)))
+		}
+		request.ServiceDiscoveryTypes = r
+	}
+
+	if v, ok := d.GetOkExists("private_zone"); ok {
+		request.ServiceDiscoveryTypes = []*string{}
+		if v.(bool) == true {
+			request.ServiceDiscoveryTypes = []*string{tea.String("PrivateZone")}
+		}
 	}
 
 	if v, ok := d.GetOk("vswitch_ids"); ok {
-		args.VswitchIds = expandStringList(v.([]interface{}))
+		r := make([]*string, 0)
+		for _, vv := range v.([]interface{}) {
+			r = append(r, tea.String(vv.(string)))
+		}
+		request.VswitchIds = r
 	}
 
-	if lbSpec, ok := d.GetOk("load_balancer_spec"); ok {
-		args.LoadBalancerSpec = lbSpec.(string)
+	if v, ok := d.GetOk("load_balancer_spec"); ok {
+		request.LoadBalancerSpec = tea.String(v.(string))
 	}
 
-	if spec, ok := d.GetOk("cluster_spec"); ok {
-		args.ClusterSpec = spec.(string)
+	if v, ok := d.GetOk("cluster_spec"); ok {
+		request.ClusterSpec = tea.String(v.(string))
+	}
+
+	if v, ok := d.GetOk("enable_rrsa"); ok {
+		request.EnableRrsa = tea.Bool(v.(bool))
+	}
+
+	if v, ok := d.GetOk("custom_san"); ok {
+		request.CustomSan = tea.String(v.(string))
+	}
+
+	if v, ok := d.GetOk("maintenance_window"); ok {
+		request.MaintenanceWindow = expandMaintenanceWindowConfigRoa(v.([]interface{}))
+	}
+
+	if v, ok := d.GetOk("operation_policy"); ok {
+		request.OperationPolicy = &roacs.CreateClusterRequestOperationPolicy{}
+		m := v.([]interface{})[0].(map[string]interface{})
+		if vv, ok := m["cluster_auto_upgrade"]; ok {
+			policy := vv.([]interface{})[0].(map[string]interface{})
+			request.OperationPolicy.ClusterAutoUpgrade = &roacs.CreateClusterRequestOperationPolicyClusterAutoUpgrade{
+				Enabled: tea.Bool(policy["enabled"].(bool)),
+				Channel: tea.String(policy["channel"].(string)),
+			}
+		}
 	}
 
 	//set tags
 	if len(tags) > 0 {
-		args.Tags = tags
+		request.Tags = tags
+	}
+	var err error
+	var resp *roacs.CreateClusterResponse
+	wait := incrementalWait(3*time.Second, 3*time.Second)
+	err = resource.Retry(5*time.Minute, func() *resource.RetryError {
+		resp, err = csClient.client.CreateCluster(request)
+		if err != nil {
+			if NeedRetry(err) {
+				wait()
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		return nil
+	})
+	if err != nil {
+		return WrapErrorf(err, DefaultErrorMsg, "alicloud_cs_serverless_kubernetes", "CreateServerlessKubernetesCluster", AlibabaCloudSdkGoERROR)
+	}
+	d.SetId(tea.StringValue(resp.Body.ClusterId))
+	taskId := tea.StringValue(resp.Body.TaskId)
+	stateConf := BuildStateConf([]string{}, []string{"success"}, d.Timeout(schema.TimeoutCreate), 10*time.Second, csClient.DescribeTaskRefreshFunc(d, taskId, []string{"fail", "failed"}))
+	if jobDetail, err := stateConf.WaitForState(); err != nil {
+		return WrapErrorf(err, ResponseCodeMsg, d.Id(), "createCluster", jobDetail)
 	}
 
-	var requestInfo *cs.Client
-	var response interface{}
-	if err := invoker.Run(func() error {
-		raw, err := client.WithCsClient(func(csClient *cs.Client) (interface{}, error) {
-			requestInfo = csClient
-			return csClient.CreateServerlessKubernetesCluster(args)
-		})
-		response = raw
-		return err
-	}); err != nil {
-		return WrapErrorf(err, DefaultErrorMsg, "alicloud_cs_serverless_kubernetes", "CreateServerlessKubernetesCluster", DenverdinoAliyungo)
-	}
-	if debugOn() {
-		requestMap := make(map[string]interface{})
-		requestMap["RegionId"] = common.Region(client.RegionId)
-		requestMap["Args"] = args
-		addDebug("CreateServerlessKubernetesCluster", response, requestInfo, requestMap)
-	}
-	cluster, _ := response.(*cs.ClusterCommonResponse)
-	d.SetId(cluster.ClusterID)
-
-	stateConf := BuildStateConf([]string{"initial"}, []string{"running"}, d.Timeout(schema.TimeoutCreate), 30*time.Second, csService.CsServerlessKubernetesInstanceStateRefreshFunc(d.Id(), []string{"deleting", "failed"}))
-
+	csService := CsService{client}
+	stateConf = BuildStateConf([]string{"initial"}, []string{"running"}, d.Timeout(schema.TimeoutCreate), 30*time.Second, csService.CsServerlessKubernetesInstanceStateRefreshFunc(d.Id(), []string{"deleting", "failed"}))
 	if _, err := stateConf.WaitForState(); err != nil {
 		return WrapErrorf(err, IdMsg, d.Id())
 	}
-
 	return resourceAlicloudCSServerlessKubernetesRead(d, meta)
 }
 
 func resourceAlicloudCSServerlessKubernetesRead(d *schema.ResourceData, meta interface{}) error {
 	client := meta.(*connectivity.AliyunClient)
-	csService := CsService{client}
-	invoker := NewInvoker()
 	rosClient, err := client.NewRoaCsClient()
 	if err != nil {
 		return WrapErrorf(err, DefaultErrorMsg, ResourceName, "InitializeClient", err)
 	}
+	csClient := CsClient{rosClient}
 
-	object, err := csService.DescribeCsServerlessKubernetes(d.Id())
+	object, err := csClient.DescribeClusterDetail(d.Id())
 	if err != nil {
 		if NotFoundError(err) {
 			d.SetId("")
@@ -407,7 +545,8 @@ func resourceAlicloudCSServerlessKubernetesRead(d *schema.ResourceData, meta int
 	}
 
 	vswitchIds := []string{}
-	resources, _ := rosClient.DescribeClusterResources(tea.String(d.Id()))
+	request := &roacs.DescribeClusterResourcesRequest{}
+	resources, _ := rosClient.DescribeClusterResources(tea.String(d.Id()), request)
 	for _, resource := range resources.Body {
 		if tea.StringValue(resource.ResourceType) == "VSWITCH" {
 			vswitchIds = append(vswitchIds, tea.StringValue(resource.InstanceId))
@@ -416,7 +555,6 @@ func resourceAlicloudCSServerlessKubernetesRead(d *schema.ResourceData, meta int
 
 	d.Set("name", object.Name)
 	d.Set("vpc_id", object.VpcId)
-	d.Set("vswitch_id", object.VSwitchId)
 	d.Set("vswitch_ids", vswitchIds)
 	d.Set("security_group_id", object.SecurityGroupId)
 	d.Set("deletion_protection", object.DeletionProtection)
@@ -424,7 +562,11 @@ func resourceAlicloudCSServerlessKubernetesRead(d *schema.ResourceData, meta int
 	d.Set("resource_group_id", object.ResourceGroupId)
 	d.Set("cluster_spec", object.ClusterSpec)
 
-	if err := d.Set("tags", flattenTagsConfig(object.Tags)); err != nil {
+	if object.Timezone != nil {
+		d.Set("timezone", object.Timezone)
+	}
+
+	if err := d.Set("tags", flattenTags(object.Tags)); err != nil {
 		return WrapError(err)
 	}
 	if d.Get("load_balancer_spec") == "" {
@@ -434,162 +576,97 @@ func resourceAlicloudCSServerlessKubernetesRead(d *schema.ResourceData, meta int
 		d.Set("logging_type", "SLS")
 	}
 
-	var requestInfo *cs.Client
-	var response interface{}
+	if object.ServiceCidr != nil {
+		d.Set("service_cidr", object.ServiceCidr)
+	} else {
+		if v, ok := object.Parameters["ServiceCIDR"]; ok {
+			d.Set("service_cidr", v)
+		}
+	}
+	capabilities := fetchClusterCapabilities(tea.StringValue(object.MetaData))
+	if v, ok := capabilities["PublicSLB"]; ok {
+		d.Set("endpoint_public_access_enabled", Interface2Bool(v))
+	}
+	metadata := fetchClusterMetaDataMap(tea.StringValue(object.MetaData))
+	if v, ok := metadata["ExtraCertSAN"]; ok && v != nil {
+		l := expandStringList(v.([]interface{}))
+		d.Set("custom_san", strings.Join(l, ","))
+	}
 
-	if err := invoker.Run(func() error {
-		raw, err := client.WithCsClient(func(csClient *cs.Client) (interface{}, error) {
-			requestInfo = csClient
-			return csClient.GetClusterCerts(d.Id())
-		})
-		response = raw
-		return err
-	}); err != nil {
-		return WrapErrorf(err, DefaultErrorMsg, d.Id(), "GetClusterCerts", DenverdinoAliyungo)
-	}
-	if debugOn() {
-		requestMap := make(map[string]interface{})
-		requestMap["ClusterId"] = d.Id()
-		addDebug("GetClusterCerts", response, requestInfo, requestMap)
-	}
-	cert, _ := response.(cs.ClusterCerts)
-	if ce, ok := d.GetOk("client_cert"); ok && ce.(string) != "" {
-		if err := writeToFile(ce.(string), cert.Cert); err != nil {
-			return WrapError(err)
-		}
-	}
-	if key, ok := d.GetOk("client_key"); ok && key.(string) != "" {
-		if err := writeToFile(key.(string), cert.Key); err != nil {
-			return WrapError(err)
-		}
-	}
-	if ca, ok := d.GetOk("cluster_ca_cert"); ok && ca.(string) != "" {
-		if err := writeToFile(ca.(string), cert.CA); err != nil {
-			return WrapError(err)
+	if data, err := flattenRRSAMetadata(tea.StringValue(object.MetaData)); err != nil {
+		return WrapError(err)
+	} else {
+		d.Set("rrsa_metadata", data)
+		if len(data) > 0 {
+			d.Set("enable_rrsa", data[0]["enabled"].(bool))
 		}
 	}
 
-	var config *cs.ClusterConfig
-	if file, ok := d.GetOk("kube_config"); ok && file.(string) != "" {
-		var requestInfo *cs.Client
+	if object.MaintenanceWindow != nil {
+		d.Set("maintenance_window", flattenMaintenanceWindowConfigRoa(object.MaintenanceWindow))
+	}
 
-		if err := invoker.Run(func() error {
-			raw, err := client.WithCsClient(func(csClient *cs.Client) (interface{}, error) {
-				requestInfo = csClient
-				return csClient.DescribeClusterUserConfig(d.Id(), !d.Get("endpoint_public_access_enabled").(bool))
+	if object.OperationPolicy != nil {
+		m := make([]map[string]interface{}, 0)
+		if object.OperationPolicy.ClusterAutoUpgrade != nil {
+			m = append(m, map[string]interface{}{
+				"cluster_auto_upgrade": []map[string]interface{}{
+					{
+						"enabled": tea.BoolValue(object.OperationPolicy.ClusterAutoUpgrade.Enabled),
+						"channel": tea.StringValue(object.OperationPolicy.ClusterAutoUpgrade.Channel),
+					},
+				},
 			})
-			response = raw
-			return err
-		}); err != nil {
-			return WrapErrorf(err, DefaultErrorMsg, d.Id(), "GetClusterConfig", DenverdinoAliyungo)
 		}
-		if debugOn() {
-			requestMap := make(map[string]interface{})
-			requestMap["ClusterId"] = d.Id()
-			addDebug("GetClusterConfig", response, requestInfo, requestMap)
-		}
-		config, _ = response.(*cs.ClusterConfig)
-
-		if err := writeToFile(file.(string), config.Config); err != nil {
-			return WrapError(err)
-		}
+		d.Set("operation_policy", m)
 	}
+
+	// get cluster conn certs
+	// If the cluster is failed, there is no need to get cluster certs
+	if tea.StringValue(object.State) == "failed" || tea.StringValue(object.State) == "deleted_failed" || tea.StringValue(object.State) == "deleting" {
+		return nil
+	}
+
+	if err = setCerts(d, meta, false); err != nil {
+		return WrapError(err)
+	}
+
 	return nil
 }
 
 func resourceAlicloudCSServerlessKubernetesUpdate(d *schema.ResourceData, meta interface{}) error {
-	d.Partial(true)
+	invoker := NewInvoker()
+	// modifyCluster
+	if !d.IsNewResource() && d.HasChanges("resource_group_id", "name", "name_prefix", "deletion_protection", "custom_san", "maintenance_window", "operation_policy", "enable_rrsa") {
+		if err := modifyCluster(d, meta, &invoker); err != nil {
+			return WrapErrorf(err, DefaultErrorMsg, d.Id(), "ModifyCluster", AlibabaCloudSdkGoERROR)
+		}
+	}
+
 	// modify cluster tag
 	if d.HasChange("tags") {
 		err := updateKubernetesClusterTag(d, meta)
 		if err != nil {
 			return WrapErrorf(err, ResponseCodeMsg, d.Id(), "ModifyClusterTags", AlibabaCloudSdkGoERROR)
 		}
-		d.SetPartial("tags")
+	}
+	// migrate cluster to pro form standard
+	if d.HasChange("cluster_spec") {
+		err := migrateCluster(d, meta)
+		if err != nil {
+			return WrapError(err)
+		}
 	}
 
-	// upgrade cluster version
+	// upgrade cluster
 	err := UpgradeAlicloudKubernetesCluster(d, meta)
 	if err != nil {
-		return WrapErrorf(err, DefaultErrorMsg, d.Id(), "UpgradeClusterVersion", DenverdinoAliyungo)
+		return WrapError(err)
 	}
 
-	if err := modifyKubernetesCluster(d, meta); err != nil {
-		return WrapErrorf(err, DefaultErrorMsg, d.Id(), "ModifyCluster", DenverdinoAliyungo)
-	}
-
-	d.Partial(false)
 	return resourceAlicloudCSServerlessKubernetesRead(d, meta)
 }
 
 func resourceAlicloudCSServerlessKubernetesDelete(d *schema.ResourceData, meta interface{}) error {
-	csService := CsService{meta.(*connectivity.AliyunClient)}
-	client, err := meta.(*connectivity.AliyunClient).NewRoaCsClient()
-	if err != nil {
-		return WrapErrorf(err, DefaultErrorMsg, ResourceName, "InitializeClient", err)
-	}
-
-	args := &roacs.DeleteClusterRequest{}
-	if v := d.Get("retain_resources"); len(v.([]interface{})) > 0 {
-		args.RetainResources = tea.StringSlice(expandStringList(v.([]interface{})))
-	}
-
-	_, err = client.DeleteCluster(tea.String(d.Id()), args)
-	if err != nil {
-		if IsExpectedErrors(err, []string{"ErrorClusterNotFound"}) {
-			return nil
-		}
-		return WrapErrorf(err, DefaultErrorMsg, ResourceName, "DeleteCluster", AliyunTablestoreGoSdk)
-	}
-
-	stateConf := BuildStateConf([]string{"running", "deleting"}, []string{}, d.Timeout(schema.TimeoutDelete), 30*time.Second, csService.CsServerlessKubernetesInstanceStateRefreshFunc(d.Id(), []string{}))
-
-	if _, err := stateConf.WaitForState(); err != nil {
-		return WrapErrorf(err, IdMsg, d.Id())
-	}
-	return nil
-}
-
-func modifyKubernetesCluster(d *schema.ResourceData, meta interface{}) error {
-	var update bool
-	action := "ModifyCluster"
-	client := meta.(*connectivity.AliyunClient)
-	csService := CsService{client}
-
-	var modifyClusterRequest cs.ModifyClusterArgs
-	if d.HasChange("deletion_protection") {
-		update = true
-		modifyClusterRequest.DeletionProtection = d.Get("deletion_protection").(bool)
-	}
-
-	if update {
-		conn, err := meta.(*connectivity.AliyunClient).NewTeaRoaCommonClient(connectivity.OpenAckService)
-		if err != nil {
-			return WrapError(err)
-		}
-		err = resource.Retry(5*time.Minute, func() *resource.RetryError {
-			response, err := conn.DoRequestWithAction(StringPointer(action), StringPointer("2015-12-15"), nil, StringPointer("PUT"), StringPointer("AK"), String(fmt.Sprintf("/api/v2/clusters/%s", d.Id())), nil, nil, modifyClusterRequest, &util.RuntimeOptions{})
-			if err != nil {
-				if IsExpectedErrors(err, []string{"QPS Limit Exceeded"}) || NeedRetry(err) {
-					return resource.RetryableError(err)
-				}
-				addDebug(action, response, nil)
-				return resource.NonRetryableError(err)
-			}
-			addDebug(action, response, nil)
-			return nil
-		})
-
-		stateConf := BuildStateConf([]string{"updating"}, []string{"running"}, d.Timeout(schema.TimeoutUpdate), 10*time.Second, csService.CsKubernetesInstanceStateRefreshFunc(d.Id(), []string{"deleting", "failed"}))
-		if _, err := stateConf.WaitForState(); err != nil {
-			return err
-		}
-
-		if err != nil {
-			return err
-		}
-	}
-	d.SetPartial("deletion_protection")
-
-	return nil
+	return resourceAlicloudCSKubernetesDelete(d, meta)
 }

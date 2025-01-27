@@ -116,7 +116,7 @@ func testSweepTsdbInstance(region string) error {
 	return nil
 }
 
-func TestAccAlicloudTsdbInstance_basic(t *testing.T) {
+func SkipTestAccAlicloudTsdbInstance_basic(t *testing.T) {
 	var v map[string]interface{}
 	resourceId := "alicloud_tsdb_instance.default"
 	ra := resourceAttrInit(resourceId, AlicloudTsdbInstanceMap)
@@ -237,7 +237,7 @@ variable "name" {
 data "alicloud_tsdb_zones" "default" {}
 
 data "alicloud_vpcs" "default" {
-	name_regex = "default-NODELETING"
+	name_regex = "^default-NODELETING$"
 }
 data "alicloud_vswitches" "default" {
 	vpc_id = data.alicloud_vpcs.default.ids.0

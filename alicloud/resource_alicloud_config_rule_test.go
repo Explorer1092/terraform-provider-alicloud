@@ -17,7 +17,6 @@ import (
 	"github.com/PaesslerAG/jsonpath"
 	util "github.com/alibabacloud-go/tea-utils/service"
 
-	"github.com/alibabacloud-go/tea-rpc/client"
 	"github.com/aliyun/terraform-provider-alicloud/alicloud/connectivity"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/acctest"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
@@ -31,33 +30,31 @@ func init() {
 }
 
 func testSweepConfigRule(region string) error {
-	rawClient, err := sharedClientForRegion(region)
-	if err != nil {
-		return WrapErrorf(err, "Error getting Alicloud client.")
-	}
-	client := rawClient.(*connectivity.AliyunClient)
-
 	prefixes := []string{
 		"tf-testAcc",
 		"tf-test",
 	}
+	return testSweepConfigRuleByPrefixes(region, prefixes)
+}
+
+func testSweepConfigRuleByPrefixes(region string, prefixes []string) error {
+	rawClient, err := sharedClientForRegion(region)
+	if err != nil {
+		return WrapErrorf(err, "Error getting AliCloud client.")
+	}
+	client := rawClient.(*connectivity.AliyunClient)
 
 	request := make(map[string]interface{})
 	var response map[string]interface{}
 	action := "ListConfigRules"
-	conn, err := client.NewConfigClient()
-	if err != nil {
-		return WrapError(err)
-	}
+
 	request["PageSize"] = PageSizeLarge
 	request["PageNumber"] = 1
 	var ruleIds []string
 	for {
-		runtime := util.RuntimeOptions{}
-		runtime.SetAutoretry(true)
 		wait := incrementalWait(3*time.Second, 5*time.Second)
 		err := resource.Retry(3*time.Minute, func() *resource.RetryError {
-			response, err = conn.DoRequest(StringPointer(action), nil, StringPointer("GET"), StringPointer("2019-01-08"), StringPointer("AK"), request, nil, &runtime)
+			response, err = client.RpcGet("Config", "2019-01-08", action, request, nil)
 			if err != nil {
 				if IsExpectedErrors(err, []string{"Throttling.User"}) {
 					wait()
@@ -78,7 +75,19 @@ func testSweepConfigRule(region string) error {
 		result, _ := resp.([]interface{})
 		for _, v := range result {
 			item := v.(map[string]interface{})
-			ruleIds = append(ruleIds, item["ConfigRuleName"].(string))
+			skip := true
+			if !sweepAll() {
+				for _, prefix := range prefixes {
+					if strings.HasPrefix(strings.ToLower(item["ConfigRuleName"].(string)), strings.ToLower(prefix)) {
+						skip = false
+					}
+				}
+				if skip {
+					log.Printf("[INFO] Skipping config rule: %s ", item["ConfigRuleName"].(string))
+					continue
+				}
+			}
+			ruleIds = append(ruleIds, item["ConfigRuleId"].(string))
 		}
 		if len(result) < PageSizeLarge {
 			break
@@ -87,21 +96,11 @@ func testSweepConfigRule(region string) error {
 	}
 
 	for _, ruleId := range ruleIds {
-		skip := true
-		for _, prefix := range prefixes {
-			if strings.HasPrefix(strings.ToLower(ruleId), strings.ToLower(prefix)) {
-				skip = false
-			}
-		}
-		if skip {
-			log.Printf("[INFO] Skipping config rule: %s ", ruleId)
-			continue
-		}
 		action = "DeleteConfigRules"
 		request := map[string]interface{}{
 			"ConfigRuleIds": ruleId,
 		}
-		_, err = conn.DoRequest(StringPointer(action), nil, StringPointer("POST"), StringPointer("2019-01-08"), StringPointer("AK"), nil, request, &util.RuntimeOptions{})
+		_, err = client.RpcPost("Config", "2019-01-08", action, nil, request, false)
 		if err != nil {
 			log.Printf("[ERROR] Failed to retrieve config rule (%s): %s", ruleId, err)
 			continue
@@ -111,10 +110,10 @@ func testSweepConfigRule(region string) error {
 	return nil
 }
 
-func TestAccAlicloudConfigRule_basic(t *testing.T) {
+func TestAccAliCloudConfigRule_basic(t *testing.T) {
 	var v map[string]interface{}
 	resourceId := "alicloud_config_rule.default"
-	ra := resourceAttrInit(resourceId, ConfigRuleMap)
+	ra := resourceAttrInit(resourceId, AliCloudConfigRuleMap0)
 	rc := resourceCheckInitWithDescribeMethod(resourceId, &v, func() interface{} {
 		return &ConfigService{testAccProvider.Meta().(*connectivity.AliyunClient)}
 	}, "DescribeConfigRule")
@@ -122,12 +121,11 @@ func TestAccAlicloudConfigRule_basic(t *testing.T) {
 	testAccCheck := rac.resourceAttrMapUpdateSet()
 	rand := acctest.RandIntRange(1000000, 9999999)
 	name := fmt.Sprintf("tf-testAccConfigRule%d", rand)
-	testAccConfig := resourceTestAccConfigFunc(resourceId, name, ConfigRuleBasicdependence)
+	testAccConfig := resourceTestAccConfigFunc(resourceId, name, AliCloudConfigRuleBasicDependence0)
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccPreCheckWithRegions(t, true, connectivity.CloudConfigSupportedRegions)
 		},
-
 		IDRefreshName: resourceId,
 		Providers:     testAccProviders,
 		CheckDestroy:  rac.checkResourceDestroy(),
@@ -170,7 +168,7 @@ func TestAccAlicloudConfigRule_basic(t *testing.T) {
 			{
 				Config: testAccConfig(map[string]interface{}{
 					"input_parameters": map[string]string{
-						"vpcIds": "${data.alicloud_instances.default.instances[0].vpc_id}",
+						"vpcIds": "${alicloud_instance.default.vpc_id}",
 					},
 				}),
 				Check: resource.ComposeTestCheckFunc(
@@ -191,7 +189,7 @@ func TestAccAlicloudConfigRule_basic(t *testing.T) {
 			},
 			{
 				Config: testAccConfig(map[string]interface{}{
-					"exclude_resource_ids_scope": "${data.alicloud_instances.default.instances[0].id}",
+					"exclude_resource_ids_scope": "${alicloud_instance.default.id}",
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
@@ -211,7 +209,7 @@ func TestAccAlicloudConfigRule_basic(t *testing.T) {
 			},
 			{
 				Config: testAccConfig(map[string]interface{}{
-					"resource_group_ids_scope": "${data.alicloud_resource_manager_resource_groups.default.ids.0}",
+					"resource_group_ids_scope": "${data.alicloud_resource_manager_resource_groups.default.groups.1.id}",
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
@@ -221,20 +219,12 @@ func TestAccAlicloudConfigRule_basic(t *testing.T) {
 			},
 			{
 				Config: testAccConfig(map[string]interface{}{
-					"tag_key_scope": "tfTest123Update",
-				}),
-				Check: resource.ComposeTestCheckFunc(
-					testAccCheck(map[string]string{
-						"tag_key_scope": "tfTest123Update",
-					}),
-				),
-			},
-			{
-				Config: testAccConfig(map[string]interface{}{
+					"tag_key_scope":   "tfTest123Update",
 					"tag_value_scope": "tfTest 123 Update",
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
+						"tag_key_scope":   "tfTest123Update",
 						"tag_value_scope": "tfTest 123 Update",
 					}),
 				),
@@ -246,8 +236,8 @@ func TestAccAlicloudConfigRule_basic(t *testing.T) {
 					"source_identifier":          "ecs-instances-in-vpc",
 					"source_owner":               "ALIYUN",
 					"region_ids_scope":           "cn-beijing",
-					"resource_group_ids_scope":   "${data.alicloud_resource_manager_resource_groups.default.ids.1}",
-					"exclude_resource_ids_scope": "${data.alicloud_instances.default.instances[1].id}",
+					"resource_group_ids_scope":   "${data.alicloud_resource_manager_resource_groups.default.groups.0.id}",
+					"exclude_resource_ids_scope": "${alicloud_instance.default.id}",
 					"tag_key_scope":              "tfTest123",
 					"tag_value_scope":            "tfTest 123 Update",
 				}),
@@ -269,10 +259,10 @@ func TestAccAlicloudConfigRule_basic(t *testing.T) {
 	})
 }
 
-func TestAccAlicloudConfigRule_status(t *testing.T) {
+func TestAccAliCloudConfigRule_status(t *testing.T) {
 	var v map[string]interface{}
 	resourceId := "alicloud_config_rule.default"
-	ra := resourceAttrInit(resourceId, ConfigRuleMap)
+	ra := resourceAttrInit(resourceId, AliCloudConfigRuleMap0)
 	rc := resourceCheckInitWithDescribeMethod(resourceId, &v, func() interface{} {
 		return &ConfigService{testAccProvider.Meta().(*connectivity.AliyunClient)}
 	}, "DescribeConfigRule")
@@ -280,12 +270,11 @@ func TestAccAlicloudConfigRule_status(t *testing.T) {
 	testAccCheck := rac.resourceAttrMapUpdateSet()
 	rand := acctest.RandIntRange(1000000, 9999999)
 	name := fmt.Sprintf("tf-testAccConfigRule%d", rand)
-	testAccConfig := resourceTestAccConfigFunc(resourceId, name, ConfigRuleBasicdependence)
+	testAccConfig := resourceTestAccConfigFunc(resourceId, name, AliCloudConfigRuleBasicDependence0)
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccPreCheckWithRegions(t, true, connectivity.CloudConfigSupportedRegions)
 		},
-
 		IDRefreshName: resourceId,
 		Providers:     testAccProviders,
 		CheckDestroy:  rac.checkResourceDestroy(),
@@ -339,28 +328,71 @@ func TestAccAlicloudConfigRule_status(t *testing.T) {
 	})
 }
 
-var ConfigRuleMap = map[string]string{}
+var AliCloudConfigRuleMap0 = map[string]string{}
 
-func ConfigRuleBasicdependence(name string) string {
+func AliCloudConfigRuleBasicDependence0(name string) string {
 	return fmt.Sprintf(`
-variable "name" {
-	default = "%s"
-}
+	variable "name" {
+  		default = "%s"
+	}
 
-data "alicloud_instances" "default"{}
+	data "alicloud_resource_manager_resource_groups" "default" {
+  		status = "OK"
+	}
 
-data "alicloud_resource_manager_resource_groups" "default" {
-  status = "OK"
-}
+	data "alicloud_zones" "default" {
+  		available_disk_category     = "cloud_efficiency"
+  		available_resource_creation = "VSwitch"
+	}
 
+	data "alicloud_images" "default" {
+  		name_regex  = "^ubuntu_[0-9]+_[0-9]+_x64*"
+  		most_recent = true
+  		owners      = "system"
+	}
+
+	data "alicloud_instance_types" "default" {
+  		availability_zone = data.alicloud_zones.default.zones.0.id
+  		image_id          = data.alicloud_images.default.images.0.id
+	}
+
+	resource "alicloud_vpc" "default" {
+  		vpc_name   = var.name
+  		cidr_block = "192.168.0.0/16"
+	}
+
+	resource "alicloud_vswitch" "default" {
+  		vswitch_name = var.name
+  		vpc_id       = alicloud_vpc.default.id
+  		cidr_block   = "192.168.192.0/24"
+  		zone_id      = data.alicloud_zones.default.zones.0.id
+	}
+
+	resource "alicloud_security_group" "default" {
+  		name   = var.name
+  		vpc_id = alicloud_vpc.default.id
+	}
+
+	resource "alicloud_instance" "default" {
+  		image_id                   = data.alicloud_images.default.images.0.id
+  		instance_type              = data.alicloud_instance_types.default.instance_types.0.id
+  		security_groups            = alicloud_security_group.default.*.id
+  		internet_charge_type       = "PayByTraffic"
+  		internet_max_bandwidth_out = "10"
+  		availability_zone          = data.alicloud_instance_types.default.instance_types.0.availability_zones.0
+  		instance_charge_type       = "PostPaid"
+  		system_disk_category       = "cloud_efficiency"
+  		vswitch_id                 = alicloud_vswitch.default.id
+  		instance_name              = var.name
+	}
 `, name)
 }
 
 // Test this case need use a custom `source_identifier`
-func SkipTestAccAlicloudConfigRule_basic1(t *testing.T) {
+func SkipTestAccAliCloudConfigRule_basic1(t *testing.T) {
 	var v map[string]interface{}
 	resourceId := "alicloud_config_rule.default"
-	ra := resourceAttrInit(resourceId, ConfigRuleMap1)
+	ra := resourceAttrInit(resourceId, AliCloudConfigRuleMap0)
 	rc := resourceCheckInitWithDescribeMethod(resourceId, &v, func() interface{} {
 		return &ConfigService{testAccProvider.Meta().(*connectivity.AliyunClient)}
 	}, "DescribeConfigRule")
@@ -368,12 +400,11 @@ func SkipTestAccAlicloudConfigRule_basic1(t *testing.T) {
 	testAccCheck := rac.resourceAttrMapUpdateSet()
 	rand := acctest.RandIntRange(1000000, 9999999)
 	name := fmt.Sprintf("tf-testAccConfigRule%d", rand)
-	testAccConfig := resourceTestAccConfigFunc(resourceId, name, ConfigRuleBasicdependence1)
+	testAccConfig := resourceTestAccConfigFunc(resourceId, name, AliCloudConfigRuleBasicDependence0)
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccPreCheckWithRegions(t, true, connectivity.CloudConfigSupportedRegions)
 		},
-
 		IDRefreshName: resourceId,
 		Providers:     testAccProviders,
 		CheckDestroy:  rac.checkResourceDestroy(),
@@ -416,7 +447,7 @@ func SkipTestAccAlicloudConfigRule_basic1(t *testing.T) {
 			{
 				Config: testAccConfig(map[string]interface{}{
 					"input_parameters": map[string]string{
-						"vpcIds": "${data.alicloud_instances.default.instances[0].vpc_id}",
+						"vpcIds": "${alicloud_instance.default.vpc_id}",
 					},
 				}),
 				Check: resource.ComposeTestCheckFunc(
@@ -437,7 +468,7 @@ func SkipTestAccAlicloudConfigRule_basic1(t *testing.T) {
 			},
 			{
 				Config: testAccConfig(map[string]interface{}{
-					"exclude_resource_ids_scope": "${data.alicloud_instances.default.instances[0].id}",
+					"exclude_resource_ids_scope": "${alicloud_instance.default.id}",
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
@@ -487,7 +518,7 @@ func SkipTestAccAlicloudConfigRule_basic1(t *testing.T) {
 			},
 			{
 				Config: testAccConfig(map[string]interface{}{
-					"resource_group_ids_scope": "${data.alicloud_resource_manager_resource_groups.default.ids.0}",
+					"resource_group_ids_scope": "${data.alicloud_resource_manager_resource_groups.default.groups.1.id}",
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
@@ -521,7 +552,7 @@ func SkipTestAccAlicloudConfigRule_basic1(t *testing.T) {
 					"config_rule_trigger_types": "ConfigurationItemChangeNotification",
 					"resource_types_scope":      []string{"ACS::ECS::Instance"},
 					"region_ids_scope":          "cn-beijing",
-					"resource_group_ids_scope":  "${data.alicloud_resource_manager_resource_groups.default.ids.1}",
+					"resource_group_ids_scope":  "${data.alicloud_resource_manager_resource_groups.default.groups.0.id}",
 					"tag_key_scope":             "tfTest123",
 					"tag_value_scope":           "tfTest 123 Update",
 				}),
@@ -541,24 +572,343 @@ func SkipTestAccAlicloudConfigRule_basic1(t *testing.T) {
 	})
 }
 
-var ConfigRuleMap1 = map[string]string{}
+func TestAccAliCloudConfigRule_regression(t *testing.T) {
+	var v map[string]interface{}
+	resourceId := "alicloud_config_rule.default"
+	ra := resourceAttrInit(resourceId, AliCloudConfigRuleMap3019)
+	rc := resourceCheckInitWithDescribeMethod(resourceId, &v, func() interface{} {
+		return &ConfigServiceV2{testAccProvider.Meta().(*connectivity.AliyunClient)}
+	}, "DescribeConfigRule")
+	rac := resourceAttrCheckInit(rc, ra)
+	testAccCheck := rac.resourceAttrMapUpdateSet()
+	rand := acctest.RandIntRange(10000, 99999)
+	name := fmt.Sprintf("tf-testacc%sConfigRule%d", defaultRegionToTest, rand)
+	testAccConfig := resourceTestAccConfigFunc(resourceId, name, AliCloudConfigRuleBasicDependence3019)
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		IDRefreshName: resourceId,
+		Providers:     testAccProviders,
+		CheckDestroy:  rac.checkResourceDestroy(),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"source_owner":               "ALIYUN",
+					"source_identifier":          "root-ak-check",
+					"risk_level":                 "1",
+					"source_detail_message_type": "ScheduledNotification",
+					"rule_name":                  "${var.name}",
+					"resource_types_scope": []string{
+						"ACS::::Account"},
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"source_owner":               "ALIYUN",
+						"source_identifier":          "root-ak-check",
+						"risk_level":                 "1",
+						"source_detail_message_type": "ScheduledNotification",
+						"rule_name":                  name,
+						"resource_types_scope.#":     "1",
+					}),
+				),
+			}, {
+				Config: testAccConfig(map[string]interface{}{
+					"tag_value_scope":                    "test",
+					"tag_key_scope":                      "test",
+					"exclude_resource_ids_scope":         "test",
+					"description":                        "检查根账户访问密钥是否存在，如果存在视为“不合规”。",
+					"region_ids_scope":                   "cn-hangzhou",
+					"resource_group_ids_scope":           "${alicloud_resource_manager_resource_group.example.1.id}",
+					"risk_level":                         "2",
+					"source_maximum_execution_frequency": "TwentyFour_Hours",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"tag_value_scope":                    "test",
+						"tag_key_scope":                      "test",
+						"exclude_resource_ids_scope":         "test",
+						"description":                        "检查根账户访问密钥是否存在，如果存在视为“不合规”。",
+						"region_ids_scope":                   "cn-hangzhou",
+						"resource_group_ids_scope":           CHECKSET,
+						"risk_level":                         "2",
+						"source_maximum_execution_frequency": "TwentyFour_Hours",
+					}),
+				),
+			}, {
+				Config: testAccConfig(map[string]interface{}{
+					"description":                "检查根账户访问密钥是否存在，如果存在视为“不合规”。",
+					"source_owner":               "ALIYUN",
+					"source_identifier":          "root-ak-check",
+					"risk_level":                 "1",
+					"tag_value_scope":            "test",
+					"tag_key_scope":              "test",
+					"exclude_resource_ids_scope": "test",
+					"region_ids_scope":           "cn-hangzhou",
+					"rule_name":                  "${var.name}_update",
+					"resource_types_scope": []string{
+						"ACS::::Account"},
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"description":                "检查根账户访问密钥是否存在，如果存在视为“不合规”。",
+						"source_owner":               "ALIYUN",
+						"source_identifier":          "root-ak-check",
+						"risk_level":                 "1",
+						"tag_value_scope":            "test",
+						"tag_key_scope":              "test",
+						"exclude_resource_ids_scope": "test",
+						"region_ids_scope":           "cn-hangzhou",
+						"rule_name":                  name + "_update",
+						"resource_types_scope.#":     "1",
+					}),
+				),
+			}, {
+				ResourceName:            resourceId,
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{},
+			},
+		},
+	})
+}
 
-func ConfigRuleBasicdependence1(name string) string {
+// Test Config Rule. >>> Resource test cases, automatically generated.
+// Case 3019
+func TestAccAliCloudConfigRule_basic3019(t *testing.T) {
+	var v map[string]interface{}
+	resourceId := "alicloud_config_rule.default"
+	ra := resourceAttrInit(resourceId, AliCloudConfigRuleMap3019)
+	rc := resourceCheckInitWithDescribeMethod(resourceId, &v, func() interface{} {
+		return &ConfigServiceV2{testAccProvider.Meta().(*connectivity.AliyunClient)}
+	}, "DescribeConfigRule")
+	rac := resourceAttrCheckInit(rc, ra)
+	testAccCheck := rac.resourceAttrMapUpdateSet()
+	rand := acctest.RandIntRange(10000, 99999)
+	name := fmt.Sprintf("tf-testacc%sConfigRule%d", defaultRegionToTest, rand)
+	testAccConfig := resourceTestAccConfigFunc(resourceId, name, AliCloudConfigRuleBasicDependence3019)
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		IDRefreshName: resourceId,
+		Providers:     testAccProviders,
+		CheckDestroy:  rac.checkResourceDestroy(),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccConfig(map[string]interface{}{
+					"source_owner":              "ALIYUN",
+					"source_identifier":         "required-tags",
+					"risk_level":                "1",
+					"config_rule_trigger_types": "ConfigurationItemChangeNotification",
+					"resource_types_scope": []string{
+						"ACS::RDS::DBInstance", "ACS::ECS::Instance"},
+					"rule_name": "${var.name}",
+					"input_parameters": map[string]string{
+						"tag1Key":   "terraform",
+						"tag1Value": "terraform",
+					},
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"source_owner":              "ALIYUN",
+						"source_identifier":         "required-tags",
+						"risk_level":                "1",
+						"config_rule_trigger_types": "ConfigurationItemChangeNotification",
+						"resource_types_scope.#":    "2",
+						"rule_name":                 CHECKSET,
+						"input_parameters.%":        "2",
+					}),
+				),
+			}, {
+				Config: testAccConfig(map[string]interface{}{
+					"tag_value_scope":            "test",
+					"tag_key_scope":              "test",
+					"exclude_resource_ids_scope": "test",
+					"description":                "RDS实例的CPU核数大于等于设置的阈值，视为“合规”",
+					"region_ids_scope":           "cn-hangzhou",
+					"config_rule_trigger_types":  "ConfigurationItemChangeNotification",
+					"resource_group_ids_scope":   "${alicloud_resource_manager_resource_group.example.1.id}",
+					"risk_level":                 "2",
+					"resource_types_scope": []string{
+						"ACS::ECS::Instance", "ACS::ECS::Disk"},
+					"input_parameters": map[string]string{
+						"tag1Key": "terraform",
+					},
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"tag_value_scope":            "test",
+						"tag_key_scope":              "test",
+						"exclude_resource_ids_scope": "test",
+						"description":                "RDS实例的CPU核数大于等于设置的阈值，视为“合规”",
+						"region_ids_scope":           "cn-hangzhou",
+						"config_rule_trigger_types":  "ConfigurationItemChangeNotification",
+						"resource_group_ids_scope":   CHECKSET,
+						"risk_level":                 "2",
+						"resource_types_scope.#":     "2",
+						"input_parameters.%":         "1",
+					}),
+				),
+			}, {
+				Config: testAccConfig(map[string]interface{}{
+					"description":                "关联的资源类型下实体资源均已有指定标签，存在没有指定标签的资源则视为“不合规”。",
+					"source_owner":               "ALIYUN",
+					"source_identifier":          "required-tags",
+					"risk_level":                 "1",
+					"tag_value_scope":            "test",
+					"tag_key_scope":              "test",
+					"exclude_resource_ids_scope": "test",
+					"region_ids_scope":           "cn-hangzhou",
+					"config_rule_trigger_types":  "ConfigurationItemChangeNotification",
+					"resource_types_scope": []string{
+						"ACS::RDS::DBInstance", "ACS::ECS::Instance"},
+					"rule_name": "tf-cicd-rule-by-required-tags",
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"description":                "关联的资源类型下实体资源均已有指定标签，存在没有指定标签的资源则视为“不合规”。",
+						"source_owner":               "ALIYUN",
+						"source_identifier":          "required-tags",
+						"risk_level":                 "1",
+						"tag_value_scope":            "test",
+						"tag_key_scope":              "test",
+						"exclude_resource_ids_scope": "test",
+						"region_ids_scope":           "cn-hangzhou",
+						"config_rule_trigger_types":  "ConfigurationItemChangeNotification",
+						"resource_types_scope.#":     "2",
+						"rule_name":                  "tf-cicd-rule-by-required-tags",
+					}),
+				),
+			}, {
+				Config: testAccConfig(map[string]interface{}{
+					"tag_value_scope":            "test",
+					"tag_key_scope":              "test",
+					"exclude_resource_ids_scope": "test",
+					"description":                "RDS实例的CPU核数大于等于设置的阈值，视为“合规”",
+					"region_ids_scope":           "cn-hangzhou",
+					"config_rule_trigger_types":  "ConfigurationItemChangeNotification",
+					"risk_level":                 "2",
+					"resource_types_scope": []string{
+						"ACS::ECS::Instance", "ACS::ECS::Disk"},
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"tag_value_scope":            "test",
+						"tag_key_scope":              "test",
+						"exclude_resource_ids_scope": "test",
+						"description":                "RDS实例的CPU核数大于等于设置的阈值，视为“合规”",
+						"region_ids_scope":           "cn-hangzhou",
+						"config_rule_trigger_types":  "ConfigurationItemChangeNotification",
+						"risk_level":                 "2",
+						"resource_types_scope.#":     "2",
+					}),
+				),
+			}, {
+				Config: testAccConfig(map[string]interface{}{
+					"tag_value_scope":            "test",
+					"tag_key_scope":              "test",
+					"exclude_resource_ids_scope": "test",
+					"description":                "RDS实例的CPU核数大于等于设置的阈值，视为“合规”",
+					"region_ids_scope":           "cn-hangzhou",
+					"config_rule_trigger_types":  "ConfigurationItemChangeNotification",
+					"risk_level":                 "2",
+					"resource_types_scope": []string{
+						"ACS::ECS::Instance", "ACS::ECS::Disk"},
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"tag_value_scope":            "test",
+						"tag_key_scope":              "test",
+						"exclude_resource_ids_scope": "test",
+						"description":                "RDS实例的CPU核数大于等于设置的阈值，视为“合规”",
+						"region_ids_scope":           "cn-hangzhou",
+						"config_rule_trigger_types":  "ConfigurationItemChangeNotification",
+						"risk_level":                 "2",
+						"resource_types_scope.#":     "2",
+					}),
+				),
+			}, {
+				Config: testAccConfig(map[string]interface{}{
+					"tag_value_scope":            "test",
+					"tag_key_scope":              "test",
+					"exclude_resource_ids_scope": "test",
+					"description":                "RDS实例的CPU核数大于等于设置的阈值，视为“合规”",
+					"region_ids_scope":           "cn-hangzhou",
+					"config_rule_trigger_types":  "ConfigurationItemChangeNotification",
+					"risk_level":                 "2",
+					"resource_types_scope": []string{
+						"ACS::ECS::Instance", "ACS::ECS::Disk"},
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"tag_value_scope":            "test",
+						"tag_key_scope":              "test",
+						"exclude_resource_ids_scope": "test",
+						"description":                "RDS实例的CPU核数大于等于设置的阈值，视为“合规”",
+						"region_ids_scope":           "cn-hangzhou",
+						"config_rule_trigger_types":  "ConfigurationItemChangeNotification",
+						"risk_level":                 "2",
+						"resource_types_scope.#":     "2",
+					}),
+				),
+			}, {
+				Config: testAccConfig(map[string]interface{}{
+					"tag_value_scope":            "test",
+					"tag_key_scope":              "test",
+					"exclude_resource_ids_scope": "test",
+					"description":                "RDS实例的CPU核数大于等于设置的阈值，视为“合规”",
+					"region_ids_scope":           "cn-hangzhou",
+					"config_rule_trigger_types":  "ConfigurationItemChangeNotification",
+					"rule_name":                  "${var.name}_update",
+					"resource_group_ids_scope":   "${alicloud_resource_manager_resource_group.example.0.id}",
+					"risk_level":                 "2",
+					"resource_types_scope": []string{
+						"ACS::ECS::Instance", "ACS::ECS::Disk"},
+				}),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheck(map[string]string{
+						"tag_value_scope":            "test",
+						"tag_key_scope":              "test",
+						"exclude_resource_ids_scope": "test",
+						"description":                "RDS实例的CPU核数大于等于设置的阈值，视为“合规”",
+						"region_ids_scope":           "cn-hangzhou",
+						"config_rule_trigger_types":  "ConfigurationItemChangeNotification",
+						"resource_group_ids_scope":   CHECKSET,
+						"rule_name":                  name + "_update",
+						"risk_level":                 "2",
+						"resource_types_scope.#":     "2",
+					}),
+				),
+			}, {
+				ResourceName:            resourceId,
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{},
+			},
+		},
+	})
+}
+
+var AliCloudConfigRuleMap3019 = map[string]string{}
+
+func AliCloudConfigRuleBasicDependence3019(name string) string {
 	return fmt.Sprintf(`
 variable "name" {
-	default = "%s"
+    default = "%s"
 }
 
-data "alicloud_instances" "default"{}
-
-data "alicloud_resource_manager_resource_groups" "default" {
-  status = "OK"
+resource "alicloud_resource_manager_resource_group" "example" {
+  count = 2
+  resource_group_name = join("-", [var.name, count.index])
+  display_name        = join("-", [var.name, count.index])
 }
-
 `, name)
 }
 
-func TestAccAlicloudConfigRule_unit(t *testing.T) {
+// Test Config Rule. <<< Resource test cases, automatically generated.
+
+func TestUnitAliCloudConfigRule(t *testing.T) {
 	p := Provider().(*schema.Provider).ResourcesMap
 	dInit, _ := schema.InternalMap(p["alicloud_config_rule"].Schema).Data(nil, nil)
 	dExisted, _ := schema.InternalMap(p["alicloud_config_rule"].Schema).Data(nil, nil)
@@ -651,7 +1001,7 @@ func TestAccAlicloudConfigRule_unit(t *testing.T) {
 	}
 
 	// Create
-	patches := gomonkey.ApplyMethod(reflect.TypeOf(&connectivity.AliyunClient{}), "NewConfigClient", func(_ *connectivity.AliyunClient) (*client.Client, error) {
+	patches := gomonkey.ApplyMethod(reflect.TypeOf(&connectivity.AliyunClient{}), "NewConfigClient", func(_ *connectivity.AliyunClient) (*connectivity.AliyunClient, error) {
 		return nil, &tea.SDKError{
 			Code:       String("loadEndpoint error"),
 			Data:       String("loadEndpoint error"),
@@ -671,7 +1021,7 @@ func TestAccAlicloudConfigRule_unit(t *testing.T) {
 	errorCodes := []string{"NonRetryableError", "Throttling", "nil"}
 	for index, errorCode := range errorCodes {
 		retryIndex := index - 1 // a counter used to cover retry scenario; the same below
-		patches := gomonkey.ApplyMethod(reflect.TypeOf(&client.Client{}), "DoRequest", func(_ *client.Client, action *string, _ *string, _ *string, _ *string, _ *string, _ map[string]interface{}, _ map[string]interface{}, _ *util.RuntimeOptions) (map[string]interface{}, error) {
+		patches := gomonkey.ApplyMethod(reflect.TypeOf(&connectivity.AliyunClient{}), "DoRequest", func(_ *connectivity.AliyunClient, action *string, _ *string, _ *string, _ *string, _ *string, _ map[string]interface{}, _ map[string]interface{}, _ *util.RuntimeOptions) (map[string]interface{}, error) {
 			if *action == "CreateConfigRule" {
 				switch errorCode {
 				case "NonRetryableError":
@@ -706,7 +1056,7 @@ func TestAccAlicloudConfigRule_unit(t *testing.T) {
 	}
 
 	// Update
-	patches = gomonkey.ApplyMethod(reflect.TypeOf(&connectivity.AliyunClient{}), "NewConfigClient", func(_ *connectivity.AliyunClient) (*client.Client, error) {
+	patches = gomonkey.ApplyMethod(reflect.TypeOf(&connectivity.AliyunClient{}), "NewConfigClient", func(_ *connectivity.AliyunClient) (*connectivity.AliyunClient, error) {
 		return nil, &tea.SDKError{
 			Code:       String("loadEndpoint error"),
 			Data:       String("loadEndpoint error"),
@@ -765,7 +1115,7 @@ func TestAccAlicloudConfigRule_unit(t *testing.T) {
 	errorCodes = []string{"NonRetryableError", "Throttling", "nil"}
 	for index, errorCode := range errorCodes {
 		retryIndex := index - 1
-		patches := gomonkey.ApplyMethod(reflect.TypeOf(&client.Client{}), "DoRequest", func(_ *client.Client, action *string, _ *string, _ *string, _ *string, _ *string, _ map[string]interface{}, _ map[string]interface{}, _ *util.RuntimeOptions) (map[string]interface{}, error) {
+		patches := gomonkey.ApplyMethod(reflect.TypeOf(&connectivity.AliyunClient{}), "DoRequest", func(_ *connectivity.AliyunClient, action *string, _ *string, _ *string, _ *string, _ *string, _ map[string]interface{}, _ map[string]interface{}, _ *util.RuntimeOptions) (map[string]interface{}, error) {
 			if *action == "UpdateConfigRule" {
 				switch errorCode {
 				case "NonRetryableError":
@@ -816,7 +1166,7 @@ func TestAccAlicloudConfigRule_unit(t *testing.T) {
 	errorCodes = []string{"NonRetryableError", "Throttling", "nil"}
 	for index, errorCode := range errorCodes {
 		retryIndex := index - 1
-		patches := gomonkey.ApplyMethod(reflect.TypeOf(&client.Client{}), "DoRequest", func(_ *client.Client, action *string, _ *string, _ *string, _ *string, _ *string, _ map[string]interface{}, _ map[string]interface{}, _ *util.RuntimeOptions) (map[string]interface{}, error) {
+		patches := gomonkey.ApplyMethod(reflect.TypeOf(&connectivity.AliyunClient{}), "DoRequest", func(_ *connectivity.AliyunClient, action *string, _ *string, _ *string, _ *string, _ *string, _ map[string]interface{}, _ map[string]interface{}, _ *util.RuntimeOptions) (map[string]interface{}, error) {
 			if *action == "StopConfigRules" {
 				switch errorCode {
 				case "NonRetryableError":
@@ -868,7 +1218,7 @@ func TestAccAlicloudConfigRule_unit(t *testing.T) {
 	errorCodes = []string{"NonRetryableError", "Throttling", "nil"}
 	for index, errorCode := range errorCodes {
 		retryIndex := index - 1
-		patches := gomonkey.ApplyMethod(reflect.TypeOf(&client.Client{}), "DoRequest", func(_ *client.Client, action *string, _ *string, _ *string, _ *string, _ *string, _ map[string]interface{}, _ map[string]interface{}, _ *util.RuntimeOptions) (map[string]interface{}, error) {
+		patches := gomonkey.ApplyMethod(reflect.TypeOf(&connectivity.AliyunClient{}), "DoRequest", func(_ *connectivity.AliyunClient, action *string, _ *string, _ *string, _ *string, _ *string, _ map[string]interface{}, _ map[string]interface{}, _ *util.RuntimeOptions) (map[string]interface{}, error) {
 			if *action == "ActiveConfigRules" {
 				switch errorCode {
 				case "NonRetryableError":
@@ -905,7 +1255,7 @@ func TestAccAlicloudConfigRule_unit(t *testing.T) {
 	errorCodes = []string{"NonRetryableError", "Throttling", "nil", "ConfigRuleNotExists", "Invalid.ConfigRuleId.Value", "{}"}
 	for index, errorCode := range errorCodes {
 		retryIndex := index - 1
-		patches := gomonkey.ApplyMethod(reflect.TypeOf(&client.Client{}), "DoRequest", func(_ *client.Client, action *string, _ *string, _ *string, _ *string, _ *string, _ map[string]interface{}, _ map[string]interface{}, _ *util.RuntimeOptions) (map[string]interface{}, error) {
+		patches := gomonkey.ApplyMethod(reflect.TypeOf(&connectivity.AliyunClient{}), "DoRequest", func(_ *connectivity.AliyunClient, action *string, _ *string, _ *string, _ *string, _ *string, _ map[string]interface{}, _ map[string]interface{}, _ *util.RuntimeOptions) (map[string]interface{}, error) {
 			if *action == "GetConfigRule" {
 				switch errorCode {
 				case "{}", "ConfigRuleNotExists", "Invalid.ConfigRuleId.Value":
@@ -933,7 +1283,7 @@ func TestAccAlicloudConfigRule_unit(t *testing.T) {
 	}
 
 	// Delete
-	patches = gomonkey.ApplyMethod(reflect.TypeOf(&connectivity.AliyunClient{}), "NewConfigClient", func(_ *connectivity.AliyunClient) (*client.Client, error) {
+	patches = gomonkey.ApplyMethod(reflect.TypeOf(&connectivity.AliyunClient{}), "NewConfigClient", func(_ *connectivity.AliyunClient) (*connectivity.AliyunClient, error) {
 		return nil, &tea.SDKError{
 			Code:       String("loadEndpoint error"),
 			Data:       String("loadEndpoint error"),
@@ -947,7 +1297,7 @@ func TestAccAlicloudConfigRule_unit(t *testing.T) {
 	errorCodes = []string{"NonRetryableError", "Throttling", "nil", "ConfigRuleNotExists"}
 	for index, errorCode := range errorCodes {
 		retryIndex := index - 1
-		patches := gomonkey.ApplyMethod(reflect.TypeOf(&client.Client{}), "DoRequest", func(_ *client.Client, action *string, _ *string, _ *string, _ *string, _ *string, _ map[string]interface{}, _ map[string]interface{}, _ *util.RuntimeOptions) (map[string]interface{}, error) {
+		patches := gomonkey.ApplyMethod(reflect.TypeOf(&connectivity.AliyunClient{}), "DoRequest", func(_ *connectivity.AliyunClient, action *string, _ *string, _ *string, _ *string, _ *string, _ map[string]interface{}, _ map[string]interface{}, _ *util.RuntimeOptions) (map[string]interface{}, error) {
 			if *action == "DeleteConfigRules" {
 				switch errorCode {
 				case "NonRetryableError", "ConfigRuleNotExists":

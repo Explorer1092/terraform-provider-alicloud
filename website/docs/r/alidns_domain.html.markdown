@@ -1,5 +1,5 @@
 ---
-subcategory: "DNS"
+subcategory: "Alidns"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_alidns_domain"
 sidebar_current: "docs-alicloud-resource-alidns-domain"
@@ -7,24 +7,32 @@ description: |-
   Provides a Alidns domain resource.
 ---
 
-# alicloud\_alidns\_domain
+# alicloud_alidns_domain
 
 Provides a Alidns domain resource.
 
 -> **NOTE:** The domain name which you want to add must be already registered and had not added by another account. Every domain name can only exist in a unique group.
 
--> **NOTE:** Available in v1.95.0+.
+-> **NOTE:** Available since v1.95.0.
 
 ## Example Usage
 
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_alidns_domain&exampleId=b0eea6b5-3a36-f056-c28d-d77f58768eccacc1eca1&activeTab=example&spm=docs.r.alidns_domain.0.b0eea6b53a&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
 ```terraform
-# Add a new Domain.
-resource "alicloud_alidns_domain" "dns" {
+resource "alicloud_alidns_domain_group" "default" {
+  domain_group_name = "tf-example"
+}
+resource "alicloud_alidns_domain" "default" {
   domain_name = "starmove.com"
-  group_id    = "85ab8713-4a30-4de4-9d20-155ff830****"
+  group_id    = alicloud_alidns_domain_group.default.id
   tags = {
-    Created     = "Terraform"
-    Environment = "test"
+    Created = "TF",
+    For     = "example",
   }
 }
 ```
@@ -51,7 +59,7 @@ The following attributes are exported:
 * `group_name` - Domain name group name.
 * `puny_code` - Only return punycode codes for Chinese domain names.
 
-### Timeouts
+## Timeouts
 
 -> **NOTE:** Available in 1.97.0+.
 
@@ -63,6 +71,6 @@ The `timeouts` block allows you to specify [timeouts](https://www.terraform.io/d
 
 Alidns domain can be imported using the id or domain name, e.g.
 
-```
+```shell
 $ terraform import alicloud_alidns_domain.example aliyun.com
 ```

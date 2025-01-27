@@ -1,5 +1,5 @@
 ---
-subcategory: "RAM"
+subcategory: "ECS"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_ram_role_attachment"
 sidebar_current: "docs-alicloud-resource-ram-role-attachment"
@@ -7,11 +7,19 @@ description: |-
   Provides a RAM role attachment resource to bind role for several ECS instances.
 ---
 
-# alicloud\_ram\_role\_attachment
+# alicloud_ram_role_attachment
 
 Provides a RAM role attachment resource to bind role for several ECS instances.
 
+-> **NOTE:** Available since v1.0.0+.
+
 ## Example Usage
+
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_ram_role_attachment&exampleId=6e027f60-510b-f8b9-d172-8eee088a5368b7a79508&activeTab=example&spm=docs.r.ram_role_attachment.0.6e027f6051&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
 
 ```terraform
 data "alicloud_zones" "default" {
@@ -37,10 +45,10 @@ resource "alicloud_vpc" "default" {
 }
 
 resource "alicloud_vswitch" "default" {
-  vpc_id     = alicloud_vpc.default.id
-  cidr_block = "172.16.0.0/24"
-  zone_id    = data.alicloud_zones.default.zones[0].id
-  name       = var.name
+  vpc_id       = alicloud_vpc.default.id
+  cidr_block   = "172.16.0.0/24"
+  zone_id      = data.alicloud_zones.default.zones[0].id
+  vswitch_name = var.name
 }
 
 resource "alicloud_security_group" "default" {
@@ -77,7 +85,7 @@ resource "alicloud_instance" "foo" {
 }
 
 resource "alicloud_ram_role" "role" {
-  name     = "testrole"
+  name     = "terraform-example"
   document = <<EOF
   {
     "Statement": [
@@ -93,7 +101,7 @@ resource "alicloud_ram_role" "role" {
     ],
     "Version": "1"
   }
-  
+
 EOF
 
 
@@ -113,10 +121,3 @@ The following arguments are supported:
 
 * `role_name` - (Required, ForceNew) The name of role used to bind. This name can have a string of 1 to 64 characters, must contain only alphanumeric characters or hyphens, such as "-", "_", and must not begin with a hyphen.
 * `instance_ids` - (Required, ForceNew) The list of ECS instance's IDs.
-
-## Attributes Reference
-
-The following attributes are exported:
-
-* `role_name` - The name of the role.
-* `instance_ids` The list of ECS instance's IDs.

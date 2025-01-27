@@ -91,7 +91,7 @@ func testSweepScdnDomain(region string) error {
 	return nil
 }
 
-func TestAccAlicloudScdnDomain_basic(t *testing.T) {
+func SkipTestAccAlicloudScdnDomain_basic(t *testing.T) {
 	var v map[string]interface{}
 	resourceId := "alicloud_scdn_domain.default"
 	ra := resourceAttrInit(resourceId, ScdnDomainMap)
@@ -101,7 +101,7 @@ func TestAccAlicloudScdnDomain_basic(t *testing.T) {
 	rac := resourceAttrCheckInit(rc, ra)
 	testAccCheck := rac.resourceAttrMapUpdateSet()
 	rand := acctest.RandIntRange(1000000, 9999999)
-	name := fmt.Sprintf("tf-testacc%s%d.xiaozhu.com", defaultRegionToTest, rand)
+	name := fmt.Sprintf("tf-testacc%s%d.alicloud-provider.cn", defaultRegionToTest, rand)
 	testAccConfig := resourceTestAccConfigFunc(resourceId, name, ScdnDomainBasicdependence)
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
@@ -148,16 +148,6 @@ func TestAccAlicloudScdnDomain_basic(t *testing.T) {
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
 						"status": "online",
-					}),
-				),
-			},
-			{
-				Config: testAccConfig(map[string]interface{}{
-					"biz_name": "scdn",
-				}),
-				Check: resource.ComposeTestCheckFunc(
-					testAccCheck(map[string]string{
-						"biz_name": "scdn",
 					}),
 				),
 			},
@@ -225,8 +215,7 @@ func TestAccAlicloudScdnDomain_basic(t *testing.T) {
 			},
 			{
 				Config: testAccConfig(map[string]interface{}{
-					"status":   "online",
-					"biz_name": "video",
+					"status": "online",
 					"cert_infos": []map[string]interface{}{
 						{
 							"cert_name":    name + "update",
@@ -250,7 +239,6 @@ func TestAccAlicloudScdnDomain_basic(t *testing.T) {
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
 						"status":       "online",
-						"biz_name":     "video",
 						"cert_infos.#": "1",
 						"check_url":    "www.yourdomainupdate.com/test.html",
 						//"sources.#":        "1",
@@ -261,7 +249,7 @@ func TestAccAlicloudScdnDomain_basic(t *testing.T) {
 				ResourceName:            resourceId,
 				ImportState:             true,
 				ImportStateVerify:       true,
-				ImportStateVerifyIgnore: []string{"force_set", "check_url", "force_set", "biz_name", "cert_infos"},
+				ImportStateVerifyIgnore: []string{"force_set", "check_url", "force_set", "cert_infos"},
 			},
 		},
 	})

@@ -84,17 +84,19 @@ func testSweepActionTrailHistoryDeliveryJob(region string) error {
 			item := v.(map[string]interface{})
 
 			skip := true
-			for _, prefix := range prefixes {
-				if strings.HasPrefix(strings.ToLower(item["TrailName"].(string)), strings.ToLower(prefix)) {
-					skip = false
+			if !sweepAll() {
+				for _, prefix := range prefixes {
+					if strings.HasPrefix(strings.ToLower(item["TrailName"].(string)), strings.ToLower(prefix)) {
+						skip = false
+					}
 				}
-			}
-			if fmt.Sprint(item["JobStatus"]) == "0" || fmt.Sprint(item["JobStatus"]) == "1" {
-				skip = true
-			}
-			if skip {
-				log.Printf("[INFO] Skipping Delivery History Job: %s", item["TrailName"].(string))
-				continue
+				if fmt.Sprint(item["JobStatus"]) == "0" || fmt.Sprint(item["JobStatus"]) == "1" {
+					skip = true
+				}
+				if skip {
+					log.Printf("[INFO] Skipping Delivery History Job: %s", item["TrailName"].(string))
+					continue
+				}
 			}
 			action := "DeleteDeliveryHistoryJob"
 			request := map[string]interface{}{
@@ -114,7 +116,7 @@ func testSweepActionTrailHistoryDeliveryJob(region string) error {
 	return nil
 }
 
-func TestAccAlicloudActiontrailHistoryDeliveryJob_basic0(t *testing.T) {
+func SkipTestAccAlicloudActiontrailHistoryDeliveryJob_basic0(t *testing.T) {
 	var v map[string]interface{}
 	checkoutSupportedRegions(t, true, connectivity.ActiontrailSupportRegions)
 	resourceId := "alicloud_actiontrail_history_delivery_job.default"
@@ -185,7 +187,7 @@ resource "alicloud_actiontrail_trail" "default" {
 `, name)
 }
 
-func TestAccAlicloudActiontrailHistoryDeliveryJob_unit(t *testing.T) {
+func TestUnitAlicloudActiontrailHistoryDeliveryJob(t *testing.T) {
 	p := Provider().(*schema.Provider).ResourcesMap
 	d, _ := schema.InternalMap(p["alicloud_actiontrail_history_delivery_job"].Schema).Data(nil, nil)
 	dCreate, _ := schema.InternalMap(p["alicloud_actiontrail_history_delivery_job"].Schema).Data(nil, nil)

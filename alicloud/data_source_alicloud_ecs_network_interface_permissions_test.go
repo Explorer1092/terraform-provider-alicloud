@@ -8,7 +8,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/helper/acctest"
 )
 
-func TestAccAlicloudEcsNetworkInterfacePermissionsDataSource(t *testing.T) {
+func TestAccAlicloudECSNetworkInterfacePermissionsDataSource(t *testing.T) {
 	rand := acctest.RandInt()
 	idsConf := dataSourceTestAccConfig{
 		existConfig: testAccCheckAlicloudEcsNetworkInterfacePermissionsDataSourceName(rand, map[string]string{
@@ -75,7 +75,7 @@ data "alicloud_zones" "default" {
 }
 
 data "alicloud_vpcs" "default" {
-	name_regex = "default-NODELETING"
+	name_regex = "^default-NODELETING$"
 }
 data "alicloud_vswitches" "default" {
 	vpc_id = data.alicloud_vpcs.default.ids.0

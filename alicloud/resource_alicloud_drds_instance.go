@@ -1,7 +1,10 @@
 package alicloud
 
 import (
+	"strconv"
 	"time"
+
+	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 
 	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 
@@ -62,6 +65,26 @@ func resourceAlicloudDRDSInstance() *schema.Resource {
 				ValidateFunc: validation.StringInSlice([]string{"drds.sn1.4c8g", "drds.sn1.8c16g", "drds.sn1.16c32g", "drds.sn1.32c64g", "drds.sn2.4c16g", "drds.sn2.8c32g", "drds.sn2.16c64g"}, false),
 				ForceNew:     true,
 			},
+			"vpc_id": {
+				Type:     schema.TypeString,
+				Optional: true,
+				Computed: true,
+				ForceNew: true,
+			},
+			"connection_string": {
+				Type:     schema.TypeString,
+				Computed: true,
+			},
+			"port": {
+				Type:     schema.TypeString,
+				Computed: true,
+			},
+			"mysql_version": {
+				Type:     schema.TypeInt,
+				Optional: true,
+				Computed: true,
+				ForceNew: true,
+			},
 		},
 	}
 }
@@ -81,17 +104,23 @@ func resourceAliCloudDRDSInstanceCreate(d *schema.ResourceData, meta interface{}
 	request.InstanceSeries = d.Get("instance_series").(string)
 	request.Quantity = "1"
 
-	if request.VswitchId != "" {
+	if v, ok := d.GetOk("vpc_id"); ok {
+		request.VpcId = v.(string)
+	}
 
+	if v, ok := d.GetOk("mysql_version"); ok {
+		request.MySQLVersion = requests.Integer(strconv.Itoa(v.(int)))
+	}
+
+	if (request.ZoneId == "" || request.VpcId == "") && request.VswitchId != "" {
 		vpcService := VpcService{client}
 		vsw, err := vpcService.DescribeVSwitch(request.VswitchId)
 		if err != nil {
 			return WrapError(err)
 		}
-
 		request.VpcId = vsw.VpcId
+		request.ZoneId = vsw.ZoneId
 	}
-	request.ClientToken = buildClientToken(request.GetActionName())
 
 	if request.PayType == string(PostPaid) {
 		request.PayType = "drdsPost"
@@ -103,6 +132,8 @@ func resourceAliCloudDRDSInstanceCreate(d *schema.ResourceData, meta interface{}
 	var response *drds.CreateDrdsInstanceResponse
 	wait := incrementalWait(3*time.Second, 2*time.Second)
 	err := resource.Retry(d.Timeout(schema.TimeoutCreate), func() *resource.RetryError {
+		// currently, the ClientToken does not work and it need to update when retry
+		request.ClientToken = buildClientToken(request.GetActionName())
 		raw, err := client.WithDrdsClient(func(drdsClient *drds.Client) (interface{}, error) {
 			return drdsClient.CreateDrdsInstance(request)
 		})
@@ -187,7 +218,18 @@ func resourceAliCloudDRDSInstanceRead(d *schema.ResourceData, meta interface{}) 
 	//other attribute not set,because these attribute from `data` can't  get
 	d.Set("zone_id", data.ZoneId)
 	d.Set("description", data.Description)
-
+	d.Set("vpc_id", data.Vips.Vip[0].VpcId)
+	var connectionString, port string
+	for _, vip := range data.Vips.Vip {
+		if vip.Type == "intranet" {
+			connectionString = vip.Dns
+			port = vip.Port
+			break
+		}
+	}
+	d.Set("connection_string", connectionString)
+	d.Set("port", port)
+	d.Set("mysql_version", data.MysqlVersion)
 	return nil
 }
 

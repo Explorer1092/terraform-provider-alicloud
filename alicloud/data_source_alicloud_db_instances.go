@@ -38,6 +38,7 @@ func dataSourceAlicloudDBInstances() *schema.Resource {
 					string(SQLServer),
 					string(PPAS),
 					string(PostgreSQL),
+					string(MariaDB),
 				}, false),
 			},
 			"status": {
@@ -348,6 +349,54 @@ func dataSourceAlicloudDBInstances() *schema.Resource {
 							Type:     schema.TypeBool,
 							Computed: true,
 						},
+						"db_instance_type": {
+							Type:     schema.TypeString,
+							Computed: true,
+						},
+						"ha_mode": {
+							Type:     schema.TypeString,
+							Computed: true,
+						},
+						"sync_mode": {
+							Type:     schema.TypeString,
+							Computed: true,
+						},
+						"host_instance_infos": {
+							Type:     schema.TypeList,
+							Computed: true,
+							Elem: &schema.Resource{
+								Schema: map[string]*schema.Schema{
+									"log_sync_time": {
+										Type:     schema.TypeString,
+										Computed: true,
+									},
+									"node_type": {
+										Type:     schema.TypeString,
+										Computed: true,
+									},
+									"zone_id": {
+										Type:     schema.TypeString,
+										Computed: true,
+									},
+									"sync_status": {
+										Type:     schema.TypeString,
+										Computed: true,
+									},
+									"data_sync_time": {
+										Type:     schema.TypeString,
+										Computed: true,
+									},
+									"node_id": {
+										Type:     schema.TypeString,
+										Computed: true,
+									},
+									"region_id": {
+										Type:     schema.TypeString,
+										Computed: true,
+									},
+								},
+							},
+						},
 					},
 				},
 			},
@@ -506,7 +555,7 @@ func rdsInstancesDescription(d *schema.ResourceData, meta interface{}, objects [
 			"charge_type":              fmt.Sprint(item["PayType"]),
 			"db_type":                  fmt.Sprint(item["DBInstanceType"]),
 			"region_id":                fmt.Sprint(item["RegionId"]),
-			"create_time":              fmt.Sprint(item["CreateTime"]),
+			"create_time":              fmt.Sprint(item["CreationTime"]),
 			"expire_time":              fmt.Sprint(item["ExpireTime"]),
 			"status":                   fmt.Sprint(item["DBInstanceStatus"]),
 			"engine":                   fmt.Sprint(item["Engine"]),
@@ -527,6 +576,7 @@ func rdsInstancesDescription(d *schema.ResourceData, meta interface{}, objects [
 			"instance_storage":         instance["DBInstanceStorage"],
 			"master_zone":              instance["MasterZone"],
 			"deletion_protection":      instance["DeletionProtection"],
+			"db_instance_type":         instance["DBInstanceType"],
 		}
 		sslResponse, sslErr := rdsService.DescribeDBInstanceSSL(fmt.Sprint(item["DBInstanceId"]))
 		if sslErr == nil {
@@ -638,6 +688,32 @@ func rdsInstancesDescription(d *schema.ResourceData, meta interface{}, objects [
 				mapping["parameters"] = parameterDetail
 			}
 		}
+
+		describeDBInstanceHAConfigObject, haError := rdsService.DescribeDBInstanceHAConfig(item["DBInstanceId"].(string))
+		if haError == nil {
+			if v, ok := describeDBInstanceHAConfigObject["HAMode"]; ok && v != "" {
+				mapping["ha_mode"] = describeDBInstanceHAConfigObject["HAMode"]
+			}
+			if v, ok := describeDBInstanceHAConfigObject["SyncMode"]; ok && v != "" {
+				mapping["sync_mode"] = describeDBInstanceHAConfigObject["SyncMode"]
+			}
+			hostInstanceInfoDetail := make([]map[string]interface{}, 0)
+			hostInstanceInfos := describeDBInstanceHAConfigObject["HostInstanceInfos"].(map[string]interface{})["NodeInfo"].([]interface{})
+			for _, val := range hostInstanceInfos {
+				item := val.(map[string]interface{})
+				hostInstanceInfoDetail = append(hostInstanceInfoDetail, map[string]interface{}{
+					"log_sync_time":  item["LogSyncTime"],
+					"node_type":      item["NodeType"],
+					"zone_id":        item["ZoneId"],
+					"sync_status":    item["SyncStatus"],
+					"data_sync_time": item["DataSyncTime"],
+					"node_id":        item["NodeId"],
+					"region_id":      item["RegionId"],
+				})
+			}
+			mapping["host_instance_infos"] = hostInstanceInfoDetail
+		}
+
 		ids = append(ids, fmt.Sprint(item["DBInstanceId"]))
 		names = append(names, fmt.Sprint(item["DBInstanceDescription"]))
 		s = append(s, mapping)

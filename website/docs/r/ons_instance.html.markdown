@@ -1,5 +1,5 @@
 ---
-subcategory: "RocketMQ"
+subcategory: "RocketMQ (Ons)"
 layout: "alicloud"
 page_title: "Alicloud: alicloud_ons_instance"
 sidebar_current: "docs-alicloud-resource-ons-instance"
@@ -21,10 +21,25 @@ For more information about how to use it, see [RocketMQ Instance Management API]
 
 Basic Usage
 
-```terraform 
+<div style="display: block;margin-bottom: 40px;"><div class="oics-button" style="float: right;position: absolute;margin-bottom: 10px;">
+  <a href="https://api.aliyun.com/terraform?resource=alicloud_ons_instance&exampleId=cae9cec5-f3cd-e263-257b-9a3b9ff8461b081583fd&activeTab=example&spm=docs.r.ons_instance.0.cae9cec5f3&intl_lang=EN_US" target="_blank">
+    <img alt="Open in AliCloud" src="https://img.alicdn.com/imgextra/i1/O1CN01hjjqXv1uYUlY56FyX_!!6000000006049-55-tps-254-36.svg" style="max-height: 44px; max-width: 100%;">
+  </a>
+</div></div>
+
+```terraform
+variable "name" {
+  default = "tf-example"
+}
+
+resource "random_integer" "default" {
+  min = 10000
+  max = 99999
+}
+
 resource "alicloud_ons_instance" "example" {
-  instance_name = "tf-example-ons-instance"
-  remark        = "tf-example-ons-instance-remark"
+  instance_name = "${var.name}-${random_integer.default.result}"
+  remark        = var.name
 }
 ```
 
@@ -33,7 +48,7 @@ resource "alicloud_ons_instance" "example" {
 The following arguments are supported:
 
 
-* `name` - (Optional, Deprecated in v1.97.0+) Replaced by `instance_name` after version 1.97.0.
+* `name` - (Optional, Deprecated from v1.97.0+) Replaced by `instance_name` after version 1.97.0.
 * `instance_name` - (Optional, Available in v1.97.0+) Two instances on a single account in the same region cannot have the same name. The length must be 3 to 64 characters. Chinese characters, English letters digits and hyphen are allowed.
 * `remark` - (Optional) This attribute is a concise description of instance. The length cannot exceed 128.
 * `tags` - (Optional, Available in v1.97.0+) A mapping of tags to assign to the resource.
@@ -54,6 +69,6 @@ The following attributes are exported:
 
 ONS INSTANCE can be imported using the id, e.g.
 
-```
+```shell
 $ terraform import alicloud_ons_instance.instance MQ_INST_1234567890_Baso1234567
 ```
